@@ -1,0 +1,18 @@
+# Browsers that we support
+
+> 1%
+last 2 versions
+not dead
+Chrome >= 60
+Firefox >= 60
+Safari >= 12
+Edge >= 79
+iOS >= 12
+Android >= 7
+
+# Support for ES modules
+supports es6-module
+supports es6-module-dynamic-import
+
+# Progressive enhancement
+not IE 11

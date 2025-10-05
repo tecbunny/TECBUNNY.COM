@@ -1,0 +1,17 @@
+# Supabase Project Link
+# This file connects your local project to your remote Supabase project
+
+# Your project reference: 7e743341-3fe9-4bd6-88bd-39360c76c52d
+# Your project URL: https://fbcsagupcxheyiusjfak.supabase.co
+
+# To link this project with Supabase CLI (when installed):
+# supabase link --project-ref 7e743341-3fe9-4bd6-88bd-39360c76c52d
+
+# To run migrations:
+# supabase db push
+
+# To create new migrations:
+# supabase migration new "migration_name"
+
+# To reset local database:
+# supabase db reset

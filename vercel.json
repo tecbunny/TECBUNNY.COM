@@ -1,0 +1,122 @@
+{
+  "version": 2,
+  "alias": ["tecbunny.store", "www.tecbunny.store", "tecbunny.com", "www.tecbunny.com"],
+  "regions": ["bom1"],
+  "framework": "nextjs",
+  "buildCommand": "npm run build",
+  "outputDirectory": ".next",
+  "installCommand": "npm install --include=dev",
+  "rewrites": [
+    {
+      "source": "/api/settings/:path*",
+      "destination": "/api/settings/:path*"
+    },
+    {
+      "source": "/api/page-content/:path*",
+      "destination": "/api/page-content/:path*"
+    },
+    {
+      "source": "/api/auto-offers/:path*",
+      "destination": "/api/auto-offers/:path*"
+    },
+    {
+      "source": "/api/coupons/:path*",
+      "destination": "/api/coupons/:path*"
+    },
+    {
+      "source": "/api/products/:path*",
+      "destination": "/api/products/:path*"
+    }
+  ],
+  "redirects": [
+    {
+      "source": "/(.*)",
+      "destination": "https://www.tecbunny.com/$1",
+      "permanent": true,
+      "has": [
+        {
+          "type": "host",
+          "value": "tecbunny.com"
+        }
+      ]
+    },
+    {
+      "source": "/admin",
+      "destination": "/management",
+      "permanent": false
+    },
+    {
+      "source": "/logout",
+      "destination": "/auth/signout",
+      "permanent": false
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        }
+      ]
+    }
+  ],
+  "functions": {
+    "src/app/api/auth/verify-otp/route.ts": {
+      "maxDuration": 30
+    },
+    "src/app/api/auth/resend-verification/route.ts": {
+      "maxDuration": 30
+    },
+    "src/app/api/auth/send-otp/route.ts": {
+      "maxDuration": 30
+    },
+    "src/app/api/auth/signup/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/payment/phonepe/initiate/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/payment/phonepe/status/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/payment/phonepe/callback/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/payment/paytm/initiate/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/payment/paytm/status/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/payment/paytm/callback/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/settings/route.ts": {
+      "maxDuration": 30
+    },
+    "src/app/api/page-content/route.ts": {
+      "maxDuration": 30
+    },
+    "src/app/api/auto-offers/route.ts": {
+      "maxDuration": 30
+    },
+    "src/app/api/coupons/route.ts": {
+      "maxDuration": 30
+    },
+    "src/app/api/products/route.ts": {
+      "maxDuration": 30
+    },
+    "src/app/api/products/csv/route.ts": {
+      "maxDuration": 30
+    },
+    "src/app/api/upload/route.ts": {
+      "maxDuration": 60
+    }
+  }
+}
