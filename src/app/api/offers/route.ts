@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { createClient } from '../../../lib/supabase/server';
+import { createClient, createServiceClient, isSupabaseServiceConfigured } from '../../../lib/supabase/server';
+import { getSessionWithRole } from '../../../lib/auth/server-role';
+
+const ADMIN_ROLES = new Set(['admin', 'superadmin', 'manager']);
 
 // GET /api/offers - Fetch offers
 export async function GET(request: NextRequest) {
@@ -11,7 +14,10 @@ export async function GET(request: NextRequest) {
     const homepageOnly = searchParams.get('homepage') === 'true';
     const includeExpired = searchParams.get('include_expired') === 'true';
 
-    const supabase = await createClient();
+    const { supabase: authClient, role } = await getSessionWithRole(request);
+    const supabase = role && ADMIN_ROLES.has(role) && isSupabaseServiceConfigured
+      ? createServiceClient()
+      : authClient ?? await createClient();
 
     let query = supabase
       .from('offers')
@@ -64,29 +70,17 @@ export async function GET(request: NextRequest) {
 // POST /api/offers - Create new offer (Admin only)
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient();
-
-    // Check authentication
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
+    const { supabase: authClient, session, role } = await getSessionWithRole(request);
+    if (!session) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
     }
-
-    // Check admin role from app_metadata (secure) or profiles table (fallback)
-    const isAdmin = user.app_metadata?.role === 'admin';
-    
-    if (!isAdmin) {
-      // Fallback: check profiles table
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user.id)
-        .single();
-
-      if (!profile || profile.role !== 'admin') {
-        return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
-      }
+    if (!role || !ADMIN_ROLES.has(role)) {
+      return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
     }
+
+    const supabase = role && ADMIN_ROLES.has(role) && isSupabaseServiceConfigured
+      ? createServiceClient()
+      : authClient;
 
     const offerData = await request.json();
 
@@ -114,7 +108,7 @@ export async function POST(request: NextRequest) {
       const { data: existingOffer } = await supabase
         .from('offers')
         .select('id')
-        .eq('offer_code', offerData.offer_code)
+  .eq('offer_code', offerData.offer_code)
         .single();
 
       if (existingOffer) {
@@ -127,7 +121,7 @@ export async function POST(request: NextRequest) {
     // Insert the new offer
     const { data: newOffer, error: insertError } = await supabase
       .from('offers')
-      .insert([offerData])
+  .insert([{ ...offerData, created_by: session.user.id }])
       .select()
       .single();
 
@@ -150,29 +144,17 @@ export async function POST(request: NextRequest) {
 // PUT /api/offers - Update offer (Admin only)
 export async function PUT(request: NextRequest) {
   try {
-    const supabase = await createClient();
-
-    // Check authentication
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
+    const { supabase: authClient, session, role } = await getSessionWithRole(request);
+    if (!session) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
     }
-
-    // Check admin role from app_metadata (secure) or profiles table (fallback)
-    const isAdmin = user.app_metadata?.role === 'admin';
-    
-    if (!isAdmin) {
-      // Fallback: check profiles table
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user.id)
-        .single();
-
-      if (!profile || profile.role !== 'admin') {
-        return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
-      }
+    if (!role || !ADMIN_ROLES.has(role)) {
+      return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
     }
+
+    const supabase = role && ADMIN_ROLES.has(role) && isSupabaseServiceConfigured
+      ? createServiceClient()
+      : authClient;
 
     const { id, ...updateData } = await request.json();
 
@@ -238,29 +220,17 @@ export async function PUT(request: NextRequest) {
 // DELETE /api/offers - Delete offer (Admin only)
 export async function DELETE(request: NextRequest) {
   try {
-    const supabase = await createClient();
-
-    // Check authentication
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
+    const { supabase: authClient, session, role } = await getSessionWithRole(request);
+    if (!session) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
     }
-
-    // Check admin role from app_metadata (secure) or profiles table (fallback)
-    const isAdmin = user.app_metadata?.role === 'admin';
-    
-    if (!isAdmin) {
-      // Fallback: check profiles table
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user.id)
-        .single();
-
-      if (!profile || profile.role !== 'admin') {
-        return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
-      }
+    if (!role || !ADMIN_ROLES.has(role)) {
+      return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
     }
+
+    const supabase = role && ADMIN_ROLES.has(role) && isSupabaseServiceConfigured
+      ? createServiceClient()
+      : authClient;
 
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');

@@ -21,7 +21,7 @@ export async function GET() {
   if (!agent) return NextResponse.json({ commissions: [] })
 
   const { data, error } = await supabase
-    .from('agent_commissions')
+    .from('sales_agent_commissions')
     .select('*')
     .eq('agent_id', agent.id)
     .order('created_at', { ascending: false })

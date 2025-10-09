@@ -57,9 +57,9 @@ async function processOrderPlaced(supabase: any, data: any, source: string) {
     phone,
     customer_name,
     customer_email,
-    total_amount,
-    amount,
-    order_total,
+  total_amount,
+  amount,
+  order_total,
     currency = 'INR',
     items,
     products,
@@ -79,7 +79,8 @@ async function processOrderPlaced(supabase: any, data: any, source: string) {
   const customerPhone = customer_phone || customer_mobile || phone;
   const customerName = customer_name;
   const customerEmail = customer_email;
-  const orderAmount = total_amount || amount || order_total;
+  const orderAmountRaw = total_amount ?? amount ?? order_total;
+  const orderAmount = Number(orderAmountRaw ?? 0);
   const orderItems = items || products || line_items || [];
   const orderDate = order_date || created_at || new Date().toISOString();
 
@@ -149,14 +150,14 @@ async function processOrderPlaced(supabase: any, data: any, source: string) {
   const { error: orderError } = await supabase
     .from('orders')
     .insert({
-      order_id: orderId,
+      id: orderId,
       customer_id: customerId,
       customer_phone: formattedPhone,
       customer_name: customerName,
       customer_email: customerEmail,
-      total_amount: orderAmount,
+      total: orderAmount,
       currency,
-      status: 'placed',
+      status: 'Awaiting Payment',
       order_data: {
         items: orderItems,
         shipping_address,
@@ -178,7 +179,7 @@ async function processOrderPlaced(supabase: any, data: any, source: string) {
       const { error: updateError } = await supabase
         .from('orders')
         .update({
-          status: 'placed',
+          status: 'Awaiting Payment',
           updated_at: new Date().toISOString()
         })
         .eq('order_id', orderId);

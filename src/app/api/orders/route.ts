@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
     const orderToInsert = {
       customer_name: orderData.customer_name,
       customer_id: orderData.customer_id || null,
-      status: orderData.status || 'pending',
+      status: orderData.status || 'Pending',
       subtotal: Math.round(subtotal * 100) / 100,
       gst_amount: Math.round(gst_amount * 100) / 100,
       total: Math.round(total * 100) / 100,

@@ -1,7 +1,8 @@
 import { createClient as createAdminClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 
-import { createClient as createServerClient, isSupabasePublicConfigured, isSupabaseServiceConfigured } from '../../../lib/supabase/server';
+import { getSessionWithRole } from '../../../lib/auth/server-role';
+import { isSupabasePublicConfigured, isSupabaseServiceConfigured } from '../../../lib/supabase/server';
 import { logger } from '../../../lib/logger';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
@@ -11,22 +12,15 @@ function getSupabaseAdmin() {
   return createAdminClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 }
 
-async function getSessionAndRole(_: NextRequest) {
+async function getSessionAndRole(request: NextRequest) {
   try {
     if (!isSupabasePublicConfigured) {
       logger.error('settings.auth.missing_supabase_config');
       return { session: null, role: null };
     }
 
-    const supabase = await createServerClient()
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) return { session: null, role: null }
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', session.user.id)
-      .single()
-    return { session, role: profile?.role || null }
+    const { session, role } = await getSessionWithRole(request);
+    return { session, role };
   } catch {
     return { session: null, role: null }
   }

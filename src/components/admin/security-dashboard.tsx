@@ -68,6 +68,11 @@ export default function SecurityDashboard() {
       
       if (data.success) {
         setSettings(data.settings);
+        if (data.fallback) {
+          setMessage('Security settings storage is not configured. Displaying default values.');
+        } else {
+          setMessage('');
+        }
       } else {
         setMessage('Failed to fetch security settings');
       }
@@ -111,10 +116,13 @@ export default function SecurityDashboard() {
       if (data.success) {
         setMessage('Setting updated successfully');
         fetchSecuritySettings();
+      } else if (data.fallback) {
+        setMessage('Security settings database is not configured. Please run the latest migrations.');
       } else {
-        setMessage('Failed to update setting');
+        setMessage(data.error || 'Failed to update setting');
       }
-    } catch {
+    } catch (error) {
+      logger.error('Error updating security setting in dashboard', { error });
       setMessage('Error updating setting');
     } finally {
       setUpdating(false);

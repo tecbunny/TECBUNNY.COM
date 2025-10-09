@@ -9,6 +9,21 @@ import { useCart } from '../lib/hooks';
 import { useAuth } from '../lib/hooks';
 import { logger } from '../lib/logger';
 
+const STATUS_MAP: Record<string, OrderStatus> = {
+  pending: 'Pending',
+  'awaiting payment': 'Awaiting Payment',
+  'payment confirmed': 'Payment Confirmed',
+  confirmed: 'Confirmed',
+  processing: 'Processing',
+  'ready to ship': 'Ready to Ship',
+  shipped: 'Shipped',
+  'ready for pickup': 'Ready for Pickup',
+  completed: 'Completed',
+  delivered: 'Delivered',
+  cancelled: 'Cancelled',
+  rejected: 'Rejected'
+};
+
 interface OrderContextType {
   orders: Order[];
   currentOrder: Order | null;
@@ -30,6 +45,47 @@ export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const { cartItems, clearCart } = useCart();
   const { user } = useAuth();
   const supabase = createClient();
+
+  const parseOrderItemsBlob = useCallback((rawItems: unknown) => {
+    if (!rawItems) return null;
+    try {
+      if (typeof rawItems === 'string') {
+        return JSON.parse(rawItems);
+      }
+      if (typeof rawItems === 'object') {
+        return rawItems as Record<string, unknown>;
+      }
+    } catch (error) {
+      logger.warn('OrderProvider failed to parse order items blob', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+    return null;
+  }, []);
+
+  const deserializeOrder = useCallback((rawOrder: any): Order => {
+    const itemsPayload = parseOrderItemsBlob(rawOrder?.items);
+
+    const parsedItems: OrderItem[] = Array.isArray(rawOrder?.items)
+      ? rawOrder.items as OrderItem[]
+      : Array.isArray(itemsPayload?.cart_items)
+        ? itemsPayload.cart_items as OrderItem[]
+        : [];
+
+    const statusKey = typeof rawOrder?.status === 'string' ? rawOrder.status.toLowerCase() : '';
+    const normalizedStatus = STATUS_MAP[statusKey] ?? (rawOrder?.status ?? 'Pending');
+
+    return {
+      ...rawOrder,
+      status: normalizedStatus,
+      items: parsedItems,
+      customer_email: itemsPayload?.customer_email ?? rawOrder?.customer_email ?? undefined,
+      customer_phone: itemsPayload?.customer_phone ?? rawOrder?.customer_phone ?? undefined,
+      delivery_address: itemsPayload?.delivery_address ?? rawOrder?.delivery_address ?? undefined,
+      payment_method: itemsPayload?.payment_method ?? rawOrder?.payment_method ?? undefined,
+      notes: itemsPayload?.customer_notes ?? rawOrder?.notes ?? undefined,
+    } as Order;
+  }, [parseOrderItemsBlob]);
 
   const createOrder = useCallback(async (orderData: Partial<Order>): Promise<Order | null> => {
     setIsProcessingOrder(true);
@@ -141,18 +197,15 @@ export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
 
       // Merge the database result with our full order data
-      const orderItemsData = JSON.parse(data.items || '{}');
-      const createdOrder = { 
-        ...data, 
-        customer_email: orderItemsData.customer_email || customerEmail,
-        customer_phone: orderItemsData.customer_phone || customerPhone,
-        delivery_address: orderItemsData.delivery_address,
-        payment_method: orderItemsData.payment_method,
-        notes: orderItemsData.customer_notes,
-        items: orderItemsData.cart_items || []
-      } as Order;
-      setCurrentOrder(createdOrder);
-      setOrders(prev => [createdOrder, ...prev]);
+      const createdOrder = deserializeOrder(data);
+      const hydratedOrder: Order = {
+        ...createdOrder,
+        customer_email: createdOrder.customer_email ?? customerEmail,
+        customer_phone: createdOrder.customer_phone ?? customerPhone,
+      };
+
+      setCurrentOrder(hydratedOrder);
+      setOrders(prev => [hydratedOrder, ...prev]);
       
       // Clear cart after successful order
       clearCart();
@@ -166,7 +219,7 @@ export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           },
           body: JSON.stringify({
             to: customerEmail,
-            orderData: createdOrder
+            orderData: hydratedOrder
           }),
         });
   } catch (_emailError) {
@@ -178,7 +231,7 @@ export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         description: `Order #${createdOrder.id.slice(0, 8)} has been placed.`,
       });
 
-      return createdOrder;
+  return hydratedOrder;
     } catch (error) {
       logger.error('OrderProvider failed to create order', {
         error: error instanceof Error ? error.message : String(error),
@@ -193,7 +246,7 @@ export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     } finally {
       setIsProcessingOrder(false);
     }
-  }, [cartItems, clearCart, supabase, toast, user]);
+  }, [cartItems, clearCart, deserializeOrder, supabase, toast, user]);
 
   const updateOrderStatus = useCallback(async (orderId: string, status: OrderStatus): Promise<boolean> => {
     try {
@@ -214,18 +267,22 @@ export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         return false;
       }
 
+      const normalizedStatus = typeof status === 'string'
+        ? STATUS_MAP[status.toLowerCase()] ?? status
+        : status;
+
       // Update local state
       setOrders(prev => prev.map(order => 
-        order.id === orderId ? { ...order, status } : order
+        order.id === orderId ? { ...order, status: normalizedStatus } : order
       ));
 
       if (currentOrder?.id === orderId) {
-        setCurrentOrder(prev => prev ? { ...prev, status } : null);
+        setCurrentOrder(prev => prev ? { ...prev, status: normalizedStatus } : null);
       }
 
       toast({
         title: "Order Updated",
-        description: `Order status updated to ${status}.`,
+        description: `Order status updated to ${normalizedStatus}.`,
       });
 
       return true;
@@ -233,7 +290,7 @@ export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       logger.error('Error updating order status', { error, orderId, status });
       return false;
     }
-  }, [supabase, toast, currentOrder]);
+  }, [currentOrder, supabase, toast]);
 
   const getOrders = useCallback(async (customerId?: string): Promise<void> => {
     try {
@@ -252,14 +309,15 @@ export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         return;
       }
 
-      setOrders(data as Order[]);
+  const normalizedOrders = (data ?? []).map(deserializeOrder);
+      setOrders(normalizedOrders);
     } catch (error) {
       logger.error('OrderProvider getOrders failed', {
         error: error instanceof Error ? error.message : String(error),
         customerId,
       });
     }
-  }, [supabase]);
+  }, [deserializeOrder, supabase]);
 
   const getOrderById = useCallback(async (orderId: string): Promise<Order | null> => {
     try {
@@ -273,7 +331,7 @@ export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         return null;
       }
 
-      const order = data as Order;
+      const order = deserializeOrder(data);
       setCurrentOrder(order);
       return order;
     } catch (error) {
@@ -283,7 +341,7 @@ export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       });
       return null;
     }
-  }, [supabase]);
+  }, [deserializeOrder, supabase]);
 
   const cancelOrder = useCallback(async (orderId: string): Promise<boolean> => {
     try {
@@ -309,6 +367,10 @@ export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         order.id === orderId ? { ...order, status: 'Cancelled' as OrderStatus } : order
       ));
 
+      if (currentOrder?.id === orderId) {
+        setCurrentOrder(prev => prev ? { ...prev, status: 'Cancelled' as OrderStatus } : null);
+      }
+
       toast({
         title: "Order Cancelled",
         description: "Order has been cancelled successfully.",
@@ -322,7 +384,7 @@ export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       });
       return false;
     }
-  }, [supabase, toast]);
+  }, [currentOrder, supabase, toast]);
 
   const value = {
     orders,

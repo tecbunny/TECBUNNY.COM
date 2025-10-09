@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 
 import { resolveSiteUrl } from '../../../lib/site-url';
 import { createClient as createServerClient } from '../../../lib/supabase/server';
+import { getEffectiveUserRole } from '../../../lib/auth/server-role';
 import { logger } from '../../../lib/logger';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.local';
@@ -38,7 +39,8 @@ async function createAuthenticatedClient(request: NextRequest) {
     
     const { data: { session } } = await supabase.auth.getSession();
     if (session) {
-      return { supabase, session };
+      const role = await getEffectiveUserRole(session.user);
+      return { supabase, session, role };
     }
     
     // Try to set session with token
@@ -48,14 +50,16 @@ async function createAuthenticatedClient(request: NextRequest) {
     });
     
     if (!setError && data.session) {
-      return { supabase, session: data.session };
+      const role = await getEffectiveUserRole(data.session.user);
+      return { supabase, session: data.session, role };
     }
   }
 
   // Fallback to server-side cookie-based authentication
   const supabase = await createServerClient();
   const { data: { session } } = await supabase.auth.getSession();
-  return { supabase, session };
+  const role = session ? await getEffectiveUserRole(session.user) : null;
+  return { supabase, session, role };
 }
 
 // GET /api/users - List all users (admin only)
@@ -65,20 +69,14 @@ export async function GET(request: NextRequest) {
       logger.error('users.supabase_configuration_missing');
       return NextResponse.json({ error: 'Service configuration error' }, { status: 503 });
     }
-    const { supabase, session } = await createAuthenticatedClient(request);
+  const { session, role } = await createAuthenticatedClient(request);
     
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // Check if user is admin
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', session.user.id)
-      .single();
-
-    if (!profile || !['superadmin', 'admin', 'manager'].includes(profile.role)) {
+  if (!role || !['superadmin', 'admin', 'manager'].includes(role)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -133,27 +131,21 @@ export async function POST(request: NextRequest) {
       logger.error('users.supabase_configuration_missing');
       return NextResponse.json({ error: 'Service configuration error' }, { status: 503 });
     }
-    const { supabase, session } = await createAuthenticatedClient(request);
+  const { session, role } = await createAuthenticatedClient(request);
     
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // Check if user is admin or manager (allow managers to create accounts too)
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', session.user.id)
-      .single();
-
-    if (!profile || !['superadmin', 'admin', 'manager'].includes(profile.role)) {
+    if (!role || !['superadmin', 'admin', 'manager'].includes(role)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const body = await request.json();
     const email = body.email as string | undefined;
     const name = body.name as string | undefined;
-    const role = (body.role as string | undefined) || 'customer';
+  const requestedRole = (body.role as string | undefined) || 'customer';
     const mobile = body.mobile as string | undefined;
     let password = body.password as string | undefined;
 
@@ -175,7 +167,7 @@ export async function POST(request: NextRequest) {
       email_confirm: true,
       user_metadata: {
         name,
-        role
+  role: requestedRole
       }
     });
 
@@ -194,7 +186,7 @@ export async function POST(request: NextRequest) {
           id: userData.user.id,
           name,
           email,
-          role,
+          role: requestedRole,
           mobile: mobile || null,
           is_active: true,
           updated_at: new Date().toISOString()
@@ -256,20 +248,14 @@ export async function PUT(request: NextRequest) {
       logger.error('users.supabase_configuration_missing');
       return NextResponse.json({ error: 'Service configuration error' }, { status: 503 });
     }
-    const { supabase, session } = await createAuthenticatedClient(request);
+  const { session, role } = await createAuthenticatedClient(request);
     
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // Check if user is admin
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', session.user.id)
-      .single();
-
-    if (!profile || !['admin', 'manager'].includes(profile.role)) {
+    if (!role || !['admin', 'manager', 'superadmin'].includes(role)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -351,20 +337,14 @@ export async function DELETE(request: NextRequest) {
       logger.error('users.supabase_configuration_missing');
       return NextResponse.json({ error: 'Service configuration error' }, { status: 503 });
     }
-    const { supabase, session } = await createAuthenticatedClient(request);
+  const { session, role } = await createAuthenticatedClient(request);
     
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // Check if user is admin
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', session.user.id)
-      .single();
-
-    if (!profile || profile.role !== 'admin') {
+    if (!role || role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 

@@ -24,11 +24,11 @@ import { Button } from '../../../../components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../../../components/ui/tabs';
 import type { User, CustomerCategory } from '../../../../lib/types';
 import { Badge } from '../../../../components/ui/badge';
-import { createClient } from '../../../../lib/supabase/client';
 import { AddUserDialog } from '../../../../components/admin/AddUserDialog';
 import { EditUserDialog } from '../../../../components/admin/EditUserDialog';
 import { DiscountOffersDialog } from '../../../../components/admin/DiscountOffersDialog';
 import { UniversalSearch, SearchFilter, SortOption } from '../../../../components/shared/UniversalSearch';
+import { useToast } from '../../../../hooks/use-toast';
 
 export default function UserManagementPage() {
   const [users, setUsers] = React.useState<User[]>([]);
@@ -43,53 +43,71 @@ export default function UserManagementPage() {
   const [filters, setFilters] = React.useState<Record<string, any>>({});
   const [sortField, setSortField] = React.useState('name');
   const [sortDirection, setSortDirection] = React.useState<'asc' | 'desc'>('asc');
-  
-  const supabase = createClient();
+  const [isLoading, setIsLoading] = React.useState(false);
+
+  const { toast } = useToast();
   
   const fetchUsers = React.useCallback(async () => {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select(`
-        id,
-        name,
-        email,
-        mobile,
-        role,
-        address,
-        gstin,
-        customer_category,
-        discount_percentage,
-        is_active,
-        created_at,
-        updated_at,
-        customer_type,
-        gst_verified,
-        business_name,
-        business_address,
-        credit_limit,
-        b2b_category
-      `);
-    
-    if (error) {
+    setIsLoading(true);
+    try {
+      const response = await fetch('/api/users', {
+        credentials: 'include',
+        headers: {
+          Accept: 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        const message = payload?.error || `Failed to load users (status ${response.status})`;
+        throw new Error(message);
+      }
+
+      const payload = await response.json();
+      const usersWithProfiles = Array.isArray(payload?.users) ? payload.users : [];
+
+      const normalizedUsers: User[] = usersWithProfiles.map((entry: any) => {
+        const profile = entry.profile || {};
+
+        return {
+          id: entry.id,
+          name: profile.name || entry.email?.split('@')[0] || 'Unnamed User',
+          email: profile.email || entry.email || '',
+          mobile: profile.mobile || '',
+          role: (profile.role || 'customer') as User['role'],
+          address: profile.address || null,
+          gstin: profile.gstin || null,
+          customerCategory: profile.customer_category || undefined,
+          discountPercentage: typeof profile.discount_percentage === 'number' ? profile.discount_percentage : undefined,
+          isActive: profile.is_active ?? true,
+          created_at: profile.created_at || entry.created_at,
+          updated_at: profile.updated_at || entry.updated_at,
+          emailVerified: Boolean(entry.email_confirmed_at),
+          email_confirmed_at: entry.email_confirmed_at,
+          customer_type: profile.customer_type || undefined,
+          gst_verified: profile.gst_verified ?? undefined,
+          gst_verification_date: profile.gst_verification_date || undefined,
+          business_name: profile.business_name || undefined,
+          business_address: profile.business_address || undefined,
+          credit_limit: profile.credit_limit ?? undefined,
+          b2b_category: profile.b2b_category || undefined,
+        };
+      });
+
+      setUsers(normalizedUsers);
+    } catch (error) {
       console.error('Failed to fetch users:', error);
-    } else {
-      // Transform snake_case to camelCase for consistency
-      const transformedUsers = data?.map(user => ({
-        ...user,
-        customerCategory: user.customer_category,
-        discountPercentage: user.discount_percentage,
-        isActive: user.is_active,
-        customerType: user.customer_type,
-        gstVerified: user.gst_verified,
-        businessName: user.business_name,
-        businessAddress: user.business_address,
-        creditLimit: user.credit_limit,
-        b2bCategory: user.b2b_category
-      })) || [];
-      
-      setUsers(transformedUsers as User[]);
+      const message = error instanceof Error ? error.message : 'Unable to load users. Please try again later.';
+      toast({
+        variant: 'destructive',
+        title: 'Error loading users',
+        description: message,
+      });
+      setUsers([]);
+    } finally {
+      setIsLoading(false);
     }
-  }, [supabase]);
+  }, [toast]);
   
   React.useEffect(() => {
     fetchUsers();
@@ -407,54 +425,68 @@ export default function UserManagementPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredUsers.map((user) => (
-                <TableRow key={user.id}>
-                  <TableCell className="font-medium">
-                    {user.name || 'No Name'}
-                  </TableCell>
-                  <TableCell>{user.email}</TableCell>
-                  <TableCell>
-                    {user.mobile || <span className="text-muted-foreground text-sm">Not provided</span>}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={getRoleVariant(user.role)} className="capitalize flex items-center gap-1">
-                      {getRoleIcon(user.role)}
-                      {user.role}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    {user.role === 'customer' && user.customerCategory ? (
-                      <Badge variant={getCategoryVariant(user.customerCategory)} className="flex items-center gap-1 w-fit">
-                        {getCategoryIcon(user.customerCategory)}
-                        {user.customerCategory}
-                      </Badge>
-                    ) : (
-                      <span className="text-muted-foreground text-sm">-</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {user.role === 'customer' && typeof user.discountPercentage === 'number' ? (
-                      <Badge variant="outline">{user.discountPercentage}%</Badge>
-                    ) : (
-                      <span className="text-muted-foreground text-sm">-</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={user.isActive !== false ? "default" : "secondary"}>
-                      {user.isActive !== false ? "Active" : "Inactive"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      onClick={() => handleEditUser(user)}
-                    >
-                      <MoreHorizontal className="h-4 w-4" />
-                    </Button>
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                    Loading users...
                   </TableCell>
                 </TableRow>
-              ))}
+              ) : filteredUsers.length > 0 ? (
+                filteredUsers.map((user) => (
+                  <TableRow key={user.id}>
+                    <TableCell className="font-medium">
+                      {user.name || 'No Name'}
+                    </TableCell>
+                    <TableCell>{user.email}</TableCell>
+                    <TableCell>
+                      {user.mobile || <span className="text-muted-foreground text-sm">Not provided</span>}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={getRoleVariant(user.role)} className="capitalize flex items-center gap-1">
+                        {getRoleIcon(user.role)}
+                        {user.role}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {user.role === 'customer' && user.customerCategory ? (
+                        <Badge variant={getCategoryVariant(user.customerCategory)} className="flex items-center gap-1 w-fit">
+                          {getCategoryIcon(user.customerCategory)}
+                          {user.customerCategory}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {user.role === 'customer' && typeof user.discountPercentage === 'number' ? (
+                        <Badge variant="outline">{user.discountPercentage}%</Badge>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={user.isActive !== false ? 'default' : 'secondary'}>
+                        {user.isActive !== false ? 'Active' : 'Inactive'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleEditUser(user)}
+                      >
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                    No users found for the selected filters.
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </CardContent>

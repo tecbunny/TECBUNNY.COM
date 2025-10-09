@@ -1,8 +1,11 @@
 import { NextRequest } from 'next/server';
 
-import { createClient } from '../../../lib/supabase/server';
+import { createClient, createServiceClient, isSupabaseServiceConfigured } from '../../../lib/supabase/server';
 import { logger } from '../../../lib/logger';
 import { apiError, apiSuccess } from '../../../lib/errors';
+import { getSessionWithRole } from '../../../lib/auth/server-role';
+
+const ADMIN_ROLES = new Set(['admin', 'superadmin', 'manager']);
 
 export const dynamic = 'force-dynamic';
 
@@ -13,13 +16,17 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: NextRequest) {
   try {
     const correlationId = request.headers.get('x-correlation-id') || null;
-    const supabase = await createClient();
-
-    // Verify authentication
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
+    const { supabase: authClient, session, role } = await getSessionWithRole(request);
+    if (!session) {
       return apiError('UNAUTHORIZED', { correlationId });
     }
+    if (!role || !ADMIN_ROLES.has(role)) {
+      return apiError('FORBIDDEN', { correlationId });
+    }
+
+    const supabase = role && ADMIN_ROLES.has(role) && isSupabaseServiceConfigured
+      ? createServiceClient()
+      : authClient ?? await createClient();
 
     // Get services with related data
     const { data: services, error } = await supabase
@@ -43,8 +50,8 @@ export async function GET(request: NextRequest) {
     const servicesWithStats = services?.map(service => ({
       ...service,
       total_requests: service.service_requests?.length || 0,
-      pending_requests: service.service_requests?.filter((req: any) => req.status === 'pending').length || 0,
-      active_requests: service.service_requests?.filter((req: any) => ['in_progress', 'assigned'].includes(req.status)).length || 0
+      pending_requests: service.service_requests?.filter((req: any) => req.request_status === 'pending').length || 0,
+      active_requests: service.service_requests?.filter((req: any) => ['in_progress', 'assigned'].includes(req.request_status)).length || 0
     })) || [];
 
     return apiSuccess({
@@ -66,13 +73,17 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const correlationId = request.headers.get('x-correlation-id') || null;
-    const supabase = await createClient();
-
-    // Verify authentication
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
+    const { supabase: authClient, session, role } = await getSessionWithRole(request);
+    if (!session) {
       return apiError('UNAUTHORIZED', { correlationId });
     }
+    if (!role || !ADMIN_ROLES.has(role)) {
+      return apiError('FORBIDDEN', { correlationId });
+    }
+
+    const supabase = role && ADMIN_ROLES.has(role) && isSupabaseServiceConfigured
+      ? createServiceClient()
+      : authClient ?? await createClient();
 
     const body = await request.json();
     const {
@@ -107,7 +118,7 @@ export async function POST(request: NextRequest) {
         icon,
         status,
         is_featured,
-        created_by: user.id,
+  created_by: session.user.id,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       })

@@ -20,7 +20,7 @@ export async function POST(request: Request) {
     // 1. Get the order details to find the referring agent
     const { data: order, error: orderError } = await supabase
       .from('orders')
-      .select('id, total_amount, referred_by_agent_id, status')
+      .select('id, total, agent_id, status')
       .eq('id', orderId)
       .single();
 
@@ -32,17 +32,18 @@ export async function POST(request: Request) {
     }
 
     // 2. Check if order is completed and has a referring agent
-    if (order.status !== 'completed') {
+    const normalizedStatus = typeof order.status === 'string' ? order.status.toLowerCase() : '';
+    if (normalizedStatus !== 'completed') {
       return NextResponse.json({ error: 'Commission can only be awarded for completed orders.' }, { status: 400 });
     }
 
-    if (!order.referred_by_agent_id) {
+    if (!order.agent_id) {
       return NextResponse.json({ message: 'No referring agent for this order. No commission to award.' });
     }
 
     // 3. Check if commission has already been awarded for this order
     const { data: existingCommission, error: commissionCheckError } = await supabase
-      .from('agent_commissions')
+      .from('sales_agent_commissions')
       .select('id')
       .eq('order_id', orderId)
       .single();
@@ -56,17 +57,19 @@ export async function POST(request: Request) {
     }
 
     // 4. Award the commission
+    const orderTotal = Number(order.total ?? 0);
+
     await enhancedCommissionService.awardCommission(
       orderId,
-      order.referred_by_agent_id,
-      order.total_amount
+      order.agent_id,
+      orderTotal
     );
 
     return NextResponse.json({ 
       message: 'Commission calculated and awarded successfully.',
       orderId,
-      agentId: order.referred_by_agent_id,
-      orderTotal: order.total_amount
+      agentId: order.agent_id,
+      orderTotal
     });
 
   } catch (error: any) {

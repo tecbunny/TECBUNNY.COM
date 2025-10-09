@@ -15,15 +15,24 @@ import { logger } from '../../../../lib/logger';
 
 interface Order {
   id: string;
-  total_amount: number;
-  payment_status: string;
-  payment_method: string;
+  total: number;
   status: string;
+  payment_method?: string | null;
   created_at: string;
-  customers: {
-    name: string;
-    email: string;
-  };
+  customer_name: string;
+  customer_email?: string | null;
+  customer_phone?: string | null;
+  items?: string | Record<string, unknown> | null;
+}
+
+type PaymentState = 'pending' | 'paid' | 'cod_pending';
+
+interface OrderExtras {
+  cart_items?: Array<Record<string, unknown>>;
+  customer_email?: string;
+  customer_phone?: string;
+  delivery_address?: string;
+  payment_method?: string;
 }
 
 export default function PaymentMethodPage() {
@@ -32,31 +41,107 @@ export default function PaymentMethodPage() {
   const { toast } = useToast();
   const orderId = Array.isArray(params.orderId) ? params.orderId[0] : params.orderId;
   const [order, setOrder] = useState<Order | null>(null);
+  const [customerEmail, setCustomerEmail] = useState<string | null>(null);
+  const [customerPhone, setCustomerPhone] = useState<string | null>(null);
+  const [paymentState, setPaymentState] = useState<PaymentState>('pending');
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const supabase = createClient();
 
   const paymentMethod = params.method as string;
 
+  const parseOrderExtras = useCallback((rawItems: Order['items']): OrderExtras => {
+    if (!rawItems) return {};
+    try {
+      if (typeof rawItems === 'string') {
+        return JSON.parse(rawItems) as OrderExtras;
+      }
+      if (typeof rawItems === 'object') {
+        return rawItems as OrderExtras;
+      }
+    } catch (error) {
+      logger.warn('payment_method.parse_items_failed', {
+        error: error instanceof Error ? error.message : 'unknown',
+      });
+    }
+    return {};
+  }, []);
+
+  const resolvePaymentState = useCallback((status?: string, method?: string | null): PaymentState => {
+    if (!status) return 'pending';
+    const normalized = status.toLowerCase();
+    const methodKey = (method ?? '').toLowerCase();
+
+    if (['payment confirmed', 'completed', 'delivered'].includes(normalized)) {
+      return 'paid';
+    }
+
+    if (normalized === 'confirmed') {
+      return methodKey === 'cod' ? 'cod_pending' : 'paid';
+    }
+
+    if (normalized === 'cod pending' || normalized === 'awaiting payment') {
+      return methodKey === 'cod' ? 'cod_pending' : 'pending';
+    }
+
+    return methodKey === 'cod' ? 'cod_pending' : 'pending';
+  }, []);
+
+  const formatPaymentState = useCallback((state: PaymentState): string => {
+    switch (state) {
+      case 'paid':
+        return 'Paid';
+      case 'cod_pending':
+        return 'COD Pending';
+      default:
+        return 'Pending';
+    }
+  }, []);
+
   const fetchOrder = useCallback(async () => {
     try {
       setLoading(true);
       const { data, error } = await supabase
         .from('orders')
-        .select(`
-          id,
-          total_amount,
-          payment_status,
-          payment_method,
-          status,
-          created_at,
-          customers!inner(name, email)
-        `)
+        .select('id, total, status, payment_method, created_at, customer_name, items')
         .eq('id', orderId)
         .single();
 
       if (error) throw error;
-      setOrder(data as unknown as Order);
+
+      const row = data as Record<string, unknown>;
+      const normalizedOrder: Order = {
+        id: String(row.id ?? orderId),
+        total: Number(row.total ?? 0),
+        status: typeof row.status === 'string' ? row.status : 'Pending',
+        payment_method: typeof row.payment_method === 'string' ? row.payment_method : paymentMethod,
+        created_at: typeof row.created_at === 'string' ? row.created_at : new Date().toISOString(),
+        customer_name: typeof row.customer_name === 'string' ? row.customer_name : 'Customer',
+        items: (row.items as Order['items']) ?? null,
+      };
+
+      const extras = parseOrderExtras(normalizedOrder.items ?? null);
+  const emailFromExtras = typeof extras.customer_email === 'string' ? extras.customer_email : null;
+  const phoneFromExtras = typeof extras.customer_phone === 'string' ? extras.customer_phone : null;
+  const emailFromRow = typeof row.customer_email === 'string' ? row.customer_email : null;
+  const phoneFromRow = typeof row.customer_phone === 'string' ? row.customer_phone : null;
+
+      const resolvedPaymentMethod = normalizedOrder.payment_method ?? extras.payment_method ?? paymentMethod;
+      const resolvedPaymentState = resolvePaymentState(normalizedOrder.status, resolvedPaymentMethod);
+
+  const customerEmailValue = emailFromExtras ?? emailFromRow;
+  const customerPhoneValue = phoneFromExtras ?? phoneFromRow;
+
+      setOrder({
+        ...normalizedOrder,
+        payment_method: resolvedPaymentMethod,
+        customer_email: customerEmailValue,
+        customer_phone: customerPhoneValue,
+      });
+
+      setCustomerEmail(customerEmailValue);
+      setCustomerPhone(customerPhoneValue);
+      setPaymentState(resolvedPaymentState);
     } catch (error) {
       logger.error('Error fetching order for payment method page', { error, orderId });
       toast({
@@ -67,7 +152,7 @@ export default function PaymentMethodPage() {
     } finally {
       setLoading(false);
     }
-  }, [orderId, supabase, toast]);
+  }, [orderId, parseOrderExtras, paymentMethod, resolvePaymentState, supabase, toast]);
 
   useEffect(() => {
     if (!orderId) {
@@ -148,39 +233,34 @@ export default function PaymentMethodPage() {
       // Simulate payment processing
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      if (paymentMethod.toLowerCase() === 'cod') {
-        // For COD, just confirm the order
-        const { error } = await supabase
-          .from('orders')
-          .update({ 
-            status: 'confirmed',
-            payment_status: 'cod_pending'
-          })
-          .eq('id', orderId);
+      const method = paymentMethod.toLowerCase();
+      const nextStatus = method === 'cod' ? 'Confirmed' : 'Payment Confirmed';
 
-        if (error) throw error;
+      const { error } = await supabase
+        .from('orders')
+        .update({ 
+          status: nextStatus,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', orderId);
 
+      if (error) throw error;
+
+      if (method === 'cod') {
+        setPaymentState('cod_pending');
         toast({
           title: "Order Confirmed!",
           description: "Your COD order has been confirmed. Pay when delivered.",
         });
       } else {
-        // For other payment methods, simulate success
-        const { error } = await supabase
-          .from('orders')
-          .update({ 
-            payment_status: 'paid',
-            status: 'confirmed'
-          })
-          .eq('id', orderId);
-
-        if (error) throw error;
-
+        setPaymentState('paid');
         toast({
           title: "Payment Successful!",
           description: "Your payment has been processed successfully.",
         });
       }
+
+      setOrder(prev => prev ? { ...prev, status: nextStatus } : prev);
 
       // Redirect to order confirmation
       router.push(`/orders/${orderId}`);
@@ -231,6 +311,9 @@ export default function PaymentMethodPage() {
     );
   }
 
+  const paymentMethodLabel = (order.payment_method ?? paymentMethod ?? 'N/A').toString().toUpperCase();
+  const formattedAmount = Number.isFinite(order.total) ? order.total.toFixed(2) : '0.00';
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-2xl">
       <div className="mb-6">
@@ -242,7 +325,10 @@ export default function PaymentMethodPage() {
         <p className="text-gray-600">Order #{order.id.slice(0, 8)}</p>
       </div>
 
-      <div className="space-y-6">
+      const paymentMethodLabel = (order.payment_method ?? paymentMethod ?? 'N/A').toString().toUpperCase();
+      const formattedAmount = Number.isFinite(order.total) ? order.total.toFixed(2) : '0.00';
+
+  <div className="space-y-6">
         {/* Payment Summary */}
         <Card>
           <CardHeader>
@@ -256,22 +342,38 @@ export default function PaymentMethodPage() {
             <div className="space-y-3">
               <div className="flex justify-between">
                 <span>Order Total:</span>
-                <span className="font-medium">₹{order.total_amount.toFixed(2)}</span>
+                <span className="font-medium">₹{formattedAmount}</span>
               </div>
               <div className="flex justify-between">
                 <span>Payment Method:</span>
-                <Badge variant="outline">{paymentMethod.toUpperCase()}</Badge>
+                <Badge variant="outline">{paymentMethodLabel}</Badge>
               </div>
               <div className="flex justify-between">
-                <span>Status:</span>
-                <Badge variant={order.payment_status === 'paid' ? 'default' : 'secondary'}>
-                  {order.payment_status.toUpperCase()}
+                <span>Payment Status:</span>
+                <Badge variant={paymentState === 'paid' ? 'default' : 'secondary'}>
+                  {formatPaymentState(paymentState)}
                 </Badge>
               </div>
+              <div className="flex justify-between">
+                <span>Order Status:</span>
+                <Badge variant="outline">{order.status}</Badge>
+              </div>
+              {customerEmail && (
+                <div className="flex justify-between text-sm text-gray-600">
+                  <span>Email:</span>
+                  <span className="font-medium text-gray-900">{customerEmail}</span>
+                </div>
+              )}
+              {customerPhone && (
+                <div className="flex justify-between text-sm text-gray-600">
+                  <span>Phone:</span>
+                  <span className="font-medium text-gray-900">{customerPhone}</span>
+                </div>
+              )}
               <Separator />
               <div className="flex justify-between text-lg font-bold">
                 <span>Amount to Pay:</span>
-                <span className="text-green-600">₹{order.total_amount.toFixed(2)}</span>
+                <span className="text-green-600">₹{formattedAmount}</span>
               </div>
             </div>
           </CardContent>
@@ -341,16 +443,16 @@ export default function PaymentMethodPage() {
                   onClick={handlePaymentProcess}
                   className="w-full"
                   size="lg"
-                  disabled={processing || order.payment_status === 'paid'}
+                  disabled={processing || paymentState === 'paid'}
                 >
                   {processing ? (
                     'Processing...'
-                  ) : order.payment_status === 'paid' ? (
+                  ) : paymentState === 'paid' ? (
                     'Payment Completed'
                   ) : paymentMethod.toLowerCase() === 'cod' ? (
                     'Confirm COD Order'
                   ) : (
-                    `Pay ₹${order.total_amount.toFixed(2)}`
+                    `Pay ₹${formattedAmount}`
                   )}
                 </Button>
                 

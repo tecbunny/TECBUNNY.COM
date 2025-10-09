@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify the code before disabling (for security)
-    const result = await twoFactorManager.verifyTwoFactor(user.id, code);
+  const result = await twoFactorManager.verifyTwoFactor(user.id, code, supabase);
 
     if (!result.success) {
       return NextResponse.json(
@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Disable 2FA
-    const success = await twoFactorManager.disableTwoFactor(user.id);
+  const success = await twoFactorManager.disableTwoFactor(user.id, supabase);
 
     if (!success) {
       return NextResponse.json(

@@ -68,16 +68,16 @@ async function processPaymentFailed(supabase: any, data: any, source: string) {
 
   const cleanPhone = customer_phone?.replace(/[^\d]/g, '');
   const formattedPhone = cleanPhone ? (cleanPhone.startsWith('91') ? cleanPhone : `91${cleanPhone}`) : null;
+  const paymentAmount = Number(amount ?? 0);
 
   // Update order status
   if (orderId) {
     const { error: orderError } = await supabase
       .from('orders')
       .update({
-        payment_status: 'failed',
         payment_id: paymentId,
         payment_method,
-        status: 'payment_pending',
+        status: 'Awaiting Payment',
         updated_at: new Date().toISOString()
       })
       .eq('order_id', orderId);
@@ -94,7 +94,7 @@ async function processPaymentFailed(supabase: any, data: any, source: string) {
       payment_id: paymentId,
       order_id: orderId,
       customer_phone: formattedPhone,
-      amount,
+  amount: paymentAmount,
       currency,
       payment_method,
       status: 'failed',
@@ -135,7 +135,7 @@ async function processPaymentFailed(supabase: any, data: any, source: string) {
           interaction_data: {
             payment_id: paymentId,
             order_id: orderId,
-            amount,
+            amount: paymentAmount,
             currency,
             payment_method,
             failure_reason,
@@ -152,7 +152,7 @@ async function processPaymentFailed(supabase: any, data: any, source: string) {
     await sendPaymentFailureWhatsApp(formattedPhone, {
       paymentId,
       orderId,
-      amount,
+      amount: paymentAmount,
       currency,
       customerName: customer_name,
       paymentMethod: payment_method,
@@ -168,7 +168,7 @@ async function processPaymentFailed(supabase: any, data: any, source: string) {
       order_id: orderId,
       customer_name,
       phone: formattedPhone,
-      amount,
+      amount: paymentAmount,
       currency,
       payment_method,
       failure_reason,
@@ -180,7 +180,7 @@ async function processPaymentFailed(supabase: any, data: any, source: string) {
     success: true,
     payment_id: paymentId,
     order_id: orderId,
-    amount,
+    amount: paymentAmount,
     currency,
     phone: formattedPhone,
     failure_reason,

@@ -15,7 +15,8 @@ import {
   Mail,
   Clock,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  XCircle
 } from 'lucide-react';
 
 import { logger } from '../../lib/logger';
@@ -79,8 +80,9 @@ interface Order {
   id: string;
   order_number: string;
   customer_id: string;
-  total_amount: number;
-  payment_status: string;
+  total?: number | string;
+  total_amount?: number | string;
+  amount?: number | string;
   status: string;
   created_at: string;
   profiles: Customer;
@@ -174,7 +176,10 @@ export default function WalkInOrderManagement() {
       const response = await fetch(`/api/walk-in-orders?action=daily-stats&date=${selectedDate}`);
       const data = await response.json();
       if (data.stats) {
-        setDailyStats(data.stats);
+        setDailyStats((prev) => ({
+          ...prev,
+          ...data.stats
+        }));
       }
     } catch (error) {
       logger.error('Error fetching daily stats', { error, context: 'WalkInOrderManagement.fetchDailyStats', date: selectedDate });
@@ -372,7 +377,7 @@ export default function WalkInOrderManagement() {
     }
   };
 
-  const updateOrderStatus = async (orderId: string, status?: string, paymentStatus?: string) => {
+  const updateOrderStatus = async (orderId: string, status: string) => {
     try {
       const response = await fetch('/api/walk-in-orders', {
         method: 'POST',
@@ -380,8 +385,7 @@ export default function WalkInOrderManagement() {
         body: JSON.stringify({
           action: 'update-order-status',
           orderId,
-          status,
-          paymentStatus
+          status
         })
       });
 
@@ -396,7 +400,7 @@ export default function WalkInOrderManagement() {
       fetchOrders();
       fetchDailyStats();
     } catch (error) {
-      logger.error('Error updating order status', { error, context: 'WalkInOrderManagement.updateOrderStatus', orderId, status, paymentStatus });
+      logger.error('Error updating order status', { error, context: 'WalkInOrderManagement.updateOrderStatus', orderId, status });
       toast({
         title: "Error",
         description: "Failed to update order",
@@ -413,16 +417,44 @@ export default function WalkInOrderManagement() {
 
   const { subtotal, categoryDiscount, total } = calculateTotals();
 
+  const resolveOrderTotalAmount = (order: Order) => {
+    const candidates = [order.total, order.total_amount, order.amount];
+    for (const value of candidates) {
+      const parsed = parseFloat(String(value ?? ''));
+      if (!Number.isNaN(parsed)) {
+        return parsed;
+      }
+    }
+    return 0;
+  };
+
+  const derivePaymentState = (order: Order): 'Paid' | 'Pending' | 'Failed' => {
+    const normalizedStatus = order.status?.toLowerCase() ?? '';
+
+    if (['payment confirmed', 'completed', 'fulfilled', 'delivered', 'paid'].includes(normalizedStatus)) {
+      return 'Paid';
+    }
+
+    if (['payment failed', 'failed', 'cancelled'].includes(normalizedStatus)) {
+      return 'Failed';
+    }
+
+    return 'Pending';
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'Completed': return 'bg-green-100 text-green-800';
       case 'Processing': return 'bg-blue-100 text-blue-800';
       case 'Cancelled': return 'bg-red-100 text-red-800';
+      case 'Payment Confirmed': return 'bg-green-100 text-green-800';
+      case 'Awaiting Payment': return 'bg-yellow-100 text-yellow-800';
+      case 'Payment Failed': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
 
-  const getPaymentStatusColor = (status: string) => {
+  const getPaymentStatusColor = (status: 'Paid' | 'Pending' | 'Failed') => {
     switch (status) {
       case 'Paid': return 'bg-green-100 text-green-800';
       case 'Pending': return 'bg-yellow-100 text-yellow-800';
@@ -815,66 +847,95 @@ export default function WalkInOrderManagement() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {orders.map((order) => (
-                      <TableRow key={order.id}>
-                        <TableCell className="font-medium">{order.order_number}</TableCell>
-                        <TableCell>
-                          <div>
-                            <div>{order.profiles.first_name} {order.profiles.last_name}</div>
-                            <div className="text-sm text-gray-500">{order.profiles.phone}</div>
-                            <Badge variant="outline" className="text-xs">
-                              {order.profiles.customer_category}
+                    {orders.map((order) => {
+                      const paymentState = derivePaymentState(order);
+                      const orderTotal = resolveOrderTotalAmount(order);
+                      const canMarkAsCompleted = ['Processing', 'Awaiting Payment'].includes(order.status);
+
+                      return (
+                        <TableRow key={order.id}>
+                          <TableCell className="font-medium">{order.order_number}</TableCell>
+                          <TableCell>
+                            <div>
+                              <div>{order.profiles.first_name} {order.profiles.last_name}</div>
+                              <div className="text-sm text-gray-500">{order.profiles.phone}</div>
+                              <Badge variant="outline" className="text-xs">
+                                {order.profiles.customer_category}
+                              </Badge>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="text-sm">
+                              {order.order_items.slice(0, 2).map((item, idx) => (
+                                <div key={idx}>{item.product_name} x{item.quantity}</div>
+                              ))}
+                              {order.order_items.length > 2 && (
+                                <div className="text-gray-500">+{order.order_items.length - 2} more</div>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="font-medium">₹{orderTotal.toFixed(2)}</TableCell>
+                          <TableCell>
+                            <Badge className={getPaymentStatusColor(paymentState)}>
+                              {paymentState}
                             </Badge>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="text-sm">
-                            {order.order_items.slice(0, 2).map((item, idx) => (
-                              <div key={idx}>{item.product_name} x{item.quantity}</div>
-                            ))}
-                            {order.order_items.length > 2 && (
-                              <div className="text-gray-500">+{order.order_items.length - 2} more</div>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell className="font-medium">₹{parseFloat(String(order.total_amount)).toFixed(2)}</TableCell>
-                        <TableCell>
-                          <Badge className={getPaymentStatusColor(order.payment_status)}>
-                            {order.payment_status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={getStatusColor(order.status)}>
-                            {order.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {new Date(order.created_at).toLocaleTimeString()}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-1">
-                            {order.status === 'Processing' && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => updateOrderStatus(order.id, 'Completed')}
-                              >
-                                <CheckCircle className="w-3 h-3" />
-                              </Button>
-                            )}
-                            {order.payment_status === 'Pending' && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => updateOrderStatus(order.id, undefined, 'Paid')}
-                              >
-                                <CreditCard className="w-3 h-3" />
-                              </Button>
-                            )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                          </TableCell>
+                          <TableCell>
+                            <Badge className={getStatusColor(order.status)}>
+                              {order.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {new Date(order.created_at).toLocaleTimeString()}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex gap-2">
+                              {canMarkAsCompleted && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => updateOrderStatus(order.id, 'Completed')}
+                                  title="Mark as Completed"
+                                >
+                                  <CheckCircle className="w-3 h-3" />
+                                </Button>
+                              )}
+                              {paymentState === 'Pending' && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => updateOrderStatus(order.id, 'Payment Confirmed')}
+                                  title="Mark as Paid"
+                                >
+                                  <CreditCard className="w-3 h-3" />
+                                </Button>
+                              )}
+                              {order.status !== 'Awaiting Payment' && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => updateOrderStatus(order.id, 'Awaiting Payment')}
+                                  title="Mark as Awaiting Payment"
+                                >
+                                  <Clock className="w-3 h-3" />
+                                </Button>
+                              )}
+                              {order.status !== 'Payment Failed' && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="text-red-600 border-red-200 hover:text-red-700 hover:border-red-300"
+                                  onClick={() => updateOrderStatus(order.id, 'Payment Failed')}
+                                  title="Mark as Failed"
+                                >
+                                  <XCircle className="w-3 h-3" />
+                                </Button>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               )}

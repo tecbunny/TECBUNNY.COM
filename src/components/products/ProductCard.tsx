@@ -2,6 +2,7 @@
 'use client';
 
 import * as React from 'react';
+import DOMPurify from 'dompurify';
 import { useRouter } from 'next/navigation';
 
 import { Eye, Tag, Truck } from 'lucide-react';
@@ -10,7 +11,6 @@ import type { Product } from '../../lib/types';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { AddToCartButton } from '../../components/cart/AddToCartButton';
-
 
 import { StarRating } from './StarRating';
 
@@ -107,6 +107,21 @@ export function ProductCard({ product, viewMode = 'grid' }: ProductCardProps) {
         };
     }
   }, [product.stock_status, product.stock_quantity]);
+
+  const descriptionText = React.useMemo(() => {
+    if (!product.description) {
+      return '';
+    }
+
+    const sanitized = DOMPurify.sanitize(product.description, { USE_PROFILES: { html: true } });
+    const text = sanitized
+      .replace(/<\/(p|div|li|br)[^>]*>/gi, '\n')
+      .replace(/<[^>]+>/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    return text;
+  }, [product.description]);
   if (viewMode === 'list') {
     return (
       <Card onClick={() => router.push(`/products/${product.id}`)} className="cursor-pointer flex flex-col md:flex-row overflow-hidden transition-all duration-300 hover:shadow-lg">
@@ -165,8 +180,8 @@ export function ProductCard({ product, viewMode = 'grid' }: ProductCardProps) {
               </CardTitle>
               
               {/* Description */}
-              <p className="text-muted-foreground mb-6 line-clamp-3 text-base">
-                {product.description}
+                <p className="text-muted-foreground mb-6 line-clamp-3 text-base">
+                  {descriptionText}
               </p>
               
               {/* Rating */}
@@ -334,15 +349,15 @@ export function ProductCard({ product, viewMode = 'grid' }: ProductCardProps) {
           
           {/* Description (shortened for grid view) - Always reserve space */}
           <div className="mb-4 min-h-[2.5rem] flex items-start">
-            {product.description ? (
-              <p className="text-sm text-muted-foreground line-clamp-2">
-                {product.description}
-              </p>
-            ) : (
-              <p className="text-sm text-muted-foreground opacity-50">
-                No description available
-              </p>
-            )}
+              {descriptionText ? (
+                <p className="text-sm text-muted-foreground line-clamp-2">
+                  {descriptionText.length > 160 ? `${descriptionText.slice(0, 160)}…` : descriptionText}
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground opacity-50">
+                  No description available
+                </p>
+              )}
           </div>
         </div>
       </CardContent>

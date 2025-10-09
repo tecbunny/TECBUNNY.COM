@@ -3,7 +3,7 @@ import type { User } from '@supabase/supabase-js';
 import { createClient, createServiceClient } from '../../lib/supabase/server';
 import { logger } from '../../lib/logger';
 
-type AdminRole = 'admin' | 'manager';
+type AdminRole = 'admin' | 'manager' | 'superadmin';
 
 export class AdminAuthError extends Error {
   status: number;
@@ -21,7 +21,7 @@ export interface AdminContext {
 }
 
 function isAdminRole(role: unknown): role is AdminRole {
-  return role === 'admin' || role === 'manager';
+  return role === 'admin' || role === 'manager' || role === 'superadmin';
 }
 
 export async function requireAdminContext(): Promise<AdminContext> {

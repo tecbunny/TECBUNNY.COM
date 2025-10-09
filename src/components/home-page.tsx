@@ -4,6 +4,7 @@ import * as React from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowRight, Package, ShoppingBag, Star, TrendingUp, Gift } from 'lucide-react';
+import DOMPurify from 'dompurify';
 
 import { logger } from '../lib/logger';
 import type { Product } from '../lib/types';
@@ -35,6 +36,65 @@ function HomeContent() {
   return <DefaultHomePage sectionFilter={section} />;
 }
 
+const FALLBACK_PRODUCTS: Product[] = [
+  {
+    id: 'fallback-1',
+    title: 'Premium Laptop Pro 15',
+    name: 'Premium Laptop Pro 15',
+    description: 'Powerful performance with Intel i7 processor, 16GB RAM, 1TB SSD, and 4K display for professionals on the go.',
+    price: 124999,
+    mrp: 139999,
+    category: 'Electronics',
+    image: '/placeholder-product.jpg',
+    popularity: 95,
+    rating: 4.8,
+    reviewCount: 128,
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 'fallback-2',
+    title: 'Smartphone Ultra X',
+    name: 'Smartphone Ultra X',
+    description: '6.7" AMOLED display, triple camera system, 5G connectivity, and all-day battery life with 65W fast charging.',
+    price: 79999,
+    mrp: 89999,
+    category: 'Electronics',
+    image: '/placeholder-product.jpg',
+    popularity: 92,
+    rating: 4.7,
+    reviewCount: 214,
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 'fallback-3',
+    title: 'Smart Home Starter Kit',
+    name: 'Smart Home Starter Kit',
+    description: 'Transform your home with smart lights, voice-controlled hub, and intelligent sensors that work together seamlessly.',
+    price: 24999,
+    mrp: 27999,
+    category: 'Home',
+    image: '/placeholder-product.jpg',
+    popularity: 88,
+    rating: 4.6,
+    reviewCount: 86,
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 'fallback-4',
+    title: 'Gaming Headset GX9',
+    name: 'Gaming Headset GX9',
+    description: 'Immersive 7.1 surround sound, noise-cancelling mic, breathable ear cushions, and RGB lighting for serious gamers.',
+    price: 9999,
+    mrp: 12999,
+    category: 'Gaming',
+    image: '/placeholder-product.jpg',
+    popularity: 90,
+    rating: 4.5,
+    reviewCount: 64,
+    created_at: new Date().toISOString()
+  }
+];
+
 function DefaultHomePage({ sectionFilter }: { sectionFilter?: string | null }) {
   const [featuredProducts, setFeaturedProducts] = React.useState<Product[]>([]);
   const [newArrivals, setNewArrivals] = React.useState<Product[]>([]);
@@ -58,12 +118,17 @@ function DefaultHomePage({ sectionFilter }: { sectionFilter?: string | null }) {
         // First, check if the products table exists and has the expected structure
         const { data: products, error: productsError } = await supabase
           .from('products')
-          .select('id, title, description, price, popularity, rating, reviewCount, created_at, status, images, vendor, product_type')
+          .select('id, title, description, price, popularity, rating, review_count, created_at, status, images, vendor, product_type')
           .eq('status', 'active')
           .order('created_at', { ascending: false });
 
         if (productsError) {
           logger.warn('Unable to fetch products (using fallback):', { error: productsError.message });
+          setError(productsError.message || 'Unable to fetch products');
+          setFeaturedProducts(FALLBACK_PRODUCTS.slice(0, 4));
+          setNewArrivals(FALLBACK_PRODUCTS.slice(0, 4));
+          setTrendingProducts(FALLBACK_PRODUCTS.slice(0, 4));
+          setDealProducts(FALLBACK_PRODUCTS.slice(0, 4));
           setLoading(false);
           return;
         }
@@ -84,7 +149,7 @@ function DefaultHomePage({ sectionFilter }: { sectionFilter?: string | null }) {
               category: p.product_type || 'General',
               popularity: p.popularity || 0,
               rating: p.rating || 0,
-              reviewCount: p.reviewCount || 0,
+              reviewCount: (p as any).review_count ?? (p as any).reviewCount ?? 0,
               description: p.description || 'No description available',
               price: p.price || 0,
               created_at: p.created_at || new Date().toISOString(),
@@ -120,10 +185,17 @@ function DefaultHomePage({ sectionFilter }: { sectionFilter?: string | null }) {
         };
 
         // Create default sections with safe fallbacks
-        const defaultFeatured = allProducts.slice(0, 4);
+        const sourceProducts = allProducts.length > 0 ? allProducts : FALLBACK_PRODUCTS;
+
+        if (allProducts.length === 0) {
+          logger.info('No products returned from Supabase, using fallback dataset');
+          setError('No live products available yet. Showing featured catalog.');
+        }
+
+        const defaultFeatured = sourceProducts.slice(0, 4);
         setFeaturedProducts(loadSectionProducts('featuredProductIds', defaultFeatured));
 
-        const defaultNewArrivals = allProducts
+        const defaultNewArrivals = [...sourceProducts]
           .sort((a, b) => {
             const dateA = new Date(a.created_at).getTime();
             const dateB = new Date(b.created_at).getTime();
@@ -132,12 +204,12 @@ function DefaultHomePage({ sectionFilter }: { sectionFilter?: string | null }) {
           .slice(0, 4);
         setNewArrivals(loadSectionProducts('newArrivalProductIds', defaultNewArrivals));
 
-        const defaultTrending = allProducts
+        const defaultTrending = [...sourceProducts]
           .sort((a, b) => b.popularity - a.popularity)
           .slice(0, 4);
         setTrendingProducts(loadSectionProducts('trendingProductIds', defaultTrending));
 
-        const defaultDeals = allProducts
+        const defaultDeals = [...sourceProducts]
           .filter(p => p.popularity > 90)
           .slice(0, 4);
         setDealProducts(loadSectionProducts('dealProductIds', defaultDeals));
@@ -165,6 +237,18 @@ function DefaultHomePage({ sectionFilter }: { sectionFilter?: string | null }) {
       : '');
     const displayPrice = product.offer_price || product.price;
     const hasDiscount = product.offer_price && product.offer_price < product.price;
+    const descriptionText = React.useMemo(() => {
+      if (!product.description) {
+        return '';
+      }
+
+      const sanitized = DOMPurify.sanitize(product.description, { USE_PROFILES: { html: true } });
+      return sanitized
+        .replace(/<\/(p|div|li|br)[^>]*>/gi, '\n')
+        .replace(/<[^>]+>/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }, [product.description]);
     
     return (
       <Link href={`/products/${product.id}`}>
@@ -196,7 +280,9 @@ function DefaultHomePage({ sectionFilter }: { sectionFilter?: string | null }) {
           </div>
           <CardContent className="p-4">
             <h3 className="font-semibold text-lg mb-2 line-clamp-2">{product.title || product.name || 'Product'}</h3>
-            <p className="text-sm text-gray-600 mb-3 line-clamp-2">{product.description}</p>
+            <p className="text-sm text-gray-600 mb-3 line-clamp-2">
+              {descriptionText ? (descriptionText.length > 160 ? `${descriptionText.slice(0, 160)}…` : descriptionText) : 'No description available'}
+            </p>
             <div className="flex items-center justify-between">
               <div className="flex flex-col">
                 <span className="text-lg font-bold text-blue-600">₹{displayPrice}</span>

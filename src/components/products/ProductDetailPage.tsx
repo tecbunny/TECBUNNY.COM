@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Share2, Star, Truck, Shield, RefreshCw } from 'lucide-react';
+import DOMPurify from 'dompurify';
 
 import { logger } from '../../lib/logger';
 
@@ -28,6 +29,11 @@ export function ProductDetailPage({ productId }: ProductDetailPageProps) {
   const [loading, setLoading] = useState(true);
   const [selectedImage, setSelectedImage] = useState(0);
   const supabase = createClient();
+
+  const skuValue = useMemo(() => {
+    if (!product) return '';
+    return product.handle || product.barcode || product.id;
+  }, [product]);
 
   // Prepare product images (main + additional) - moved before early returns
   const productImages = useMemo(() => {
@@ -80,6 +86,22 @@ export function ProductDetailPage({ productId }: ProductDetailPageProps) {
 
     // Sanitize all URLs to avoid SVGs
     return finalized.map(ensurePng);
+  }, [product]);
+
+  const descriptionHtml = useMemo(() => {
+    if (!product) {
+      return '';
+    }
+
+    const fallbackText = `Experience the best in ${product.category} technology with the ${product.name}. This premium product combines cutting-edge features with exceptional build quality to deliver outstanding performance and reliability. Perfect for both professionals and enthusiasts who demand the very best.`;
+
+    const rawDescription = (product.description && product.description.trim().length > 0)
+      ? product.description
+      : `<p>${fallbackText}</p>`;
+
+    return DOMPurify.sanitize(rawDescription, {
+      USE_PROFILES: { html: true }
+    });
   }, [product]);
 
   useEffect(() => {
@@ -266,9 +288,10 @@ export function ProductDetailPage({ productId }: ProductDetailPageProps) {
           {/* Description */}
           <div className="space-y-4">
             <h3 className="text-lg font-semibold">Product Description</h3>
-            <p className="text-muted-foreground leading-relaxed">
-              {product.description || `Experience the best in ${product.category} technology with the ${product.name}. This premium product combines cutting-edge features with exceptional build quality to deliver outstanding performance and reliability. Perfect for both professionals and enthusiasts who demand the very best.`}
-            </p>
+            <div
+              className="prose prose-slate max-w-none text-muted-foreground leading-relaxed"
+              dangerouslySetInnerHTML={{ __html: descriptionHtml }}
+            />
           </div>
 
           {/* Specifications */}
@@ -292,10 +315,10 @@ export function ProductDetailPage({ productId }: ProductDetailPageProps) {
 
           {/* Additional Product Info */}
           <div className="grid grid-cols-2 gap-4 text-sm">
-            {product.barcode && (
+            {skuValue && (
               <div>
                 <span className="font-medium">SKU:</span> 
-                <span className="text-muted-foreground ml-1">{product.barcode}</span>
+                <span className="text-muted-foreground ml-1">{skuValue}</span>
               </div>
             )}
             <div>
@@ -358,9 +381,11 @@ export function ProductDetailPage({ productId }: ProductDetailPageProps) {
             </div>
             
             <div className="grid grid-cols-2 gap-4 text-sm text-muted-foreground">
-              <div>
-                <span className="font-medium">SKU:</span> {product.id}
-              </div>
+              {skuValue && (
+                <div>
+                  <span className="font-medium">SKU:</span> {skuValue}
+                </div>
+              )}
               <div>
                 <span className="font-medium">Category:</span> {product.category}
               </div>

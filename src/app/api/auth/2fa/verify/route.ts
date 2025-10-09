@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify the 2FA code
-    const result = await twoFactorManager.verifyTwoFactor(user.id, code);
+  const result = await twoFactorManager.verifyTwoFactor(user.id, code, supabase);
 
     if (!result.success) {
       return NextResponse.json(

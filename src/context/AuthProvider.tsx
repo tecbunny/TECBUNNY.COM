@@ -1,12 +1,64 @@
 'use client';
 
-import React, { createContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
 
 import type { SupabaseClient, User as SupabaseUser } from '@supabase/supabase-js';
 
 import type { User, UserRole } from '../lib/types';
 import { createClient } from '../lib/supabase/client';
 import { logger } from '../lib/logger';
+import { SessionManager, SESSION_EXPIRED_EVENT } from '../lib/session-manager';
+
+const ROLE_SET: ReadonlySet<UserRole> = new Set([
+  'customer',
+  'sales',
+  'service_engineer',
+  'accounts',
+  'manager',
+  'admin',
+  'superadmin'
+]);
+
+const parseRole = (value: unknown): UserRole | null => {
+  if (typeof value !== 'string' || !value) {
+    return null;
+  }
+
+  const normalized = value.trim().toLowerCase() as UserRole;
+  return ROLE_SET.has(normalized) ? normalized : null;
+};
+
+const METADATA_ROLE_KEYS = ['role', 'default_role', 'app_role', 'user_role'] as const;
+const METADATA_ROLE_ARRAY_KEYS = ['roles', 'app_roles'] as const;
+
+const extractRoleFromMetadata = (metadata: Record<string, unknown> | undefined | null): UserRole | null => {
+  if (!metadata || typeof metadata !== 'object') return null;
+  const metaRecord = metadata as Record<string, unknown>;
+
+  for (const key of METADATA_ROLE_KEYS) {
+    if (key in metaRecord) {
+      const candidate = metaRecord[key];
+      const parsed = parseRole(candidate);
+      if (parsed) {
+        return parsed;
+      }
+    }
+  }
+
+  for (const key of METADATA_ROLE_ARRAY_KEYS) {
+    const candidate = metaRecord[key];
+    if (Array.isArray(candidate)) {
+      for (const value of candidate) {
+        const parsed = parseRole(value);
+        if (parsed) {
+          return parsed;
+        }
+      }
+    }
+  }
+
+  return null;
+};
 
 interface SignupDetails {
   email: string;
@@ -35,7 +87,7 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<AuthResponse>;
-  logout: () => Promise<void>;
+  logout: (options?: { redirectTo?: string; silent?: boolean }) => Promise<void>;
   signup: (details: SignupDetails) => Promise<AuthResponse>;
   resendConfirmation: (email: string) => Promise<AuthResponse>;
   setUser: React.Dispatch<React.SetStateAction<User | null>>;
@@ -48,13 +100,25 @@ export const AuthContext = createContext<AuthContextType | undefined>(undefined)
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
+  const sessionManager = SessionManager.getInstance();
 
   const fetchUserProfile = useCallback(async (supabaseUser: SupabaseUser) => {
+    // Pre-compute metadata-derived fields so we always have a usable profile
+    const appMetadataRole = extractRoleFromMetadata(supabaseUser.app_metadata as Record<string, unknown> | undefined);
+    const userMetadataRole = extractRoleFromMetadata(supabaseUser.user_metadata as Record<string, unknown> | undefined);
+    const resolvedRole = appMetadataRole ?? userMetadataRole ?? 'customer';
+    const fallbackProfile: User = {
+      id: supabaseUser.id,
+      name: supabaseUser.user_metadata?.name || supabaseUser.email?.split('@')[0] || 'User',
+      email: supabaseUser.email || '',
+      mobile: supabaseUser.user_metadata?.mobile || '',
+      role: resolvedRole,
+      emailVerified: Boolean(supabaseUser.email_confirmed_at),
+      email_confirmed_at: supabaseUser.email_confirmed_at ?? null
+    };
+
     try {
-      // Get role from app_metadata (secure, admin-only editable)
-      const appMetadataRole = (supabaseUser.app_metadata?.role as UserRole) || null;
-      
       const { data: profile, error } = await supabase
         .from('profiles')
         .select('*')
@@ -65,13 +129,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (error.code === 'PGRST116') {
           // Profile doesn't exist, create a basic one from user metadata
           logger.info('Profile not found, creating from user metadata', { userId: supabaseUser.id });
+
           const newProfile: User = {
             id: supabaseUser.id,
             name: supabaseUser.user_metadata?.name || supabaseUser.email?.split('@')[0] || 'User',
             email: supabaseUser.email || '',
             mobile: supabaseUser.user_metadata?.mobile || '',
             // Prefer app_metadata role (secure), fallback to user_metadata
-            role: appMetadataRole || (supabaseUser.user_metadata?.role as UserRole) || 'customer'
+            role: resolvedRole
           };
           
           // Try to insert the profile
@@ -80,36 +145,65 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             .insert([{
               id: newProfile.id,
               name: newProfile.name,
+              email: newProfile.email,
               mobile: newProfile.mobile,
-              role: newProfile.role
+              role: newProfile.role,
+              email_verified: Boolean(supabaseUser.email_confirmed_at)
             }])
             .select()
             .single();
             
           if (insertError) {
             logger.error('Error creating profile', { error: insertError, userId: supabaseUser.id });
-            return newProfile; // Return basic profile even if insert fails
+            return {
+              ...newProfile,
+              emailVerified: Boolean(supabaseUser.email_confirmed_at),
+              email_confirmed_at: supabaseUser.email_confirmed_at ?? null
+            };
           }
           
-          return { ...insertedProfile, email: newProfile.email } as User;
+          return {
+            ...insertedProfile,
+            email: newProfile.email,
+            emailVerified: Boolean(supabaseUser.email_confirmed_at || insertedProfile.email_confirmed_at),
+            email_confirmed_at: supabaseUser.email_confirmed_at ?? insertedProfile.email_confirmed_at
+          } as User;
         } else {
           logger.error('Error fetching profile', { error, userId: supabaseUser.id });
-          return null;
+          return fallbackProfile;
         }
       }
       
-      // Prefer app_metadata role (secure, admin-only editable) over profiles.role
-      const userRole = appMetadataRole || (profile.role as UserRole) || 'customer';
+      const profileRole = parseRole(profile.role as string | undefined);
+      const userRole = appMetadataRole ?? profileRole ?? userMetadataRole ?? 'customer';
+
+      if (profileRole !== userRole) {
+        try {
+          await supabase
+            .from('profiles')
+            .update({ role: userRole })
+            .eq('id', supabaseUser.id);
+        } catch (updateError) {
+          logger.warn('AuthProvider role normalization update failed', {
+            error: updateError,
+            userId: supabaseUser.id,
+            currentRole: profile.role,
+            normalizedRole: userRole
+          });
+        }
+      }
       
       // Add email from auth user if not in profile
       return { 
         ...profile, 
         email: supabaseUser.email || profile.email || '',
-        role: userRole
+        role: userRole,
+        emailVerified: Boolean(supabaseUser.email_confirmed_at || profile.email_confirmed_at),
+        email_confirmed_at: supabaseUser.email_confirmed_at ?? profile.email_confirmed_at
       } as User;
     } catch (err) {
       logger.error('Unexpected error in fetchUserProfile', { error: err, userId: supabaseUser?.id });
-      return null;
+      return fallbackProfile;
     }
   }, [supabase]);
 
@@ -137,6 +231,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               setUser({ ...profile, emailVerified: Boolean(emailConfirmedAt || profile.email_confirmed_at), email_confirmed_at: emailConfirmedAt ?? profile.email_confirmed_at });
             } else {
               setUser(null);
+            }
+
+            if (typeof window !== 'undefined') {
+              const lastSignInAtRaw = session.user.last_sign_in_at;
+              const parsedTimestamp = lastSignInAtRaw ? new Date(lastSignInAtRaw).getTime() : NaN;
+              const sessionStart = Number.isFinite(parsedTimestamp) ? parsedTimestamp : Date.now();
+              sessionManager.registerSessionStart(sessionStart);
             }
           } else if (mounted) {
             setUser(null);
@@ -170,11 +271,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setUser(profile);
           setLoading(false);
         }
+
+        if (typeof window !== 'undefined') {
+          const lastSignInAtRaw = session.user.last_sign_in_at;
+          const parsedTimestamp = lastSignInAtRaw ? new Date(lastSignInAtRaw).getTime() : NaN;
+          const sessionStart = Number.isFinite(parsedTimestamp) ? parsedTimestamp : Date.now();
+          sessionManager.registerSessionStart(sessionStart);
+        }
       } else if (event === 'SIGNED_OUT') {
         if (mounted) {
           setUser(null);
           setLoading(false);
         }
+        sessionManager.clearSessionTracking();
       }
     });
 
@@ -182,7 +291,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       mounted = false;
       subscription?.unsubscribe();
     };
-  }, [supabase.auth, fetchUserProfile]);
+  }, [supabase.auth, fetchUserProfile, sessionManager]);
 
   const login = async (email: string, password: string): Promise<AuthResponse> => {
     try {
@@ -218,6 +327,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (data.session.user) {
         const profile = await fetchUserProfile(data.session.user);
         setUser(profile);
+
+        if (typeof window !== 'undefined') {
+          const lastSignInAtRaw = data.session.user.last_sign_in_at;
+          const parsedTimestamp = lastSignInAtRaw ? new Date(lastSignInAtRaw).getTime() : NaN;
+          const sessionStart = Number.isFinite(parsedTimestamp) ? parsedTimestamp : Date.now();
+          sessionManager.registerSessionStart(sessionStart);
+        }
         
         // Return success response with user profile for redirect logic
         return {
@@ -242,42 +358,64 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const logout = async () => {
-    try {
+  const logout = useCallback(async (options?: { redirectTo?: string; silent?: boolean }) => {
+    const redirectTo = options?.redirectTo ?? '/';
+    const silent = Boolean(options?.silent);
+
+    if (!silent) {
       setLoading(true);
-      
-      // Call server-side signout API
+    }
+
+    sessionManager.clearSessionTracking();
+
+    try {
       const response = await fetch('/api/auth/signout', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
       });
-      
+
       if (!response.ok) {
         throw new Error('Server signout failed');
       }
-      
-      // Also call client-side signout as backup
+    } catch (error) {
+      logger.error('Server signout error', { error });
+    }
+
+    try {
       const { error } = await supabase.auth.signOut();
       if (error) {
         logger.error('Client signout error', { error });
-        // Don't throw here, server signout already succeeded
       }
-      
-      setUser(null);
-      
-      // Force redirect to homepage
-      window.location.href = '/';
     } catch (error) {
-      logger.error('Logout error', { error });
-      // Fallback: still clear user state and redirect
-      setUser(null);
-      window.location.href = '/';
-    } finally {
+      logger.error('Supabase signout failure', { error });
+    }
+
+    setUser(null);
+
+    if (!silent) {
       setLoading(false);
     }
-  };
+
+    if (typeof window !== 'undefined') {
+      window.location.href = redirectTo;
+    }
+  }, [sessionManager, supabase]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleSessionExpired = () => {
+      logout({ redirectTo: '/auth/login?session=expired', silent: true });
+    };
+
+    window.addEventListener(SESSION_EXPIRED_EVENT, handleSessionExpired);
+
+    return () => {
+      window.removeEventListener(SESSION_EXPIRED_EVENT, handleSessionExpired);
+    };
+  }, [logout]);
 
   const signup = async (details: SignupDetails): Promise<AuthResponse> => {
     try {

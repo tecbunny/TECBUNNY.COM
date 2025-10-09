@@ -133,7 +133,6 @@ class ImprovedEmailService {
     }
     const now = Date.now();
     const oneHour = 60 * 60 * 1000;
-    const thirtySeconds = 30 * 1000;
     const fiveMinutes = 5 * 60 * 1000;
     
     // Global rate limiting: max 1 email per 500ms for faster OTP delivery

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { createClient } from '../../../lib/supabase/server';
+import { createClient, createServiceClient, isSupabaseServiceConfigured } from '../../../lib/supabase/server';
+import { getSessionWithRole } from '../../../lib/auth/server-role';
 import { logger } from '../../../lib/logger';
 
 // Simple in-memory cache for products table columns (lifetime of lambda)
@@ -21,6 +22,8 @@ async function ensureProductColumns(supabase: any) {
   return productColumnsCache;
 }
 
+const ADMIN_ROLES = new Set(['admin', 'superadmin', 'manager']);
+
 // Get products with variants and options
 export async function GET(request: NextRequest) {
   try {
@@ -29,7 +32,10 @@ export async function GET(request: NextRequest) {
     const include_variants = searchParams.get('include_variants') === 'true';
     const include_options = searchParams.get('include_options') === 'true';
 
-    const supabase = await createClient();
+    const { supabase: authClient, role } = await getSessionWithRole(request);
+    const supabase = role && ADMIN_ROLES.has(role) && isSupabaseServiceConfigured
+      ? createServiceClient()
+      : authClient ?? await createClient();
 
     if (handle) {
       // Get specific product by handle (use name as fallback)
@@ -226,21 +232,18 @@ export async function POST(request: NextRequest) {
       ? images.map((img: any) => typeof img === 'string' ? img : img?.url).filter(Boolean)
       : [];
 
-    const supabase = await createClient();
-
-    // Check authentication & role
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
+    const { supabase: authClient, session, role } = await getSessionWithRole(request);
+    if (!session) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
     }
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single();
-    if (!profile || !['admin','manager'].includes(profile.role)) {
+    if (!role || !ADMIN_ROLES.has(role)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
+
+    const supabase = role && ADMIN_ROLES.has(role) && isSupabaseServiceConfigured
+      ? createServiceClient()
+      : authClient;
+    const user = session.user;
 
     // Create product; now that handle is available, prefer upsert on handle, with safe fallback
     let product: any = null;
@@ -378,23 +381,20 @@ export async function PUT(request: NextRequest) {
       (updateData as any).images = images.map((img: any) => typeof img === 'string' ? img : img?.url).filter(Boolean);
     }
 
-    const supabase = await createClient();
-
-    // Check authentication & role
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
+    const { supabase: authClient, session, role } = await getSessionWithRole(request);
+    if (!session) {
       logger.warn('product_update_unauthenticated', { correlationId });
       return NextResponse.json({ error: 'Authentication required' }, { status: 401, headers: { 'x-correlation-id': correlationId } });
     }
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single();
-    if (!profile || !['admin','manager'].includes(profile.role)) {
-      logger.warn('product_update_forbidden', { correlationId, role: profile?.role });
+    if (!role || !ADMIN_ROLES.has(role)) {
+      logger.warn('product_update_forbidden', { correlationId, role });
       return NextResponse.json({ error: 'Forbidden' }, { status: 403, headers: { 'x-correlation-id': correlationId } });
     }
+
+    const supabase = role && ADMIN_ROLES.has(role) && isSupabaseServiceConfigured
+      ? createServiceClient()
+      : authClient;
+    const user = session.user;
 
     // Normalize tags if provided as comma separated string
     if (typeof (updateData as any).tags === 'string') {
@@ -531,21 +531,17 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Product ID is required' }, { status: 400 });
     }
 
-    const supabase = await createClient();
-
-    // Check authentication & role
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
+    const { supabase: authClient, session, role } = await getSessionWithRole(request);
+    if (!session) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
     }
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single();
-    if (!profile || !['admin','manager'].includes(profile.role)) {
+    if (!role || !ADMIN_ROLES.has(role)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
+
+    const supabase = role && ADMIN_ROLES.has(role) && isSupabaseServiceConfigured
+      ? createServiceClient()
+      : authClient ?? await createClient();
 
     const { error } = await supabase
       .from('products')

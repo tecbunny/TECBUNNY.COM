@@ -57,6 +57,7 @@ export function Header() {
     
     let dashboardPath = '/';
     switch (user.role) {
+      case 'superadmin':
       case 'admin':
         dashboardPath = '/management/admin';
         break;

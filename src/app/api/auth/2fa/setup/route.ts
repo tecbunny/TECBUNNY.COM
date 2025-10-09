@@ -19,7 +19,7 @@ export async function POST(_request: NextRequest) {
     }
 
     // Check if 2FA is already enabled
-    const status = await twoFactorManager.getTwoFactorStatus(user.id);
+  const status = await twoFactorManager.getTwoFactorStatus(user.id, supabase);
     if (status?.enabled) {
       return NextResponse.json(
         { error: '2FA is already enabled for this account' },
@@ -79,7 +79,7 @@ export async function PUT(request: NextRequest) {
     }
 
     // Enable 2FA for the user
-    const success = await twoFactorManager.enableTwoFactor(user.id, secret, backupCodes);
+  const success = await twoFactorManager.enableTwoFactor(user.id, secret, backupCodes, supabase);
 
     if (!success) {
       return NextResponse.json(

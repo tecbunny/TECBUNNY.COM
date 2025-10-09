@@ -1,10 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { logger } from '../../../../lib/logger';
+import { isAdmin } from '../../../../lib/permissions';
+import { createClient as createRouteClient } from '../../../../lib/supabase/server';
 import { createSupabaseServiceClient } from '../../../../lib/supabase-server';
+
+async function assertAdmin() {
+  const supabase = await createRouteClient();
+  const { data: { user }, error } = await supabase.auth.getUser();
+
+  if (error) {
+    logger.error('payment_settings.auth_failed', { error });
+    return { response: NextResponse.json({ error: 'Authentication failed' }, { status: 500 }) };
+  }
+
+  if (!user || !(await isAdmin(user))) {
+    return { response: NextResponse.json({ error: 'Admin access required' }, { status: 403 }) };
+  }
+
+  return { user };
+}
 
 export async function GET() {
   try {
+    const authResult = await assertAdmin();
+    if ('response' in authResult) {
+      return authResult.response;
+    }
+
     const supabase = createSupabaseServiceClient();
     
     // Fetch payment settings from the settings table
@@ -57,6 +80,11 @@ export async function GET() {
 
 export async function PUT(request: NextRequest) {
   try {
+    const authResult = await assertAdmin();
+    if ('response' in authResult) {
+      return authResult.response;
+    }
+
     const supabase = createSupabaseServiceClient();
     const { methodId, updates } = await request.json();
 

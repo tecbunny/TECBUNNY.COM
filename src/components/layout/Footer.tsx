@@ -3,11 +3,13 @@
 import * as React from 'react';
 import Link from 'next/link';
 
-import { Facebook, Twitter, Instagram, Linkedin } from 'lucide-react';
+import { Facebook, Twitter, Instagram, Linkedin, Youtube, Globe } from 'lucide-react';
 
 import { Button } from '../../components/ui/enhanced-ui';
 import { Input } from '../../components/ui/enhanced-ui';
 import { Logo } from '../../components/ui/logo';
+import { createClient } from '../../lib/supabase/client';
+import { logger } from '../../lib/logger';
 
 function WhatsAppIcon(props: React.SVGProps<SVGSVGElement>) {
     return (
@@ -25,6 +27,8 @@ function WhatsAppIcon(props: React.SVGProps<SVGSVGElement>) {
 
 export function Footer() {
   const [companyInfo, setCompanyInfo] = React.useState<{supportEmail?: string; supportPhone?: string; registeredAddress?: string}>({});
+  const [socialLinks, setSocialLinks] = React.useState<Record<string, string>>({});
+  const supabase = React.useMemo(() => createClient(), []);
 
   React.useEffect(() => {
     fetch('/company-info.json')
@@ -33,9 +37,59 @@ export function Footer() {
       .catch(() => {});
   }, []);
 
+  React.useEffect(() => {
+    const loadSocialLinks = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('settings')
+          .select('key, value')
+          .in('key', [
+            'facebookUrl',
+            'twitterUrl',
+            'instagramUrl',
+            'linkedinUrl',
+            'youtubeUrl',
+            'websiteUrl',
+          ]);
+
+        if (error) {
+          logger.error('Footer: failed to load social media links', { error });
+          return;
+        }
+
+        const links: Record<string, string> = {};
+        data?.forEach((setting) => {
+          if (setting.value) {
+            links[setting.key] = setting.value as string;
+          }
+        });
+
+        setSocialLinks(links);
+      } catch (error) {
+        logger.error('Footer: unexpected error while loading social media links', { error });
+      }
+    };
+
+    loadSocialLinks();
+  }, [supabase]);
+
   const supportEmail = companyInfo.supportEmail || 'support@tecbunny.com';
   const supportPhone = companyInfo.supportPhone || '+1234567890';
   const address = companyInfo.registeredAddress || undefined;
+
+  const socialPlatforms = React.useMemo(
+    () => [
+      { key: 'facebookUrl', icon: Facebook, label: 'Facebook' },
+      { key: 'instagramUrl', icon: Instagram, label: 'Instagram' },
+      { key: 'twitterUrl', icon: Twitter, label: 'Twitter' },
+      { key: 'linkedinUrl', icon: Linkedin, label: 'LinkedIn' },
+      { key: 'youtubeUrl', icon: Youtube, label: 'YouTube' },
+      { key: 'websiteUrl', icon: Globe, label: 'Website' },
+    ],
+    []
+  );
+
+  const activeSocialPlatforms = socialPlatforms.filter(({ key }) => Boolean(socialLinks[key]));
 
   return (
     <footer className="footer-custom">
@@ -94,28 +148,37 @@ export function Footer() {
 
           <div className="space-y-4">
             <h4 className="text-lg font-semibold text-blue-300">Connect</h4>
-            <div className="flex gap-4">
-              <a href="#" className="text-gray-300 hover:text-blue-400 transition-all duration-300 hover:scale-110">
-                <Facebook className="h-6 w-6" />
-                <span className="sr-only">Facebook</span>
+            {activeSocialPlatforms.length > 0 ? (
+              <div className="flex gap-4 flex-wrap">
+                {activeSocialPlatforms.map(({ key, icon: Icon, label }) => (
+                  <a
+                    key={key}
+                    href={socialLinks[key]}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-gray-300 hover:text-blue-400 transition-all duration-300 hover:scale-110"
+                  >
+                    <Icon className="h-6 w-6" />
+                    <span className="sr-only">{label}</span>
+                  </a>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-400">
+                Social media links will appear here once they&apos;re configured.
+              </p>
+            )}
+            {supportPhone && (
+              <a
+                href={`https://wa.me/${supportPhone.replace(/\D/g, '')}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 text-gray-300 hover:text-blue-400 transition-colors"
+              >
+                <WhatsAppIcon className="h-5 w-5" />
+                <span className="text-sm">Chat with us on WhatsApp</span>
               </a>
-              <a href="#" className="text-gray-300 hover:text-blue-400 transition-all duration-300 hover:scale-110">
-                <Twitter className="h-6 w-6" />
-                <span className="sr-only">Twitter</span>
-              </a>
-              <a href="#" className="text-gray-300 hover:text-blue-400 transition-all duration-300 hover:scale-110">
-                <Instagram className="h-6 w-6" />
-                <span className="sr-only">Instagram</span>
-              </a>
-              <a href="#" className="text-gray-300 hover:text-blue-400 transition-all duration-300 hover:scale-110">
-                <WhatsAppIcon className="h-6 w-6" />
-                <span className="sr-only">WhatsApp</span>
-              </a>
-              <a href="#" className="text-gray-300 hover:text-blue-400 transition-all duration-300 hover:scale-110">
-                <Linkedin className="h-6 w-6" />
-                <span className="sr-only">LinkedIn</span>
-              </a>
-            </div>
+            )}
           </div>
         </div>
         

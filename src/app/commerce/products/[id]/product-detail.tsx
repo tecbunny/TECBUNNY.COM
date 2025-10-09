@@ -16,6 +16,7 @@ import { createClient } from '../../../../lib/supabase/client';
 async function getProduct(id: string) {
   const supabase = createClient();
   const { data: product, error } = await supabase
+  
     .from('products')
     .select('*')
     .eq('id', id)
@@ -24,7 +25,29 @@ async function getProduct(id: string) {
   if (error || !product) {
     notFound();
   }
-  return product as Product;
+
+  const firstImage = Array.isArray((product as any).images) && (product as any).images.length > 0
+    ? (typeof (product as any).images[0] === 'string'
+        ? (product as any).images[0]
+        : (product as any).images[0]?.url || '')
+    : undefined;
+
+  return {
+    ...product,
+    id: product.id,
+    name: (product as any).name || product.title || 'Product',
+    title: product.title || (product as any).name || 'Product',
+    category: (product as any).category || product.product_type || 'General',
+    brand: (product as any).brand || product.vendor,
+    price: typeof product.price === 'number' ? product.price : Number(product.price) || 0,
+    popularity: (product as any).popularity || 0,
+    rating: (product as any).rating || 0,
+    reviewCount: (product as any).review_count ?? (product as any).reviewCount ?? 0,
+    description: product.description || 'No description available',
+    image: (product as any).image || firstImage || 'https://placehold.co/600x400.png?text=No+Image',
+    created_at: product.created_at || new Date().toISOString(),
+    updated_at: product.updated_at,
+  } as Product;
 }
 
 async function getReviews(productId: string) {

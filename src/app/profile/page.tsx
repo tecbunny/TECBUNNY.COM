@@ -21,22 +21,30 @@ async function getUserData() {
   }
 
   // Get user profile data
-  const { data: profile } = await supabase
-    .from('users')
+  const { data: profileData } = await supabase
+    .from('profiles')
     .select('*')
     .eq('id', user.id)
-    .single();
+    .maybeSingle();
 
   // Get sales agent application status if exists
   const { data: salesAgentData } = await supabase
     .from('sales_agents')
     .select('*')
     .eq('user_id', user.id)
-    .single();
+    .maybeSingle();
+
+  const fallbackProfile = profileData ?? {
+    id: user.id,
+    name: user.user_metadata?.name ?? user.email?.split('@')[0] ?? 'User',
+    email: user.email,
+    mobile: user.user_metadata?.mobile ?? '',
+    role: (user.app_metadata?.role as string) ?? 'customer'
+  };
 
   return {
     user,
-    profile,
+    profile: fallbackProfile,
     salesAgentData
   };
 }

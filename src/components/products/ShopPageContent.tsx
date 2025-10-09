@@ -108,6 +108,7 @@ export function ShopPageContent() {
               price: priceNum,
               popularity: p.popularity || 0,
               rating: p.rating || 0,
+              reviewCount: p.review_count ?? p.reviewCount ?? 0,
               created_at: p.created_at || new Date().toISOString(),
               image: p.image || firstImage || 'https://placehold.co/600x400.png?text=No+Image',
             } as Product;

@@ -18,14 +18,22 @@ import { logger } from '../../../../lib/logger';
 
 interface Order {
   id: string;
-  total_amount: number;
-  payment_status: string;
+  total: number;
   status: string;
   created_at: string;
-  customers: {
-    name: string;
-    email: string;
-  };
+  customer_name: string;
+  items?: string | Record<string, unknown> | null;
+}
+
+type PaymentState = 'pending' | 'paid';
+
+interface OrderExtras {
+  cart_items?: Array<Record<string, unknown>>;
+  customer_email?: string;
+  customer_phone?: string;
+  delivery_address?: string;
+  payment_method?: string;
+  customer_notes?: string;
 }
 
 export default function UPIPaymentPage() {
@@ -34,22 +42,50 @@ export default function UPIPaymentPage() {
   const { toast } = useToast();
   const orderId = Array.isArray(params.orderId) ? params.orderId[0] : params.orderId;
   const [order, setOrder] = useState<Order | null>(null);
+  const [customerEmail, setCustomerEmail] = useState<string | null>(null);
+  const [customerPhone, setCustomerPhone] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
-  const [paymentStatus, setPaymentStatus] = useState('pending');
+  const [paymentStatus, setPaymentStatus] = useState<PaymentState>('pending');
   const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
   const supabase = createClient();
 
   // UPI ID for payments (configurable via env; fallback provided for dev)
   const UPI_ID = process.env.NEXT_PUBLIC_UPI_ID || "9604136010@okbizaxis";
 
+  const parseOrderExtras = useCallback((rawItems: Order['items']): OrderExtras => {
+    if (!rawItems) return {};
+    try {
+      if (typeof rawItems === 'string') {
+        return JSON.parse(rawItems) as OrderExtras;
+      }
+      if (typeof rawItems === 'object') {
+        return rawItems as OrderExtras;
+      }
+    } catch (error) {
+      logger.warn('upi_payment.parse_items_failed', {
+        error: error instanceof Error ? error.message : 'unknown',
+      });
+    }
+    return {};
+  }, []);
+
+  const resolvePaymentState = useCallback((status?: string): PaymentState => {
+    if (!status) return 'pending';
+    const normalized = status.toLowerCase();
+    return ['payment confirmed', 'confirmed', 'completed', 'delivered'].includes(normalized)
+      ? 'paid'
+      : 'pending';
+  }, []);
+
   const generateUPILink = useCallback(
     (currentOrder?: Order | null) => {
-      const amount = currentOrder?.total_amount ?? order?.total_amount ?? 0;
+      const amount = currentOrder?.total ?? order?.total ?? 0;
+      const amountText = Number.isFinite(amount) ? amount.toFixed(2) : '0';
       if (!orderId) return `upi://pay?pa=${UPI_ID}&pn=TecBunny Store&am=0&cu=INR&tn=Order`;
-      return `upi://pay?pa=${UPI_ID}&pn=TecBunny Store&am=${amount}&cu=INR&tn=Order ${orderId}`;
+      return `upi://pay?pa=${UPI_ID}&pn=TecBunny Store&am=${amountText}&cu=INR&tn=Order ${orderId}`;
     },
-    [UPI_ID, order?.total_amount, orderId]
+    [UPI_ID, order?.total, orderId]
   );
 
   const fetchOrder = useCallback(async () => {
@@ -57,23 +93,29 @@ export default function UPIPaymentPage() {
       setLoading(true);
       const { data, error } = await supabase
         .from('orders')
-        .select(`
-          id,
-          total_amount,
-          payment_status,
-          status,
-          created_at,
-          customers!inner(name, email)
-        `)
+        .select('id, total, status, created_at, customer_name, items')
         .eq('id', orderId)
         .single();
 
       if (error) throw error;
-      const fetchedOrder = data as unknown as Order;
-      setOrder(fetchedOrder);
-      setPaymentStatus(fetchedOrder.payment_status);
 
-      const upiLink = generateUPILink(fetchedOrder);
+      const normalizedOrder: Order = {
+        id: data.id,
+        total: Number(data.total ?? 0),
+        status: data.status ?? 'Pending',
+        created_at: data.created_at,
+        customer_name: data.customer_name ?? 'Customer',
+        items: data.items ?? null,
+      };
+
+      setOrder(normalizedOrder);
+
+      const extras = parseOrderExtras(data.items ?? null);
+      setCustomerEmail(typeof extras.customer_email === 'string' ? extras.customer_email : null);
+      setCustomerPhone(typeof extras.customer_phone === 'string' ? extras.customer_phone : null);
+      setPaymentStatus(resolvePaymentState(normalizedOrder.status));
+
+      const upiLink = generateUPILink(normalizedOrder);
       const qrDataUrl = await QRCode.toDataURL(upiLink, {
         width: 256,
         margin: 2,
@@ -93,7 +135,7 @@ export default function UPIPaymentPage() {
     } finally {
       setLoading(false);
     }
-  }, [generateUPILink, orderId, supabase, toast]);
+  }, [generateUPILink, orderId, parseOrderExtras, resolvePaymentState, supabase, toast]);
 
   useEffect(() => {
     if (!orderId) {
@@ -124,14 +166,15 @@ export default function UPIPaymentPage() {
       const { error } = await supabase
         .from('orders')
         .update({ 
-          payment_status: 'paid',
-          status: 'confirmed'
+          status: 'Payment Confirmed',
+          updated_at: new Date().toISOString()
         })
         .eq('id', orderId);
 
       if (error) throw error;
 
       setPaymentStatus('paid');
+      setOrder(prev => prev ? { ...prev, status: 'Payment Confirmed' } : prev);
 
       toast({
         title: "Payment Confirmed!",
@@ -205,12 +248,27 @@ export default function UPIPaymentPage() {
           <CardContent>
             <div className="flex justify-between items-center">
               <span className="text-lg">Amount to Pay:</span>
-              <span className="text-2xl font-bold text-green-600">₹{order.total_amount.toFixed(2)}</span>
+              <span className="text-2xl font-bold text-green-600">₹{order.total.toFixed(2)}</span>
             </div>
-            <div className="mt-2">
-              <Badge variant={paymentStatus === 'paid' ? 'default' : 'secondary'}>
-                {paymentStatus.toUpperCase()}
-              </Badge>
+            <div className="mt-4 grid gap-2 text-sm text-gray-600">
+              {customerEmail && (
+                <div className="flex justify-between">
+                  <span>Email</span>
+                  <span className="font-medium text-gray-900">{customerEmail}</span>
+                </div>
+              )}
+              {customerPhone && (
+                <div className="flex justify-between">
+                  <span>Phone</span>
+                  <span className="font-medium text-gray-900">{customerPhone}</span>
+                </div>
+              )}
+              <div className="flex justify-between">
+                <span>Status</span>
+                <Badge variant={paymentStatus === 'paid' ? 'default' : 'secondary'}>
+                  {paymentStatus.toUpperCase()}
+                </Badge>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -264,7 +322,7 @@ export default function UPIPaymentPage() {
                 </div>
               </div>
               <p className="text-sm text-gray-600">
-                Transfer ₹{order.total_amount.toFixed(2)} to the above UPI ID with reference: Order {order.id.slice(0, 8)}
+                Transfer ₹{order.total.toFixed(2)} to the above UPI ID with reference: Order {order.id.slice(0, 8)}
               </p>
             </div>
 
@@ -285,7 +343,7 @@ export default function UPIPaymentPage() {
                         height={200}
                       />
                       <p className="text-sm text-gray-600">
-                        Scan with any UPI app to pay ₹{order?.total_amount}
+                        Scan with any UPI app to pay ₹{order?.total.toFixed(2)}
                       </p>
                     </div>
                   ) : (

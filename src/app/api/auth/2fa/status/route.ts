@@ -19,7 +19,7 @@ export async function GET(_request: NextRequest) {
       );
     }
 
-    const status = await twoFactorManager.getTwoFactorStatus(user.id);
+  const status = await twoFactorManager.getTwoFactorStatus(user.id, supabase);
 
     if (!status) {
       return NextResponse.json(

@@ -75,24 +75,19 @@ export default function ForgotPasswordPage() {
       });
 
       const result = await response.json();
-      
-      console.log('Forgot password response:', { status: response.status, result });
 
       if (!response.ok) {
         setError(result.error || 'Failed to send reset email');
-        console.error('Forgot password failed:', result);
         return;
       }
 
-      console.log('OTP sent successfully:', result);
       setEmailSent(true);
       toast({
         title: 'OTP sent successfully!',
         description: 'Check your email for the 4-digit OTP code to reset your password.',
       });
 
-    } catch (err) {
-      console.error('Password reset error:', err);
+    } catch (_err) {
       setError('Network error. Please try again.');
     } finally {
       setIsLoading(false);

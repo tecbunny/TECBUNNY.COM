@@ -295,9 +295,13 @@ export default function AdminProductCatalogPage() {
     try {
       const fd = new FormData();
       fd.append('file', file);
-      const res = await fetch('/api/uploads/product', { method: 'POST', body: fd });
-      const data = await res.json();
-      if (!res.ok || !data?.url) throw new Error(data?.error || 'Upload failed');
+      fd.append('type', 'product');
+      const res = await fetch('/api/upload', { method: 'POST', body: fd });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.url) {
+        const message = data?.error || data?.message || `Upload failed (status ${res.status})`;
+        throw new Error(message);
+      }
       setFormData(prev => ({ ...prev, images: [...(prev.images || []), { url: data.url }] }));
       toast({ title: 'Image uploaded', description: 'Product image added.' });
     } catch (err: any) {
@@ -328,16 +332,22 @@ export default function AdminProductCatalogPage() {
     if (!files.length) return;
     setIsUploadingImage(true);
     try {
+      let successCount = 0;
       for (const file of files) {
         const fd = new FormData();
         fd.append('file', file);
-        const res = await fetch('/api/uploads/product', { method: 'POST', body: fd });
-        const data = await res.json();
+        fd.append('type', 'product');
+        const res = await fetch('/api/upload', { method: 'POST', body: fd });
+        const data = await res.json().catch(() => null);
         if (res.ok && data?.url) {
+          successCount++;
           setFormData(prev => ({ ...prev, images: [...(prev.images || []), { url: data.url }] }));
+        } else if (!res.ok) {
+          const message = data?.error || data?.message || `Upload failed (status ${res.status})`;
+          throw new Error(message);
         }
       }
-      toast({ title: 'Images uploaded', description: `${files.length} image(s) added.` });
+      toast({ title: 'Images uploaded', description: `${successCount} image(s) added.` });
     } catch (err: any) {
       toast({ title: 'Upload failed', description: err?.message || 'Could not upload images', variant: 'destructive' });
     } finally {

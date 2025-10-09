@@ -1,8 +1,10 @@
 import type { User as SupabaseUser } from '@supabase/supabase-js';
+
 import { createClient } from '../lib/supabase/server';
+
 import type { User as CustomUser, UserRole } from './types';
 import { logger } from './logger';
-import { ROLE_HIERARCHY as roleHierarchy, EFFECTIVE_PERMISSIONS, getDisplayName as getRoleDisplayName } from './roles';
+import { ROLE_HIERARCHY as roleHierarchy, EFFECTIVE_PERMISSIONS } from './roles';
 
 /**
  * Fetches the role for a given user from the database.

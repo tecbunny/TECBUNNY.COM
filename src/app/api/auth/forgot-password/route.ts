@@ -113,7 +113,7 @@ export async function POST(request: NextRequest) {
   logger.info('forgot_password.sending_otp', { identifier, email, mobile });
   // Generate 4-digit OTP for recovery
   const otp = Math.floor(1000 + Math.random() * 9000).toString();
-  logger.info('forgot_password.otp_generated', { identifier, otp: otp.substring(0, 2) + '**' });
+  logger.info('forgot_password.otp_generated', { identifier, otp: `${otp.substring(0, 2)}**` });
   
   // Store OTP
   const stored = await otpManager.storeOTP(identifier, otp, 'recovery');
@@ -125,7 +125,7 @@ export async function POST(request: NextRequest) {
   
   const message = `Your TecBunny Store password reset code is: ${otp}`;
   let successCount = 0;
-  let errors = [];
+  const errors: Array<{ channel: string; error: unknown }> = [];
   
   // Send via SMS
   if (mobile) {

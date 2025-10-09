@@ -101,7 +101,8 @@ export interface Database {
           status: string;
           popularity: number;
           rating: number;
-          reviewCount: number;
+          review_count: number | null;
+          reviewCount?: number | null;
           created_at: string;
           updated_at: string;
           // ... other product fields
@@ -115,7 +116,8 @@ export interface Database {
           status?: string;
           popularity?: number;
           rating?: number;
-          reviewCount?: number;
+          review_count?: number | null;
+          reviewCount?: number | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -128,7 +130,8 @@ export interface Database {
           status?: string;
           popularity?: number;
           rating?: number;
-          reviewCount?: number;
+          review_count?: number | null;
+          reviewCount?: number | null;
           created_at?: string;
           updated_at?: string;
         };

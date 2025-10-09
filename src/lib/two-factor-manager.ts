@@ -2,9 +2,10 @@ import { randomBytes } from 'crypto';
 
 import speakeasy from 'speakeasy';
 import qrcode from 'qrcode';
-import { createClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { logger } from './logger';
+import { createServiceClient, isSupabaseServiceConfigured } from './supabase/server';
 
 export interface TwoFactorSetup {
   secret: string;
@@ -19,17 +20,16 @@ export interface TwoFactorVerification {
 }
 
 class TwoFactorManager {
-  private getSupabase(): ReturnType<typeof createClient> | null {
-    const url = (process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim();
-    const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
-    if (url && key) {
-      return createClient(url, key, {
-        auth: { autoRefreshToken: false, persistSession: false },
-      });
-    } else {
-      logger.warn('Supabase env vars missing. 2FA will use fallback only.');
-      return null;
+  private resolveSupabaseClient(supabase?: SupabaseClient): SupabaseClient {
+    if (supabase) {
+      return supabase;
     }
+
+    if (isSupabaseServiceConfigured) {
+      return createServiceClient();
+    }
+
+    throw new Error('Database not configured');
   }
 
   // Generate a secure TOTP secret and backup codes
@@ -100,14 +100,16 @@ class TwoFactorManager {
   }
 
   // Enable 2FA for a user
-  async enableTwoFactor(userId: string, secret: string, backupCodes: string[]): Promise<boolean> {
-    const supabase = this.getSupabase();
-    if (!supabase) {
-      throw new Error('Database not configured');
-    }
+  async enableTwoFactor(
+    userId: string,
+    secret: string,
+    backupCodes: string[],
+    supabase?: SupabaseClient
+  ): Promise<boolean> {
+    const client = this.resolveSupabaseClient(supabase);
 
     try {
-      const { error } = await (supabase as any)
+      const { error } = await (client as any)
         .from('profiles')
         .update({
           two_factor_enabled: true,
@@ -132,14 +134,11 @@ class TwoFactorManager {
   }
 
   // Disable 2FA for a user
-  async disableTwoFactor(userId: string): Promise<boolean> {
-    const supabase = this.getSupabase();
-    if (!supabase) {
-      throw new Error('Database not configured');
-    }
+  async disableTwoFactor(userId: string, supabase?: SupabaseClient): Promise<boolean> {
+    const client = this.resolveSupabaseClient(supabase);
 
     try {
-      const { error } = await (supabase as any)
+      const { error } = await (client as any)
         .from('profiles')
         .update({
           two_factor_enabled: false,
@@ -164,19 +163,25 @@ class TwoFactorManager {
   }
 
   // Get 2FA status for a user
-  async getTwoFactorStatus(userId: string): Promise<{
+  async getTwoFactorStatus(
+    userId: string,
+    supabase?: SupabaseClient
+  ): Promise<{
     enabled: boolean;
     method: string | null;
     setupAt: string | null;
     backupCodesRemaining: number;
   } | null> {
-    const supabase = this.getSupabase();
-    if (!supabase) {
+    let client: SupabaseClient;
+
+    try {
+      client = this.resolveSupabaseClient(supabase);
+    } catch {
       return null;
     }
 
     try {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await (client as any)
         .from('profiles')
         .select('two_factor_enabled, two_factor_method, two_factor_setup_at, two_factor_backup_codes, two_factor_backup_codes_used')
         .eq('id', userId)
@@ -203,15 +208,23 @@ class TwoFactorManager {
   }
 
   // Verify 2FA during login
-  async verifyTwoFactor(userId: string, token: string): Promise<TwoFactorVerification> {
-    const supabase = this.getSupabase();
-    if (!supabase) {
+  async verifyTwoFactor(
+    userId: string,
+    token: string,
+    supabase?: SupabaseClient
+  ): Promise<TwoFactorVerification> {
+    let client: SupabaseClient;
+
+    try {
+      client = this.resolveSupabaseClient(supabase);
+    } catch (error) {
+      logger.error('2FA verification error: supabase client missing', { error });
       return { success: false, message: 'Database not configured' };
     }
 
     try {
       // Get user's 2FA settings
-      const { data: profile, error } = await (supabase as any)
+      const { data: profile, error } = await (client as any)
         .from('profiles')
         .select('two_factor_secret, two_factor_backup_codes, two_factor_backup_codes_used')
         .eq('id', userId)
@@ -241,7 +254,7 @@ class TwoFactorManager {
         const updatedUsedCodes = this.markBackupCodeUsed(backupCodes, usedCodes, token);
 
         // Update database
-        await (supabase as any)
+        await (client as any)
           .from('profiles')
           .update({ two_factor_backup_codes_used: updatedUsedCodes } as any)
           .eq('id', userId);

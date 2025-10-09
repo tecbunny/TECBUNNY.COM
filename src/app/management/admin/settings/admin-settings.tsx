@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 
-import { Palette, Building, FileText, Globe, Settings, Share2 } from 'lucide-react';
+import { Palette, Building, FileText, Globe, Settings } from 'lucide-react';
 
 import {
   Card,
@@ -15,6 +15,7 @@ import {
   CardTitle,
 } from '../../../../components/ui/card';
 import { Button } from '../../../../components/ui/button';
+import { Alert, AlertDescription, AlertTitle } from '../../../../components/ui/alert';
 import {
   Form,
   FormControl,
@@ -92,195 +93,209 @@ const settingsSchema = z.object({
 
 type SettingsFormValues = z.infer<typeof settingsSchema>;
 
+const DEFAULT_CATEGORY_GST_RATES: Record<string, number> = {
+  Electronics: 18,
+  Accessories: 18,
+  Books: 5,
+  Clothing: 12,
+  Food: 5,
+  Health: 12,
+  Home: 18,
+  Sports: 18,
+};
+
+const createDefaultSettings = (): SettingsFormValues => ({
+  siteName: 'TecBunny',
+  tagline: 'Your Tech Store',
+  logoUrl: '',
+  faviconUrl: '',
+  primaryColor: '#3b82f6',
+  secondaryColor: '#64748b',
+  accentColor: '#f59e0b',
+  heroTitle: 'Future at Your Fingertips',
+  heroSubtitle: 'Discover the latest in cutting-edge technology. From smart devices to essential gear, find everything you need to stay ahead.',
+  heroButtonText: 'Shop All Products',
+  heroButtonLink: '/products',
+  featuredProductId: 'none',
+  topBannerEnabled: false,
+  topBannerText: '',
+  topBannerLink: '',
+  topBannerImage: '',
+  sideBannerEnabled: false,
+  sideBannerImage: '',
+  sideBannerLink: '',
+  companyName: 'TecBunny Solutions',
+  address: '123 Tech Lane',
+  city: 'Bangalore',
+  state: 'Karnataka',
+  pincode: '560100',
+  country: 'India',
+  phone: '(+91) 987 654 3210',
+  email: 'support@tecbunny.com',
+  website: 'https://tecbunny.com',
+  gstin: '',
+  pan: '',
+  cin: '',
+  businessType: 'Private Limited',
+  currency: 'INR',
+  timezone: 'Asia/Kolkata',
+  enableGST: false,
+  categoryGstRates: { ...DEFAULT_CATEGORY_GST_RATES },
+});
+
 export default function SiteSettingsPage() {
   const { toast } = useToast();
-  const supabase = createClient();
+  const supabase = React.useMemo(() => createClient(), []);
   const [loading, setLoading] = React.useState(true);
+  const [loadError, setLoadError] = React.useState<string | null>(null);
   const [logoPreview, setLogoPreview] = React.useState('');
   const [faviconPreview, setFaviconPreview] = React.useState('');
   const [products, setProducts] = React.useState<any[]>([]);
 
   const form = useForm<SettingsFormValues>({
     resolver: zodResolver(settingsSchema),
-    defaultValues: {
-      // Site Identity
-      siteName: 'TecBunny',
-      tagline: 'Your Tech Store',
-      logoUrl: '',
-      faviconUrl: '',
-      
-      // Color Scheme
-      primaryColor: '#3b82f6',
-      secondaryColor: '#64748b',
-      accentColor: '#f59e0b',
-      
-      // Homepage Settings
-      heroTitle: 'Future at Your Fingertips',
-      heroSubtitle: 'Discover the latest in cutting-edge technology. From smart devices to essential gear, find everything you need to stay ahead.',
-      heroButtonText: 'Shop All Products',
-      heroButtonLink: '/products',
-      featuredProductId: 'none',
-      
-      // Banner Settings
-      topBannerEnabled: false,
-      topBannerText: '',
-      topBannerLink: '',
-      topBannerImage: '',
-      sideBannerEnabled: false,
-      sideBannerImage: '',
-      sideBannerLink: '',
-      
-      // Business Details
-      companyName: 'TecBunny Solutions',
-      address: '123 Tech Lane',
-      city: 'Bangalore',
-      state: 'Karnataka',
-      pincode: '560100',
-      country: 'India',
-      
-      // Contact Information
-      phone: '(+91) 987 654 3210',
-      email: 'support@tecbunny.com',
-      website: 'https://tecbunny.com',
-      
-      // Business Registration
-      gstin: '',
-      pan: '',
-      cin: '',
-      businessType: 'Private Limited',
-      
-      // Additional Settings
-      currency: 'INR',
-      timezone: 'Asia/Kolkata',
-      enableGST: false,
-      
-      // Category-based GST Rates
-      categoryGstRates: {
-        'Electronics': 18,
-        'Accessories': 18,
-        'Books': 5,
-        'Clothing': 12,
-        'Food': 5,
-        'Health': 12,
-        'Home': 18,
-        'Sports': 18,
-      },
-    },
+    defaultValues: createDefaultSettings(),
   });
 
-  // Load data on component mount
-  React.useEffect(() => {
-    const loadData = async () => {
-      try {
-        logger.info('Loading settings and products...');
-        
-        // Load settings
-        const { data: settings, error: settingsError } = await supabase
-          .from('settings')
-          .select('*');
-        
-        // Load products
-        const { data: productsData, error: productsError } = await supabase
-          .from('products')
-          .select('id, name, price, image');
-        
-        if (settingsError) {
-          logger.error('Settings error:', { error: settingsError });
-        } else if (settings && settings.length > 0) {
-          const settingsMap = new Map(settings.map(s => [s.key, s.value]));
-          
-          const formData = {
-            // Site Identity
-            siteName: settingsMap.get('siteName') || 'TecBunny',
-            tagline: settingsMap.get('tagline') || 'Your Tech Store',
-            logoUrl: settingsMap.get('logoUrl') || '',
-            faviconUrl: settingsMap.get('faviconUrl') || '',
-            
-            // Color Scheme
-            primaryColor: settingsMap.get('primaryColor') || '#3b82f6',
-            secondaryColor: settingsMap.get('secondaryColor') || '#64748b',
-            accentColor: settingsMap.get('accentColor') || '#f59e0b',
-            
-            // Homepage Settings
-            heroTitle: settingsMap.get('heroTitle') || 'Future at Your Fingertips',
-            heroSubtitle: settingsMap.get('heroSubtitle') || 'Discover the latest in cutting-edge technology. From smart devices to essential gear, find everything you need to stay ahead.',
-            heroButtonText: settingsMap.get('heroButtonText') || 'Shop All Products',
-            heroButtonLink: settingsMap.get('heroButtonLink') || '/products',
-            featuredProductId: settingsMap.get('featuredProductId') || 'none',
-            
-            // Banner Settings
-            topBannerEnabled: settingsMap.get('topBannerEnabled') === 'true',
-            topBannerText: settingsMap.get('topBannerText') || '',
-            topBannerLink: settingsMap.get('topBannerLink') || '',
-            topBannerImage: settingsMap.get('topBannerImage') || '',
-            sideBannerEnabled: settingsMap.get('sideBannerEnabled') === 'true',
-            sideBannerImage: settingsMap.get('sideBannerImage') || '',
-            sideBannerLink: settingsMap.get('sideBannerLink') || '',
-            
-            // Business Details
-            companyName: settingsMap.get('companyName') || 'TecBunny Solutions',
-            address: settingsMap.get('address') || '123 Tech Lane',
-            city: settingsMap.get('city') || 'Bangalore',
-            state: settingsMap.get('state') || 'Karnataka',
-            pincode: settingsMap.get('pincode') || '560100',
-            country: settingsMap.get('country') || 'India',
-            
-            // Contact Information
-            phone: settingsMap.get('phone') || '(+91) 987 654 3210',
-            email: settingsMap.get('email') || 'support@tecbunny.com',
-            website: settingsMap.get('website') || 'https://tecbunny.com',
-            
-            // Business Registration
-            gstin: settingsMap.get('gstin') || '',
-            pan: settingsMap.get('pan') || '',
-            cin: settingsMap.get('cin') || '',
-            businessType: settingsMap.get('businessType') || 'Private Limited',
-            
-            // Additional Settings
-            currency: settingsMap.get('currency') || 'INR',
-            timezone: settingsMap.get('timezone') || 'Asia/Kolkata',
-            enableGST: settingsMap.get('enableGST') === 'true',
-            
-            // Category-based GST Rates
-            categoryGstRates: settingsMap.get('categoryGstRates') 
-              ? JSON.parse(settingsMap.get('categoryGstRates') || '{}')
-              : {
-                  'Electronics': 18,
-                  'Accessories': 18,
-                  'Books': 5,
-                  'Clothing': 12,
-                  'Food': 5,
-                  'Health': 12,
-                  'Home': 18,
-                  'Sports': 18,
-                },
-          };
-          
-          form.reset(formData);
-          setLogoPreview(formData.logoUrl);
-          setFaviconPreview(formData.faviconUrl);
-        }
-        
-        if (productsError) {
-          logger.error('Products error:', { error: productsError });
-        } else {
-          setProducts(productsData || []);
-        }
-        
-      } catch (error) {
-        logger.error('Error loading data:', { error });
-        toast({
-          variant: 'destructive',
-          title: 'Error loading settings',
-          description: 'Failed to load settings. Please try refreshing the page.',
-        });
-      } finally {
-        setLoading(false);
-      }
-    };
+  const loadData = React.useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
 
-    loadData();
+    try {
+      logger.info('Loading settings and products...');
+
+      const settingsResponse = await fetch('/api/settings', {
+        credentials: 'include',
+        headers: {
+          'Accept': 'application/json',
+        },
+      });
+
+      const settingsPayload = await settingsResponse.json().catch(() => null);
+
+      if (!settingsResponse.ok || !Array.isArray(settingsPayload)) {
+        const message = settingsPayload && typeof settingsPayload?.error === 'string'
+          ? settingsPayload.error
+          : `Failed to load settings (status ${settingsResponse.status})`;
+        throw new Error(message);
+      }
+
+      const settingsArray = settingsPayload as Array<{ key: string; value: unknown }>;
+      const settingsMap = new Map(settingsArray.map(setting => [setting.key, setting.value]));
+      const defaults = createDefaultSettings();
+
+      const getString = (key: string, fallback: string) => {
+        const raw = settingsMap.get(key);
+        if (raw === undefined || raw === null) return fallback;
+        if (typeof raw === 'string') return raw;
+        if (typeof raw === 'number') return raw.toString();
+        if (typeof raw === 'boolean') return raw ? 'true' : 'false';
+        return fallback;
+      };
+
+      const getBoolean = (key: string, fallback: boolean) => {
+        const raw = settingsMap.get(key);
+        if (typeof raw === 'boolean') return raw;
+        if (typeof raw === 'string') {
+          const normalized = raw.trim().toLowerCase();
+          if (normalized === 'true') return true;
+          if (normalized === 'false') return false;
+        }
+        return fallback;
+      };
+
+      const resolveCategoryRates = () => {
+        const raw = settingsMap.get('categoryGstRates');
+        if (!raw) return { ...defaults.categoryGstRates };
+        if (typeof raw === 'object') {
+          return { ...(raw as Record<string, number>) };
+        }
+        if (typeof raw === 'string' && raw.trim().length > 0) {
+          try {
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed === 'object') {
+              return { ...(parsed as Record<string, number>) };
+            }
+          } catch (error) {
+            logger.warn('Failed to parse categoryGstRates value', { error });
+          }
+        }
+        return { ...defaults.categoryGstRates };
+      };
+
+      const formData: SettingsFormValues = {
+        ...defaults,
+        siteName: getString('siteName', defaults.siteName),
+        tagline: getString('tagline', defaults.tagline ?? ''),
+        logoUrl: getString('logoUrl', defaults.logoUrl ?? ''),
+        faviconUrl: getString('faviconUrl', defaults.faviconUrl ?? ''),
+        primaryColor: getString('primaryColor', defaults.primaryColor),
+        secondaryColor: getString('secondaryColor', defaults.secondaryColor),
+        accentColor: getString('accentColor', defaults.accentColor),
+        heroTitle: getString('heroTitle', defaults.heroTitle),
+        heroSubtitle: getString('heroSubtitle', defaults.heroSubtitle ?? ''),
+        heroButtonText: getString('heroButtonText', defaults.heroButtonText),
+        heroButtonLink: getString('heroButtonLink', defaults.heroButtonLink),
+        featuredProductId: (() => {
+          const value = getString('featuredProductId', '');
+          return value && value.trim().length > 0 ? value : 'none';
+        })(),
+        topBannerEnabled: getBoolean('topBannerEnabled', defaults.topBannerEnabled ?? false),
+        topBannerText: getString('topBannerText', defaults.topBannerText ?? ''),
+        topBannerLink: getString('topBannerLink', defaults.topBannerLink ?? ''),
+        topBannerImage: getString('topBannerImage', defaults.topBannerImage ?? ''),
+        sideBannerEnabled: getBoolean('sideBannerEnabled', defaults.sideBannerEnabled ?? false),
+        sideBannerImage: getString('sideBannerImage', defaults.sideBannerImage ?? ''),
+        sideBannerLink: getString('sideBannerLink', defaults.sideBannerLink ?? ''),
+        companyName: getString('companyName', defaults.companyName),
+        address: getString('address', defaults.address),
+        city: getString('city', defaults.city),
+        state: getString('state', defaults.state),
+        pincode: getString('pincode', defaults.pincode),
+        country: getString('country', defaults.country),
+        phone: getString('phone', defaults.phone),
+        email: getString('email', defaults.email),
+        website: getString('website', defaults.website),
+        gstin: getString('gstin', defaults.gstin ?? ''),
+        pan: getString('pan', defaults.pan ?? ''),
+        cin: getString('cin', defaults.cin ?? ''),
+        businessType: getString('businessType', defaults.businessType),
+        currency: getString('currency', defaults.currency),
+        timezone: getString('timezone', defaults.timezone),
+        enableGST: getBoolean('enableGST', defaults.enableGST ?? false),
+        categoryGstRates: resolveCategoryRates(),
+      };
+
+      form.reset(formData);
+      setLogoPreview(formData.logoUrl || '');
+      setFaviconPreview(formData.faviconUrl || '');
+
+      const { data: productsData, error: productsError } = await supabase
+        .from('products')
+        .select('id, name, price, image');
+
+      if (productsError) {
+        logger.error('Products error:', { error: productsError });
+      } else {
+        setProducts(productsData || []);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load settings. Please try again.';
+      logger.error('Error loading data:', { error: message });
+      setLoadError(message);
+      toast({
+        variant: 'destructive',
+        title: 'Error loading settings',
+        description: message,
+      });
+    } finally {
+      setLoading(false);
+    }
   }, [form, supabase, toast]);
+
+  React.useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const onSubmit = async (data: SettingsFormValues) => {
     try {
@@ -431,8 +446,27 @@ export default function SiteSettingsPage() {
         </p>
       </div>
 
+      {loadError && (
+        <Alert variant="destructive" className="mb-6">
+          <AlertTitle>We couldn&apos;t refresh the latest settings</AlertTitle>
+          <AlertDescription className="flex flex-col gap-3">
+            <span>{loadError}</span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="w-fit"
+              onClick={() => loadData()}
+              disabled={loading}
+            >
+              Retry
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
       <Tabs defaultValue="identity" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="identity" className="flex items-center gap-2">
             <Building className="h-4 w-4" />
             Identity
@@ -448,10 +482,6 @@ export default function SiteSettingsPage() {
           <TabsTrigger value="business" className="flex items-center gap-2">
             <FileText className="h-4 w-4" />
             Business
-          </TabsTrigger>
-          <TabsTrigger value="social" className="flex items-center gap-2">
-            <Share2 className="h-4 w-4" />
-            Social Media
           </TabsTrigger>
           <TabsTrigger value="advanced" className="flex items-center gap-2">
             <Settings className="h-4 w-4" />
@@ -861,120 +891,6 @@ export default function SiteSettingsPage() {
                         </FormItem>
                       )}
                     />
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            {/* Social Media Tab */}
-            <TabsContent value="social" className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Share2 className="h-5 w-5" />
-                    Social Media Links
-                  </CardTitle>
-                  <CardDescription>
-                    Manage your business social media presence and links that appear across your website.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-center py-8">
-                    <Share2 className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                    <h3 className="text-lg font-medium mb-2">Advanced Social Media Management</h3>
-                    <p className="text-muted-foreground mb-6">
-                      For comprehensive social media management with preview, validation, and advanced features, 
-                      visit the dedicated Social Media Management page.
-                    </p>
-                    <div className="flex gap-3 justify-center">
-                      <Button
-                        type="button"
-                        onClick={() => window.open('/management/admin/social-media', '_blank')}
-                        className="flex items-center gap-2"
-                      >
-                        <Share2 className="h-4 w-4" />
-                        Open Social Media Manager
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => window.location.href = '/management/admin/social-media'}
-                      >
-                        Go to Social Media Page
-                      </Button>
-                    </div>
-                  </div>
-                  
-                  {/* Quick Links Section */}
-                  <div className="border-t pt-6 mt-6">
-                    <h4 className="text-md font-medium mb-4">Quick Social Media Setup</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-3">
-                        <div>
-                          <Label htmlFor="quick-facebook">Facebook URL</Label>
-                          <Input
-                            id="quick-facebook"
-                            placeholder="https://facebook.com/yourpage"
-                            className="mt-1"
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="quick-instagram">Instagram URL</Label>
-                          <Input
-                            id="quick-instagram"
-                            placeholder="https://instagram.com/yourusername"
-                            className="mt-1"
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="quick-twitter">Twitter URL</Label>
-                          <Input
-                            id="quick-twitter"
-                            placeholder="https://twitter.com/yourusername"
-                            className="mt-1"
-                          />
-                        </div>
-                      </div>
-                      <div className="space-y-3">
-                        <div>
-                          <Label htmlFor="quick-linkedin">LinkedIn URL</Label>
-                          <Input
-                            id="quick-linkedin"
-                            placeholder="https://linkedin.com/company/yourcompany"
-                            className="mt-1"
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="quick-youtube">YouTube URL</Label>
-                          <Input
-                            id="quick-youtube"
-                            placeholder="https://youtube.com/c/yourchannel"
-                            className="mt-1"
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="quick-website">Website URL</Label>
-                          <Input
-                            id="quick-website"
-                            placeholder="https://yourwebsite.com"
-                            className="mt-1"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                      <div className="flex items-start gap-3">
-                        <Share2 className="h-5 w-5 text-blue-600 mt-0.5" />
-                        <div>
-                          <h5 className="font-medium text-blue-900">Pro Tip</h5>
-                          <p className="text-sm text-blue-700 mt-1">
-                            Use the dedicated Social Media Manager for advanced features like link validation, 
-                            preview functionality, bulk editing, and real-time testing of your social media links.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
                   </div>
                 </CardContent>
               </Card>

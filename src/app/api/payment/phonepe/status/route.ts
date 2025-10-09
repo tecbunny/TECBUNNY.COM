@@ -80,7 +80,8 @@ export async function GET(request: NextRequest) {
     const responseData = await response.json();
 
     if (responseData.success) {
-      const { state, amount, transactionId: gatewayTxnId, responseCode } = responseData.data;
+  const { state, amount, transactionId: gatewayTxnId, responseCode } = responseData.data;
+  const normalizedAmount = typeof amount === 'number' ? amount / 100 : Number(amount ?? 0) / 100;
 
       // Update local transaction record
       const { error: updateError } = await supabase
@@ -110,8 +111,7 @@ export async function GET(request: NextRequest) {
           await supabase
             .from('orders')
             .update({
-              status: 'confirmed',
-              payment_status: 'paid',
+              status: 'Payment Confirmed',
               updated_at: new Date().toISOString()
             })
             .eq('id', transaction.order_id);
@@ -121,7 +121,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         success: true,
         status: state,
-        amount: amount / 100, // Convert from paise to rupees
+        amount: normalizedAmount,
         transactionId: gatewayTxnId,
         responseCode
       });

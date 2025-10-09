@@ -65,17 +65,17 @@ async function processPaymentReceived(supabase: any, data: any, source: string) 
 
   const cleanPhone = customer_phone?.replace(/[^\d]/g, '');
   const formattedPhone = cleanPhone ? (cleanPhone.startsWith('91') ? cleanPhone : `91${cleanPhone}`) : null;
+  const paymentAmount = Number(amount ?? 0);
 
   // Update order status
   if (orderId) {
     const { error: orderError } = await supabase
       .from('orders')
       .update({
-        payment_status: 'paid',
         payment_id: paymentId,
         payment_method,
         payment_date: payment_date || new Date().toISOString(),
-        status: 'confirmed',
+        status: 'Payment Confirmed',
         updated_at: new Date().toISOString()
       })
       .eq('order_id', orderId);
@@ -92,7 +92,7 @@ async function processPaymentReceived(supabase: any, data: any, source: string) 
       payment_id: paymentId,
       order_id: orderId,
       customer_phone: formattedPhone,
-      amount,
+  amount: paymentAmount,
       currency,
       payment_method,
       status: payment_status,
@@ -129,7 +129,7 @@ async function processPaymentReceived(supabase: any, data: any, source: string) 
           interaction_data: {
             payment_id: paymentId,
             order_id: orderId,
-            amount,
+            amount: paymentAmount,
             currency,
             payment_method,
             source
@@ -144,7 +144,7 @@ async function processPaymentReceived(supabase: any, data: any, source: string) 
     await sendPaymentConfirmationWhatsApp(formattedPhone, {
       paymentId,
       orderId,
-      amount,
+      amount: paymentAmount,
       currency,
       customerName: customer_name,
       paymentMethod: payment_method
@@ -158,7 +158,7 @@ async function processPaymentReceived(supabase: any, data: any, source: string) 
       order_id: orderId,
       customer_name,
       phone: formattedPhone,
-      amount,
+      amount: paymentAmount,
       currency,
       payment_method,
       source
@@ -169,7 +169,7 @@ async function processPaymentReceived(supabase: any, data: any, source: string) 
     success: true,
     payment_id: paymentId,
     order_id: orderId,
-    amount,
+    amount: paymentAmount,
     currency,
     phone: formattedPhone,
     source

@@ -3,6 +3,54 @@ import { createClient } from '@supabase/supabase-js';
 
 import { logger } from '../../../lib/logger';
 
+const resolveOrderTotal = (order: Record<string, any>) => {
+  const candidates = [order?.total, order?.total_amount, order?.amount, order?.grand_total];
+  for (const value of candidates) {
+    const parsed = parseFloat(String(value ?? ''));
+    if (!Number.isNaN(parsed)) {
+      return parsed;
+    }
+  }
+  return 0;
+};
+
+const normalizeStatus = (status?: string) => status?.toLowerCase().trim() ?? '';
+
+const isPaidStatus = (status?: string) => {
+  const normalized = normalizeStatus(status);
+  return [
+    'payment confirmed',
+    'completed',
+    'delivered',
+    'fulfilled',
+    'paid'
+  ].some((value) => normalized === value);
+};
+
+const isPendingPaymentStatus = (status?: string) => {
+  const normalized = normalizeStatus(status);
+  return [
+    'awaiting payment',
+    'pending',
+    'processing',
+    'payment pending'
+  ].some((value) => normalized === value);
+};
+
+const mapPaymentStatusToOrderStatus = (paymentStatus?: string) => {
+  const normalized = normalizeStatus(paymentStatus);
+  if (normalized === 'paid') {
+    return 'Payment Confirmed';
+  }
+  if (normalized === 'failed') {
+    return 'Payment Failed';
+  }
+  if (normalized === 'pending') {
+    return 'Awaiting Payment';
+  }
+  return undefined;
+};
+
 export async function GET(request: NextRequest) {
   try {
     const supabase = createClient(
@@ -69,9 +117,16 @@ export async function GET(request: NextRequest) {
 
       const stats = {
         totalOrders: orders?.length || 0,
-        totalRevenue: orders?.reduce((sum: number, order: { total: string | number }) => sum + (parseFloat(String(order.total)) || 0), 0) || 0,
-        completedOrders: orders?.filter((order: { status: string }) => order.status === 'Completed').length || 0,
-        pendingOrders: orders?.filter((order: { status: string }) => order.status === 'Pending').length || 0
+        totalRevenue:
+          orders?.reduce(
+            (sum: number, order: { total: string | number; total_amount?: string | number; amount?: string | number }) =>
+              sum + resolveOrderTotal(order),
+            0
+          ) || 0,
+        completedOrders: orders?.filter((order: { status: string }) => normalizeStatus(order.status) === 'completed').length || 0,
+        pendingOrders: orders?.filter((order: { status: string }) => normalizeStatus(order.status) === 'pending').length || 0,
+        paidOrders: orders?.filter((order: { status: string }) => isPaidStatus(order.status)).length || 0,
+        pendingPayments: orders?.filter((order: { status: string }) => isPendingPaymentStatus(order.status)).length || 0
       };
 
       return NextResponse.json({ stats });
@@ -135,6 +190,52 @@ export async function POST(request: NextRequest) {
     );
     
     const { action, ...data } = await request.json();
+
+    if (action === 'update-order-status') {
+      const { orderId, status, paymentStatus } = data;
+
+      if (!orderId) {
+        return NextResponse.json(
+          { error: 'Order ID is required' },
+          { status: 400 }
+        );
+      }
+
+      const updates: Record<string, any> = {
+        updated_at: new Date().toISOString()
+      };
+
+      if (status) {
+        updates.status = status;
+      } else if (paymentStatus) {
+        const derivedStatus = mapPaymentStatusToOrderStatus(paymentStatus);
+        if (derivedStatus) {
+          updates.status = derivedStatus;
+        }
+      }
+
+      if (!updates.status) {
+        return NextResponse.json(
+          { error: 'No valid status provided for update' },
+          { status: 400 }
+        );
+      }
+
+      const { error } = await supabase
+        .from('orders')
+        .update(updates)
+        .eq('id', orderId);
+
+      if (error) {
+        logger.error('Failed to update order status', { error, context: 'walk-in-orders.update-order-status', orderId, updates });
+        return NextResponse.json(
+          { error: 'Failed to update order', details: error.message },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({ success: true });
+    }
 
     if (action === 'create-order') {
       const { customer_name, customer_email, customer_phone, items, payment_method, notes } = data;

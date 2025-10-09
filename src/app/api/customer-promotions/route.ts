@@ -34,9 +34,8 @@ export async function POST(request: NextRequest) {
       // Get customer's order statistics
       const { data: orders, error: ordersError } = await supabase
         .from('orders')
-        .select('total_amount, created_at, status')
+        .select('total, created_at, status')
         .eq('customer_id', customerId)
-        .eq('status', 'Completed')
         .order('created_at', { ascending: false });
 
       if (ordersError) {
@@ -87,6 +86,24 @@ export async function POST(request: NextRequest) {
       };
       const eligiblePromotions = [];
 
+      const normalizedOrders = (orders || []).map(order => {
+        const totalValue = Number(order.total ?? 0);
+        const status = typeof order.status === 'string' ? order.status : '';
+        return {
+          ...order,
+          total: totalValue,
+          status,
+          status_normalized: status.toLowerCase(),
+        };
+      });
+
+      const isEligibleStatus = (status: string) => {
+        const normalized = status.toLowerCase();
+        return ['completed', 'delivered', 'payment confirmed'].includes(normalized);
+      };
+
+      const completedOrders = normalizedOrders.filter(order => isEligibleStatus(order.status));
+
       // Check each rule
       for (const rule of promotionSettings.rules || []) {
         if (!rule.isActive || rule.fromCategory !== customer.customer_category) {
@@ -97,12 +114,12 @@ export async function POST(request: NextRequest) {
         const cutoffDate = new Date();
         cutoffDate.setDate(cutoffDate.getDate() - rule.timeframeDays);
 
-        const recentOrders = orders.filter(order => 
+        const recentOrders = completedOrders.filter(order => 
           new Date(order.created_at) >= cutoffDate
         );
 
         const orderCount = recentOrders.length;
-        const totalAmount = recentOrders.reduce((sum, order) => sum + parseFloat(order.total_amount), 0);
+        const totalAmount = recentOrders.reduce((sum, order) => sum + Number(order.total ?? 0), 0);
 
         if (orderCount >= rule.minOrderCount && totalAmount >= rule.minOrderAmount) {
           eligiblePromotions.push({
@@ -127,9 +144,9 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json({
         customer,
-        orders: orders.slice(0, 10), // Recent 10 orders
+        orders: normalizedOrders.slice(0, 10), // Recent 10 orders with normalized totals
         eligiblePromotions,
-        totalOrders: orders.length
+        totalOrders: normalizedOrders.length
       });
     }
 

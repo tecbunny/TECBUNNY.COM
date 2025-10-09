@@ -17,9 +17,22 @@ interface Order {
   customer_name: string;
   total: number;
   status: string;
-  payment_status?: string;
   created_at: string;
-  items?: string;
+  payment_method?: string | null;
+  items?: string | Record<string, unknown> | null;
+  customer_email?: string | null;
+  customer_phone?: string | null;
+}
+
+type PhonePePaymentStatus = 'pending' | 'success' | 'failed' | 'checking';
+
+type OrderPaymentState = 'pending' | 'paid';
+
+interface OrderExtras {
+  customer_email?: string;
+  customer_phone?: string;
+  payment_method?: string;
+  cart_items?: Array<Record<string, unknown>>;
 }
 
 function PhonePePaymentContent() {
@@ -30,28 +43,83 @@ function PhonePePaymentContent() {
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
-  const [paymentStatus, setPaymentStatus] = useState<'pending' | 'success' | 'failed' | 'checking'>('pending');
+  const [paymentStatus, setPaymentStatus] = useState<PhonePePaymentStatus>('pending');
+  const [customerEmail, setCustomerEmail] = useState<string | null>(null);
+  const [customerPhone, setCustomerPhone] = useState<string | null>(null);
   const supabase = createClient();
 
   const orderId = params.orderId as string;
   const txnId = searchParams.get('txnId');
 
+  const parseOrderExtras = useCallback((rawItems: Order['items']): OrderExtras => {
+    if (!rawItems) return {};
+    try {
+      if (typeof rawItems === 'string') {
+        return JSON.parse(rawItems) as OrderExtras;
+      }
+      if (typeof rawItems === 'object') {
+        return rawItems as OrderExtras;
+      }
+    } catch (error) {
+      console.warn('phonepe_payment.parse_items_failed', error);
+    }
+    return {};
+  }, []);
+
+  const resolveOrderPaymentState = useCallback((status?: string): OrderPaymentState => {
+    if (!status) return 'pending';
+    const normalized = status.toLowerCase();
+    return ['payment confirmed', 'confirmed', 'completed', 'delivered'].includes(normalized)
+      ? 'paid'
+      : 'pending';
+  }, []);
+
   const fetchOrder = useCallback(async () => {
     try {
+      setLoading(true);
       const { data, error } = await supabase
         .from('orders')
-        .select('*')
+        .select('id, total, status, created_at, customer_name, payment_method, items, customer_email, customer_phone')
         .eq('id', orderId)
         .single();
 
       if (error) throw error;
-      
-      const orderData = data as Order;
-      setOrder(orderData);
-      
-      // Check if payment is already completed
-      if (orderData.payment_status === 'paid') {
+
+      const row = data as Record<string, unknown>;
+      const normalizedOrder: Order = {
+        id: String(row.id ?? orderId),
+        customer_name: typeof row.customer_name === 'string' ? row.customer_name : 'Customer',
+        total: Number(row.total ?? 0),
+        status: typeof row.status === 'string' ? row.status : 'Pending',
+        created_at: typeof row.created_at === 'string' ? row.created_at : new Date().toISOString(),
+        payment_method: typeof row.payment_method === 'string' ? row.payment_method : null,
+        items: (row.items as Order['items']) ?? null,
+        customer_email: typeof row.customer_email === 'string' ? row.customer_email : null,
+        customer_phone: typeof row.customer_phone === 'string' ? row.customer_phone : null,
+      };
+
+      const extras = parseOrderExtras(normalizedOrder.items ?? null);
+      const resolvedEmail = extras.customer_email ?? normalizedOrder.customer_email ?? null;
+      const resolvedPhone = extras.customer_phone ?? normalizedOrder.customer_phone ?? null;
+
+      setOrder({
+        ...normalizedOrder,
+        customer_email: resolvedEmail,
+        customer_phone: resolvedPhone,
+      });
+      setCustomerEmail(resolvedEmail);
+      setCustomerPhone(resolvedPhone);
+
+      const paymentState = resolveOrderPaymentState(normalizedOrder.status);
+      if (paymentState === 'paid') {
         setPaymentStatus('success');
+      } else {
+        setPaymentStatus(prev => {
+          if (prev === 'failed' || prev === 'checking') {
+            return prev;
+          }
+          return 'pending';
+        });
       }
     } catch (error) {
       console.error('Error fetching order:', error);
@@ -63,7 +131,7 @@ function PhonePePaymentContent() {
     } finally {
       setLoading(false);
     }
-  }, [orderId, supabase, toast]);
+  }, [orderId, parseOrderExtras, resolveOrderPaymentState, supabase, toast]);
 
   const checkPaymentStatus = useCallback(async (transactionId: string) => {
     try {
@@ -134,7 +202,9 @@ function PhonePePaymentContent() {
     
     setProcessing(true);
     try {
-      const orderItems = JSON.parse(order.items || '{}');
+      const extras = parseOrderExtras(order.items ?? null);
+      const phone = customerPhone ?? extras.customer_phone ?? '';
+      const email = customerEmail ?? extras.customer_email ?? '';
       
       const response = await fetch('/api/payment/phonepe/initiate', {
         method: 'POST',
@@ -144,8 +214,8 @@ function PhonePePaymentContent() {
         body: JSON.stringify({
           orderId: order.id,
           amount: order.total,
-          customerPhone: orderItems.customer_phone || '',
-          customerEmail: orderItems.customer_email || ''
+          customerPhone: phone,
+          customerEmail: email
         }),
       });
 
@@ -246,6 +316,19 @@ function PhonePePaymentContent() {
   }
 
   const statusInfo = getStatusMessage();
+  const formattedAmount = Number.isFinite(order.total) ? order.total.toFixed(2) : '0.00';
+  const paymentBadge = (() => {
+    switch (paymentStatus) {
+      case 'success':
+        return { label: 'Paid', variant: 'default' as const };
+      case 'failed':
+        return { label: 'Failed', variant: 'destructive' as const };
+      case 'checking':
+        return { label: 'Verifying', variant: 'secondary' as const };
+      default:
+        return { label: 'Pending', variant: 'secondary' as const };
+    }
+  })();
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -288,14 +371,28 @@ function PhonePePaymentContent() {
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Amount:</span>
-                  <span className="font-semibold">₹{order.total.toFixed(2)}</span>
+                  <span className="font-semibold">₹{formattedAmount}</span>
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Status:</span>
-                  <Badge variant={order.payment_status === 'paid' ? 'default' : 'secondary'}>
-                    {order.payment_status === 'paid' ? 'Paid' : 'Pending'}
-                  </Badge>
+                <div className="flex justify-between text-sm items-center">
+                  <span className="text-gray-600">Payment Status:</span>
+                  <Badge variant={paymentBadge.variant}>{paymentBadge.label}</Badge>
                 </div>
+                <div className="flex justify-between text-sm items-center">
+                  <span className="text-gray-600">Order Status:</span>
+                  <Badge variant="outline">{order.status}</Badge>
+                </div>
+                {customerEmail && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Email:</span>
+                    <span className="font-medium text-gray-900">{customerEmail}</span>
+                  </div>
+                )}
+                {customerPhone && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Phone:</span>
+                    <span className="font-medium text-gray-900">{customerPhone}</span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -317,7 +414,7 @@ function PhonePePaymentContent() {
                   ) : (
                     <div className="flex items-center gap-2">
                       <Smartphone className="h-4 w-4" />
-                      Pay ₹{order.total.toFixed(2)} with PhonePe
+                      Pay ₹{formattedAmount} with PhonePe
                     </div>
                   )}
                 </Button>

@@ -80,19 +80,19 @@ export async function POST(request: Request) {
   const modernPayload = {
     order_number: orderNumber,
     user_id: customerId,
-    status: 'pending',
+    status: 'Pending',
     subtotal: totals.subtotal,
     tax_amount: totals.gst_amount,
     shipping_amount: 0,
+    total: totals.total,
     total_amount: totals.total,
     currency: 'INR',
-    payment_status: 'pending',
     payment_method: null as any,
     shipping_address: null as any,
     billing_address: null as any,
     items,
     notes,
-    referred_by_agent_id: agent.id
+    agent_id: agent.id
   }
 
   let createdOrderId: string | null = null
@@ -103,11 +103,11 @@ export async function POST(request: Request) {
     const { data, error } = await svc
       .from('orders')
       .insert(modernPayload)
-      .select('id, total_amount')
+      .select('id, total')
       .maybeSingle()
     if (!error && data) {
       createdOrderId = data.id
-      orderTotalForCommission = Number(data.total_amount ?? totals.total)
+      orderTotalForCommission = Number(data.total ?? totals.total)
     }
   }
 
@@ -116,7 +116,7 @@ export async function POST(request: Request) {
     const legacyPayload: any = {
       customer_name: customer.name || customer.email || customer.mobile || 'Customer',
       customer_id: customerId,
-      status: 'Confirmed',
+      status: 'Pending',
       subtotal: totals.subtotal,
       gst_amount: totals.gst_amount,
       total: totals.total,
@@ -124,17 +124,17 @@ export async function POST(request: Request) {
       items,
       notes,
       processed_by: user.id,
-      referred_by_agent_id: agent.id
+      agent_id: agent.id
     }
-    // Attempt with referred_by_agent_id
+    // Attempt with agent_id
     let { data, error } = await svc
       .from('orders')
       .insert(legacyPayload)
       .select('id, total')
       .maybeSingle()
     if (error) {
-      // Retry without referred_by_agent_id if undefined column
-      delete legacyPayload.referred_by_agent_id
+      // Retry without agent_id if undefined column
+      delete legacyPayload.agent_id
       const retry = await svc
         .from('orders')
         .insert(legacyPayload)
@@ -219,7 +219,7 @@ async function awardCommissionForAgent(
   points = Math.round(points * 100) / 100
 
   // Insert commission record
-  await svc.from('agent_commissions').insert({
+  await svc.from('sales_agent_commissions').insert({
     agent_id: agentId,
     order_id: orderId,
     order_total: orderTotal,
