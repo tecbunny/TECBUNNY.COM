@@ -369,14 +369,22 @@ export async function PUT(request: NextRequest) {
   const correlationId = request.headers.get('x-correlation-id') || crypto.randomUUID();
   try {
     const body = await request.json();
-    const { id, options, variants, handle: _ignoreHandle, images, ...updateData } = body;
+    const { id, options, variants, handle: _ignoreHandle, images, image, additional_images, ...updateData } = body;
 
     if (!id) {
       logger.warn('product_update_missing_id', { correlationId });
       return NextResponse.json({ error: 'Product id is required' }, { status: 400, headers: { 'x-correlation-id': correlationId } });
     }
 
-    // Normalize images if passed (array of URLs or objects)
+    // Handle image fields from frontend
+    if (image !== undefined) {
+      (updateData as any).image = image;
+    }
+    if (additional_images !== undefined) {
+      (updateData as any).additional_images = additional_images;
+    }
+
+    // Normalize images if passed (array of URLs or objects) - legacy support
     if (Array.isArray(images)) {
       (updateData as any).images = images.map((img: any) => typeof img === 'string' ? img : img?.url).filter(Boolean);
     }
