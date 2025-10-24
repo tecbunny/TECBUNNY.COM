@@ -1,10 +1,11 @@
- 'use client';
+'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import NextDynamic from 'next/dynamic';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
+import { Mail, MessageCircle } from 'lucide-react';
 
 import { Button } from '../../components/ui/button';
 import {
@@ -29,6 +30,9 @@ import { useAuth } from '../../lib/hooks';
 import { useToast } from '../../hooks/use-toast';
 import { logger } from '../../lib/logger';
 
+type OTPChannel = 'email' | 'sms' | 'whatsapp';
+type PreferredChannel = 'email' | 'whatsapp';
+
 const signupSchema = z.object({
   name: z.string().min(2, { message: 'Name must be at least 2 characters.' }),
   email: z.string().email({ message: 'Please enter a valid email address.' }),
@@ -48,6 +52,7 @@ export function SignupDialog({ children }: { children: React.ReactNode }) {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [preferredChannel, setPreferredChannel] = useState<PreferredChannel>('email');
   const turnstileSiteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim();
   const captchaDisabled = process.env.NODE_ENV !== 'production' && process.env.NEXT_PUBLIC_DISABLE_CAPTCHA === 'true';
   
@@ -74,12 +79,31 @@ export function SignupDialog({ children }: { children: React.ReactNode }) {
     },
   });
 
+  const watchedMobile = form.watch('mobile');
+  const sanitizedMobile = useMemo(() => watchedMobile.replace(/\D/g, ''), [watchedMobile]);
+  const phoneEnabled = sanitizedMobile.length >= 10;
+
+  useEffect(() => {
+    if (!phoneEnabled && preferredChannel === 'whatsapp') {
+      setPreferredChannel('email');
+    }
+  }, [phoneEnabled, preferredChannel]);
+
   const onSubmit = async (values: SignupFormValues) => {
     // Check CAPTCHA before proceeding if Turnstile is enabled
     if (!!turnstileSiteKey && !captchaDisabled && !captchaToken) {
       toast({
         title: 'Security Verification Required',
         description: 'Please complete the CAPTCHA to continue.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (preferredChannel === 'whatsapp' && !phoneEnabled) {
+      toast({
+        title: 'Mobile number required',
+        description: 'Add a valid mobile number to receive OTP via WhatsApp.',
         variant: 'destructive',
       });
       return;
@@ -94,7 +118,8 @@ export function SignupDialog({ children }: { children: React.ReactNode }) {
         email: values.email,
         password: values.password,
         phone: values.mobile,
-        captchaToken: captchaToken || undefined
+        captchaToken: captchaToken || undefined,
+        preferredChannel
       });
 
       if (!signupResult.success) {
@@ -106,12 +131,26 @@ export function SignupDialog({ children }: { children: React.ReactNode }) {
         return;
       }
 
+      const otpId = signupResult.data?.otpId as string | undefined;
+      const dispatchedChannel = (signupResult.data?.channel as OTPChannel | undefined) || preferredChannel;
+      const fallbackAvailable = Boolean(signupResult.data?.fallbackAvailable);
+
+      if (!otpId) {
+        toast({
+          title: 'Verification unavailable',
+          description: 'Could not create a verification reference. Please try again.',
+          variant: 'destructive'
+        });
+        return;
+      }
+
       toast({
         title: 'Verification code sent!',
-        description: 'Please check your email for the verification code.',
+        description: `We sent a code via ${dispatchedChannel === 'email' ? 'Email' : dispatchedChannel === 'sms' ? 'Automated Call' : 'WhatsApp'}.`,
       });
       setOpen(false);
       form.reset();
+      setPreferredChannel('email');
       
       // Store signup data for account creation after OTP verification
       const signupData = {
@@ -119,6 +158,9 @@ export function SignupDialog({ children }: { children: React.ReactNode }) {
         password: values.password, // Store password temporarily for account creation
         name: values.name,
         mobile: values.mobile,
+        otpId,
+        channel: dispatchedChannel,
+        fallbackAvailable,
         timestamp: Date.now(),
       };
       
@@ -129,7 +171,16 @@ export function SignupDialog({ children }: { children: React.ReactNode }) {
       }
       
       // Redirect to OTP verification page
-      window.location.href = `/auth/verify-otp?email=${encodeURIComponent(values.email)}&type=signup`;
+      const query = new URLSearchParams({
+        email: values.email,
+        otpId,
+        channel: dispatchedChannel,
+        type: 'signup'
+      });
+      if (phoneEnabled) {
+        query.set('mobile', sanitizedMobile);
+      }
+      window.location.href = `/auth/verify-otp?${query.toString()}`;
     } catch (error) {
       toast({
         title: 'Error creating account',
@@ -196,6 +247,39 @@ export function SignupDialog({ children }: { children: React.ReactNode }) {
                 </FormItem>
               )}
             />
+
+            <div className="space-y-2">
+              <FormLabel>Verification Method</FormLabel>
+              <div className="grid gap-2">
+                {(['email', 'whatsapp'] as PreferredChannel[]).map(option => {
+                  const isPhoneChannel = option === 'whatsapp';
+                  const disabled = isPhoneChannel && !phoneEnabled;
+                  return (
+                    <button
+                      key={option}
+                      type="button"
+                      onClick={() => !disabled && setPreferredChannel(option)}
+                      disabled={disabled}
+                      className={`flex w-full flex-col rounded-lg border p-3 text-left transition ${
+                        preferredChannel === option ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 bg-white'
+                      } ${disabled ? 'opacity-60 cursor-not-allowed' : 'hover:border-blue-300 hover:bg-blue-50'}`}
+                    >
+                      <span className="flex items-center gap-2 text-sm font-medium">
+                        {option === 'email' ? <Mail className="h-4 w-4" /> : <MessageCircle className="h-4 w-4" />}
+                        {option === 'email' ? 'Email' : 'WhatsApp'}
+                      </span>
+                      <span className="text-xs text-gray-500">
+                        {option === 'email' && 'Send code to your email address'}
+                        {option === 'whatsapp' && 'Send code via WhatsApp'}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              {!phoneEnabled && watchedMobile && (
+                <p className="text-xs text-gray-500">Add at least 10 digits to enable WhatsApp verification.</p>
+              )}
+            </div>
             
             <FormField
               control={form.control}

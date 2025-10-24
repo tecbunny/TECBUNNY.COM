@@ -133,6 +133,7 @@ export function Footer() {
               <Link href="/info/policies/terms" className="text-gray-300 hover:text-blue-400 transition-colors">Terms of Service</Link>
               <Link href="/info/policies/return" className="text-gray-300 hover:text-blue-400 transition-colors">Return Policy</Link>
               <Link href="/info/policies/shipping" className="text-gray-300 hover:text-blue-400 transition-colors">Shipping Policy</Link>
+              <Link href="/info/policies/refund-cancellation" className="text-gray-300 hover:text-blue-400 transition-colors">Refund & Cancellation</Link>
             </nav>
           </div>
           
@@ -192,6 +193,7 @@ export function Footer() {
               <Link href="/info/policies/terms" className="text-gray-300 hover:text-blue-400 transition-colors">Terms</Link>
               <Link href="/info/policies/return" className="text-gray-300 hover:text-blue-400 transition-colors">Returns</Link>
               <Link href="/info/policies/shipping" className="text-gray-300 hover:text-blue-400 transition-colors">Shipping</Link>
+              <Link href="/info/policies/refund-cancellation" className="text-gray-300 hover:text-blue-400 transition-colors">Refunds</Link>
             </div>
           </div>
         </div>

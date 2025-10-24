@@ -16,7 +16,9 @@ import {
   Tag,
   Image,
   Eye,
-  X
+  X,
+  ChevronUp,
+  ChevronDown
 } from 'lucide-react';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../../../components/ui/card';
@@ -47,6 +49,7 @@ interface Product {
   tags?: string[];
   status: 'active' | 'archived' | 'draft';
   images?: any[];
+  hsnCode?: string;
   created_at: string;
   updated_at: string;
   variants?: ProductVariant[];
@@ -80,6 +83,9 @@ interface ProductFormData {
   product_type: string;
   tags: string;
   status: 'active' | 'archived' | 'draft';
+  mrp: number;
+  price: number;
+  hsnCode: string;
   images?: { url: string; alt?: string }[];
   options: { name: string; values: string[] }[];
   variants: {
@@ -116,7 +122,10 @@ export default function AdminProductCatalogPage() {
     product_type: '',
     tags: '',
     status: 'active',
-  images: [],
+    mrp: 0,
+    price: 0,
+    hsnCode: '',
+    images: [],
     options: [{ name: 'Color', values: [] }],
     variants: []
   });
@@ -126,7 +135,8 @@ export default function AdminProductCatalogPage() {
   const fetchProducts = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/products?include_variants=true&include_options=true&page=${page}&limit=${limit}`);
+      // Fetch with display_order sorting (ASC - lowest numbers first)
+      const response = await fetch(`/api/products?include_variants=true&include_options=true&page=${page}&limit=${limit}&sort=display_order&order=asc`);
       const result = await response.json();
       
       logger.debug('Fetch products response:', { result });
@@ -167,6 +177,14 @@ export default function AdminProductCatalogPage() {
     try {
       setIsSaving(true);
       // Normalize images to array of plain URL strings – backend expects text[] or json[] of URLs
+      const normalizedImages = (formData.images || []).map(img => typeof (img as any) === 'string' ? img : img.url).filter(Boolean);
+      
+      logger.debug('admin_products_save_image_payload', {
+        imageSourcesProvided: formData.images?.length || 0,
+        normalizedCount: normalizedImages.length,
+        sampleImage: normalizedImages[0] || null
+      });
+      
       const productData = {
         handle: formData.handle,
         title: formData.title,
@@ -175,7 +193,10 @@ export default function AdminProductCatalogPage() {
         product_type: formData.product_type,
         tags: formData.tags.split(',').map(tag => tag.trim()).filter(Boolean),
         status: formData.status,
-        images: (formData.images || []).map(img => typeof (img as any) === 'string' ? img : img.url).filter(Boolean),
+        mrp: formData.mrp,
+        price: formData.price,
+        hsnCode: formData.hsnCode.trim() || null,
+        images: normalizedImages,
         options: formData.options.filter(opt => opt.name && opt.values.length > 0),
         variants: formData.variants.filter(variant => variant.title && variant.price > 0)
       } as const;
@@ -237,7 +258,10 @@ export default function AdminProductCatalogPage() {
       product_type: '',
       tags: '',
       status: 'active',
-  images: [],
+      mrp: 0,
+      price: 0,
+      hsnCode: '',
+      images: [],
       options: [{ name: 'Color', values: [] }],
       variants: []
     });
@@ -267,7 +291,16 @@ export default function AdminProductCatalogPage() {
         product_type: p.product_type || '',
         tags: Array.isArray(p.tags) ? p.tags.join(', ') : (typeof p.tags === 'string' ? p.tags : ''),
         status: (p.status as any) || 'active',
-  images: (p.images || []).map((img: any) => ({ url: img.url || img, alt: img.alt })),
+        mrp: typeof p.mrp === 'number' ? p.mrp : 0,
+        price: typeof p.price === 'number' ? p.price : 0,
+        hsnCode: (p as any).hsnCode || (p as any).hsn_code || '',
+        // Handle both text[] (from DB) and object[] (from state) formats
+        images: (p.images || []).map((img: any) => {
+          if (typeof img === 'string') {
+            return { url: img, alt: '' };
+          }
+          return { url: img.url || img, alt: img.alt || '' };
+        }),
         options: (p.options || []).map((o: any) => ({ name: o.name, values: o.values || [] })),
         variants: (p.variants || []).map((v: any) => ({
           title: v.title || '',
@@ -511,6 +544,43 @@ export default function AdminProductCatalogPage() {
     await handleExport(false);
   };
 
+  // Product order management functions
+  const moveProductOrder = async (product: Product, direction: 'up' | 'down') => {
+    try {
+      const currentIndex = products.findIndex(p => p.id === product.id);
+      if (currentIndex === -1) return;
+
+      const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+      if (targetIndex < 0 || targetIndex >= products.length) return;
+
+      const currentProduct = products[currentIndex];
+      const targetProduct = products[targetIndex];
+
+      // Swap display_order values
+      const currentOrder = (currentProduct as any).display_order || (currentIndex * 10);
+      const targetOrder = (targetProduct as any).display_order || (targetIndex * 10);
+
+      // Update both products
+      await Promise.all([
+        fetch('/api/products', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: currentProduct.id, display_order: targetOrder })
+        }),
+        fetch('/api/products', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: targetProduct.id, display_order: currentOrder })
+        })
+      ]);
+
+      toast({ title: 'Order updated', description: 'Product order has been changed.' });
+      fetchProducts(); // Refresh list
+    } catch (_error) {
+      toast({ title: 'Error', description: 'Failed to update order', variant: 'destructive' });
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-7xl mx-auto space-y-6">
@@ -691,6 +761,45 @@ export default function AdminProductCatalogPage() {
                         <option value="draft">Draft</option>
                         <option value="archived">Archived</option>
                       </select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="mrp">MRP (Maximum Retail Price)</Label>
+                      <Input
+                        id="mrp"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={formData.mrp}
+                        onChange={(e) => setFormData({...formData, mrp: parseFloat(e.target.value) || 0})}
+                        placeholder="e.g., 1999.00"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="price">Sale Price</Label>
+                      <Input
+                        id="price"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={formData.price}
+                        onChange={(e) => setFormData({...formData, price: parseFloat(e.target.value) || 0})}
+                        placeholder="e.g., 1599.00"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Sale price should be less than or equal to MRP
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="hsnCode">HSN / SAC Code</Label>
+                      <Input
+                        id="hsnCode"
+                        value={formData.hsnCode}
+                        onChange={(e) => setFormData({ ...formData, hsnCode: e.target.value })}
+                        placeholder="e.g., 85183000"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Enter the product-specific HSN/SAC identifier for invoicing.
+                      </p>
                     </div>
                   </div>
                   <div className="space-y-2">
@@ -875,6 +984,7 @@ export default function AdminProductCatalogPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="w-20">Order</TableHead>
                       <TableHead>Handle</TableHead>
                       <TableHead>Title</TableHead>
                       <TableHead>Vendor</TableHead>
@@ -886,8 +996,37 @@ export default function AdminProductCatalogPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {products.map((product) => (
+                    {products.map((product, index) => (
                       <TableRow key={product.id}>
+                        <TableCell>
+                          <div className="flex flex-col items-center gap-1">
+                            <div className="flex gap-1">
+                              <Button 
+                                size="sm" 
+                                variant="ghost" 
+                                className="h-6 w-6 p-0"
+                                onClick={() => moveProductOrder(product, 'up')}
+                                disabled={index === 0}
+                                title="Move up"
+                              >
+                                <ChevronUp className="h-4 w-4" />
+                              </Button>
+                              <Button 
+                                size="sm" 
+                                variant="ghost" 
+                                className="h-6 w-6 p-0"
+                                onClick={() => moveProductOrder(product, 'down')}
+                                disabled={index === products.length - 1}
+                                title="Move down"
+                              >
+                                <ChevronDown className="h-4 w-4" />
+                              </Button>
+                            </div>
+                            <span className="text-xs text-gray-500">
+                              {(product as any).display_order || 0}
+                            </span>
+                          </div>
+                        </TableCell>
                         <TableCell className="font-mono text-sm">{product.handle}</TableCell>
                         <TableCell className="font-medium">{product.title}</TableCell>
                         <TableCell>{product.vendor}</TableCell>

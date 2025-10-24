@@ -20,15 +20,19 @@ export interface CompanySettings {
     pan?: string;
     tan?: string;
     cin?: string;
+    supportEmail?: string;
+    supportPhone?: string;
 }
 
 interface InvoiceTemplateProps {
     order: Order;
     settings: CompanySettings;
+    autoPrint?: boolean;
 }
 
-export function InvoiceTemplate({ order, settings }: InvoiceTemplateProps) {
+export function InvoiceTemplate({ order, settings, autoPrint }: InvoiceTemplateProps) {
     const invoiceRef = React.useRef<HTMLDivElement>(null);
+    const hasAutoPrintedRef = React.useRef(false);
     type CompanyInfoJson = {
         companyName?: string;
         registeredAddress?: string;
@@ -37,6 +41,8 @@ export function InvoiceTemplate({ order, settings }: InvoiceTemplateProps) {
         tan?: string;
         cin?: string;
         logoUrl?: string;
+        supportEmail?: string;
+        supportPhone?: string;
     };
     const [companyInfo, setCompanyInfo] = React.useState<CompanyInfoJson | null>(null);
 
@@ -55,6 +61,8 @@ export function InvoiceTemplate({ order, settings }: InvoiceTemplateProps) {
         tan: companyInfo?.tan,
         cin: companyInfo?.cin,
         logoUrl: companyInfo?.logoUrl || settings.logoUrl,
+        supportEmail: companyInfo?.supportEmail || settings.supportEmail,
+        supportPhone: companyInfo?.supportPhone || settings.supportPhone,
     };
 
     const handlePrint = () => {
@@ -79,47 +87,61 @@ export function InvoiceTemplate({ order, settings }: InvoiceTemplateProps) {
         }
     };
 
+    React.useEffect(() => {
+        if (!autoPrint || hasAutoPrintedRef.current) {
+            return;
+        }
+
+        hasAutoPrintedRef.current = true;
+        const timer = window.setTimeout(() => {
+            handlePrint();
+        }, 300);
+
+        return () => window.clearTimeout(timer);
+    }, [autoPrint]);
+
     return (
-        <div>
-            <div className="flex justify-end mb-4">
-                 <Button variant="outline" onClick={handlePrint}>
+        <div className="space-y-4 px-3 sm:px-0">
+            <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:justify-end">
+                 <Button variant="outline" onClick={handlePrint} className="w-full sm:w-auto">
                     <Printer className="mr-2 h-4 w-4" /> Print Invoice
                 </Button>
             </div>
             <div ref={invoiceRef}>
-                <Card className="max-w-4xl mx-auto border-2 border-primary/20 shadow-lg font-sans">
-                    <CardHeader className="p-8">
-                        <div className="flex justify-between items-start">
+                <Card className="mx-auto w-full max-w-4xl border-2 border-primary/20 font-sans shadow-lg">
+                    <CardHeader className="p-6 sm:p-8">
+                        <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
                             <div className="flex items-center gap-4">
-                                <Logo className="h-16 w-16 text-primary" />
-                                <div>
-                                    <h1 className="text-3xl font-bold text-primary">{merged.name}</h1>
-                                    <p className="text-gray-500 text-sm">{merged.address}</p>
-                                    {merged.gstin && (<p className="text-gray-500 text-sm">GSTIN: {merged.gstin}</p>)}
-                                    {merged.pan && (<p className="text-gray-500 text-sm">PAN: {merged.pan}</p>)}
-                                    {merged.tan && (<p className="text-gray-500 text-sm">TAN: {merged.tan}</p>)}
-                                    {merged.cin && (<p className="text-gray-500 text-sm">CIN: {merged.cin}</p>)}
+                                <Logo className="h-14 w-14 text-primary sm:h-16 sm:w-16" />
+                                <div className="space-y-1">
+                                    <h1 className="text-2xl font-bold text-primary sm:text-3xl">{merged.name}</h1>
+                                    <p className="text-sm text-gray-500 sm:text-base">{merged.address}</p>
+                                    {merged.gstin && (<p className="text-sm text-gray-500">GSTIN: {merged.gstin}</p>)}
+                                    {merged.pan && (<p className="text-sm text-gray-500">PAN: {merged.pan}</p>)}
+                                    {merged.tan && (<p className="text-sm text-gray-500">TAN: {merged.tan}</p>)}
+                                    {merged.cin && (<p className="text-sm text-gray-500">CIN: {merged.cin}</p>)}
                                 </div>
                             </div>
-                            <div className="text-right">
-                                <h2 className="text-2xl font-semibold uppercase tracking-widest text-primary">Invoice</h2>
-                                <p className="text-gray-500">#{order.id}</p>
+                            <div className="text-left md:text-right">
+                                <h2 className="text-xl font-semibold uppercase tracking-widest text-primary sm:text-2xl">Invoice</h2>
+                                <p className="text-sm text-gray-500 sm:text-base">#{order.id}</p>
                             </div>
                         </div>
                     </CardHeader>
                     <Separator />
-                    <CardContent className="p-8">
-                        <div className="grid grid-cols-2 gap-8 mb-8">
+                    <CardContent className="p-6 sm:p-8">
+                        <div className="mb-8 grid grid-cols-1 gap-6 sm:grid-cols-2">
                              <div>
-                                <h3 className="font-semibold mb-2 text-primary">Bill To</h3>
+                                <h3 className="mb-2 font-semibold text-primary">Bill To</h3>
                                 <p className="font-medium">{order.customer_name}</p>
                             </div>
-                            <div className="text-right">
-                                <h3 className="font-semibold mb-2 text-primary">Invoice Date</h3>
+                            <div className="text-left sm:text-right">
+                                <h3 className="mb-2 font-semibold text-primary">Invoice Date</h3>
                                 <p>{order.created_at}</p>
                             </div>
                         </div>
-                        <Table>
+                        <div className="overflow-x-auto">
+                        <Table className="min-w-[720px]">
                             <TableHeader>
                                 <TableRow className="bg-primary/10 hover:bg-primary/10">
                                     <TableHead className="w-[40%] text-primary">Item Description</TableHead>
@@ -159,11 +181,12 @@ export function InvoiceTemplate({ order, settings }: InvoiceTemplateProps) {
                                 })}
                             </TableBody>
                         </Table>
+                        </div>
                     </CardContent>
                      <Separator />
-                    <CardFooter className="p-8">
-                        <div className="w-full flex justify-end">
-                            <div className="w-full max-w-sm space-y-4">
+                    <CardFooter className="p-6 sm:p-8">
+                        <div className="flex w-full justify-end">
+                            <div className="w-full max-w-sm space-y-4 text-sm sm:text-base">
                                <div className="flex justify-between">
                                     <span>Taxable Amount</span>
                                     <span>₹{order.subtotal.toFixed(2)}</span>
@@ -177,7 +200,7 @@ export function InvoiceTemplate({ order, settings }: InvoiceTemplateProps) {
                                     <span>₹{(order.gst_amount / 2).toFixed(2)}</span>
                                 </div>
                                 <Separator />
-                                <div className="flex justify-between font-bold text-xl text-primary">
+                                <div className="flex justify-between text-lg font-bold text-primary sm:text-xl">
                                     <span>Grand Total</span>
                                     <span>₹{order.total.toFixed(2)}</span>
                                 </div>

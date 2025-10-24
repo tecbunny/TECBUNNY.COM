@@ -5,29 +5,24 @@ import { ProductImportRow } from '../../../../lib/types/products';
 import { logger } from '../../../../lib/logger';
 import sanitizeHtml from '../../../../lib/sanitize-html';
 
-// Simple in-memory cache for products table columns (lifetime of lambda/edge)
-let productColumnsCache: Set<string> | null = null;
-let productColumnsMeta: Record<string, { nullable: boolean; data_type: string }> | null = null;
 async function ensureProductColumns(supabase: any) {
-  if (productColumnsCache && productColumnsMeta) return productColumnsCache;
   try {
     const { data, error } = await supabase
       .from('information_schema.columns' as any)
-      .select('column_name,is_nullable,data_type')
+      .select('column_name, is_nullable, data_type')
       .eq('table_name', 'products');
     if (error) throw error;
-    productColumnsCache = new Set((data || []).map((c: any) => c.column_name));
-    productColumnsMeta = {};
-    (data || []).forEach((c: any) => {
-      productColumnsMeta![c.column_name] = { nullable: c.is_nullable === 'YES', data_type: c.data_type };
-    });
-    logger.debug('import_product_columns_cached', { columns: Array.from(productColumnsCache), meta: productColumnsMeta });
+    const columns = new Set((data || []).map((c: any) => c.column_name));
+    const meta = (data || []).reduce((acc: any, c: any) => {
+      acc[c.column_name] = { nullable: c.is_nullable === 'YES', data_type: c.data_type };
+      return acc;
+    }, {});
+    logger.debug('import_product_columns_fetched', { columns: Array.from(columns), meta });
+    return { columns, meta };
   } catch (e) {
-    logger.warn('import_product_columns_cache_failed', { error: (e as Error).message });
-    productColumnsCache = new Set();
-    productColumnsMeta = {};
+    logger.warn('import_product_columns_fetch_failed', { error: (e as Error).message });
+    return { columns: new Set(), meta: {} };
   }
-  return productColumnsCache;
 }
 
 // Helper function to parse CSV line with proper quote handling
@@ -492,7 +487,7 @@ export async function POST(request: NextRequest) {
           }
 
           // Conditionally remove columns that do not exist in current schema
-          const cols = await ensureProductColumns(supabase);
+          const { columns: cols, meta: productColumnsMeta } = await ensureProductColumns(supabase);
           // Column presence adaptations
           if (!cols.has('created_by')) { delete productData.created_by; rowWarnings.push('created_by missing; omitted'); }
           if (!cols.has('updated_by')) { delete productData.updated_by; rowWarnings.push('updated_by missing; omitted'); }
@@ -858,7 +853,7 @@ export async function POST(request: NextRequest) {
     }
 
   // Include product table columns (if cached) for debugging handle presence
-  const cols = await ensureProductColumns(supabase);
+  const { columns: cols, meta: productColumnsMeta } = await ensureProductColumns(supabase);
   return NextResponse.json({
       success: true,
       message,

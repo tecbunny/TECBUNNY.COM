@@ -93,20 +93,22 @@ export default function AboutPage() {
             <div className="space-y-8">
               <div className="timeline-item">
                 <div className="flex items-start space-x-4">
-                  <div className="w-12 h-12 gradient-bg rounded-full flex items-center justify-center text-white font-bold shadow-lg">
-                    2025
+                  <div className="w-16 h-16 gradient-bg rounded-full flex flex-col items-center justify-center text-white font-bold shadow-lg leading-tight">
+                    <span className="text-sm">Aug</span>
+                    <span className="text-xs opacity-90">2025</span>
                   </div>
                   <div>
-                    <h3 className="text-xl font-semibold text-gray-900 mb-2">The Beginning</h3>
-                    <p className="text-gray-600">Founded in Goa with a vision to bring cutting-edge technology to every corner of India.</p>
+                    <h3 className="text-xl font-semibold text-gray-900 mb-2">Incorporated</h3>
+                    <p className="text-gray-600">Formally incorporated in Goa with a mission to bring cutting-edge technology to every corner of India.</p>
                   </div>
                 </div>
               </div>
 
               <div className="timeline-item">
                 <div className="flex items-start space-x-4">
-                  <div className="w-12 h-12 gradient-bg rounded-full flex items-center justify-center text-white font-bold shadow-lg">
-                    2021
+                  <div className="w-16 h-16 gradient-bg rounded-full flex flex-col items-center justify-center text-white font-bold shadow-lg leading-tight">
+                    <span className="text-sm">Sep</span>
+                    <span className="text-xs opacity-90">2025</span>
                   </div>
                   <div>
                     <h3 className="text-xl font-semibold text-gray-900 mb-2">Team Building</h3>
@@ -117,8 +119,9 @@ export default function AboutPage() {
 
               <div className="timeline-item">
                 <div className="flex items-start space-x-4">
-                  <div className="w-12 h-12 gradient-bg rounded-full flex items-center justify-center text-white font-bold shadow-lg">
-                    2023
+                  <div className="w-16 h-16 gradient-bg rounded-full flex flex-col items-center justify-center text-white font-bold shadow-lg leading-tight">
+                    <span className="text-sm">Oct</span>
+                    <span className="text-xs opacity-90">2025</span>
                   </div>
                   <div>
                     <h3 className="text-xl font-semibold text-gray-900 mb-2">Platform Launch</h3>
@@ -129,8 +132,9 @@ export default function AboutPage() {
 
               <div className="timeline-item">
                 <div className="flex items-start space-x-4">
-                  <div className="w-12 h-12 gradient-bg rounded-full flex items-center justify-center text-white font-bold shadow-lg">
-                    2025
+                  <div className="w-16 h-16 gradient-bg rounded-full flex flex-col items-center justify-center text-white font-bold shadow-lg leading-tight">
+                    <span className="text-sm">Nov</span>
+                    <span className="text-xs opacity-90">2025</span>
                   </div>
                   <div>
                     <h3 className="text-xl font-semibold text-gray-900 mb-2">Rapid Growth</h3>

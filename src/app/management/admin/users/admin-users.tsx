@@ -71,9 +71,9 @@ export default function UserManagementPage() {
 
         return {
           id: entry.id,
-          name: profile.name || entry.email?.split('@')[0] || 'Unnamed User',
+          name: profile.name || profile.full_name || entry.email?.split('@')[0] || 'Unnamed User',
           email: profile.email || entry.email || '',
-          mobile: profile.mobile || '',
+          mobile: profile.mobile || profile.phone || '',
           role: (profile.role || 'customer') as User['role'],
           address: profile.address || null,
           gstin: profile.gstin || null,

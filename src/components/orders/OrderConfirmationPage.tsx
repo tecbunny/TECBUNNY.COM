@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { CheckCircle, Package, MapPin, Phone, Mail, Calendar, Hash } from 'lucide-react';
 
@@ -33,6 +33,44 @@ export default function OrderConfirmationPage({ orderId }: OrderConfirmationPage
     fetchOrder();
   }, [orderId, getOrderById]);
 
+  const handlePrint = useCallback(() => {
+    if (typeof window === 'undefined') return;
+
+    let mediaQuery: MediaQueryList | null = null;
+
+    const cleanup = () => {
+      document.body.classList.remove('order-print-active');
+      window.removeEventListener('afterprint', cleanup);
+      if (mediaQuery) {
+        if (typeof mediaQuery.removeEventListener === 'function') {
+          mediaQuery.removeEventListener('change', handleMediaChange);
+        } else if (typeof mediaQuery.removeListener === 'function') {
+          mediaQuery.removeListener(handleMediaChange);
+        }
+      }
+    };
+
+    const handleMediaChange = (event: MediaQueryListEvent) => {
+      if (!event.matches) {
+        cleanup();
+      }
+    };
+
+    document.body.classList.add('order-print-active');
+
+    if (window.matchMedia) {
+      mediaQuery = window.matchMedia('print');
+      if (typeof mediaQuery.addEventListener === 'function') {
+        mediaQuery.addEventListener('change', handleMediaChange);
+      } else if (typeof mediaQuery.addListener === 'function') {
+        mediaQuery.addListener(handleMediaChange);
+      }
+    }
+
+    window.addEventListener('afterprint', cleanup);
+    window.print();
+  }, []);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -64,6 +102,7 @@ export default function OrderConfirmationPage({ orderId }: OrderConfirmationPage
 
   const getStatusColor = (status: string) => {
     switch (status) {
+      case 'Awaiting Payment': return 'bg-amber-100 text-amber-800';
       case 'Pending': return 'bg-yellow-100 text-yellow-800';
       case 'Confirmed': return 'bg-blue-100 text-blue-800';
       case 'Processing': return 'bg-purple-100 text-purple-800';
@@ -74,9 +113,48 @@ export default function OrderConfirmationPage({ orderId }: OrderConfirmationPage
     }
   };
 
+  const normalizedPaymentMethod = order.payment_method?.toLowerCase() ?? '';
+  const isPaymentConfirmed = (order.payment_status ?? '').toLowerCase() === 'payment confirmed'
+    || ['Payment Confirmed', 'Confirmed', 'Processing', 'Ready to Ship', 'Shipped', 'Ready for Pickup', 'Completed', 'Delivered'].includes(order.status);
+  const isAwaitingUpiConfirmation = normalizedPaymentMethod === 'upi'
+    && !isPaymentConfirmed
+    && ['Awaiting Payment', 'Pending'].includes(order.status);
+  const statusLabel = isAwaitingUpiConfirmation
+    ? 'Payment Confirmation Pending'
+    : order.status;
+  const paymentStatusLabel = (() => {
+    const explicit = order.payment_status?.trim();
+    if (explicit && explicit.length > 0) {
+      return explicit;
+    }
+
+    if (['Cancelled', 'Rejected'].includes(order.status)) {
+      return 'Payment Cancelled';
+    }
+
+    if (!isPaymentConfirmed) {
+      return normalizedPaymentMethod === 'upi' ? 'Payment Confirmation Pending' : 'Awaiting Payment';
+    }
+
+    return 'Payment Confirmed';
+  })();
+  const paymentStatusTone = paymentStatusLabel === 'Payment Confirmed'
+    ? 'text-green-600'
+    : paymentStatusLabel === 'Payment Confirmation Pending'
+      ? 'text-amber-600'
+      : ['Payment Cancelled', 'Payment Failed'].includes(paymentStatusLabel)
+        ? 'text-red-600'
+        : 'text-gray-700';
+  const paymentMethodLabel = order.payment_method
+    ? order.payment_method.toUpperCase()
+    : 'NOT SPECIFIED';
+  const shouldShowRetryUpi = normalizedPaymentMethod === 'upi'
+    && !isPaymentConfirmed
+    && !['Cancelled', 'Rejected'].includes(order.status);
+
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-4xl mx-auto px-4">
+    <div className="min-h-screen bg-gray-50 py-8 order-print-page">
+      <div id="order-print-area" className="max-w-4xl mx-auto px-4">
         {/* Success Header */}
         <div className="text-center mb-8">
           <CheckCircle className="h-16 w-16 text-green-600 mx-auto mb-4" />
@@ -90,7 +168,7 @@ export default function OrderConfirmationPage({ orderId }: OrderConfirmationPage
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Order Details */}
           <Card>
             <CardHeader>
@@ -100,7 +178,7 @@ export default function OrderConfirmationPage({ orderId }: OrderConfirmationPage
                   Order Details
                 </span>
                 <Badge className={getStatusColor(order.status)}>
-                  {order.status}
+                  {statusLabel}
                 </Badge>
               </CardTitle>
             </CardHeader>
@@ -165,6 +243,21 @@ export default function OrderConfirmationPage({ orderId }: OrderConfirmationPage
 
               <Separator />
 
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span>Payment Method</span>
+                  <span>{paymentMethodLabel}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Payment Status</span>
+                  <span className={`font-medium ${paymentStatusTone}`}>
+                    {paymentStatusLabel}
+                  </span>
+                </div>
+              </div>
+
+              <Separator />
+
               <div className="flex justify-between text-lg font-bold">
                 <span>Total Amount</span>
                 <span>₹{order.total.toFixed(2)}</span>
@@ -218,10 +311,11 @@ export default function OrderConfirmationPage({ orderId }: OrderConfirmationPage
                 ) : (
                   <div>
                     <p className="font-medium mb-2">Pickup Location:</p>
-                    <p className="text-sm text-gray-600">
-                      Our Store<br />
-                      123 Main Street, City<br />
-                      Please bring this order confirmation
+                    <p className="text-sm text-gray-600 whitespace-pre-line">
+                      {(order.pickup_store || order.delivery_address || 'Shivparvati Enterprises, Chawdewada, Parcem, Pernem Goa.').trim()}
+                    </p>
+                    <p className="mt-3 text-xs text-gray-500">
+                      Bring a valid ID and this confirmation email when collecting your order.
                     </p>
                   </div>
                 )}
@@ -238,7 +332,7 @@ export default function OrderConfirmationPage({ orderId }: OrderConfirmationPage
         </div>
 
         {/* Action Buttons */}
-        <div className="mt-8 flex flex-wrap gap-4 justify-center">
+        <div className="mt-8 flex flex-wrap gap-4 justify-center no-print">
           <Button
             onClick={() => window.location.href = '/products'}
             variant="outline"
@@ -252,8 +346,23 @@ export default function OrderConfirmationPage({ orderId }: OrderConfirmationPage
           >
             View All Orders
           </Button>
+          {shouldShowRetryUpi && (
+            <Button
+              onClick={() => window.location.href = `/payment/upi/${order.id}`}
+              className="bg-purple-600 hover:bg-purple-700 px-6"
+            >
+              Retry UPI Payment
+            </Button>
+          )}
           <Button
-            onClick={() => window.print()}
+            onClick={() => window.open(`/orders/${order.id}/invoice`, '_blank', 'noopener,noreferrer')}
+            variant="outline"
+            className="px-6"
+          >
+            View Invoice
+          </Button>
+          <Button
+            onClick={handlePrint}
             variant="outline"
             className="px-6"
           >
@@ -262,7 +371,7 @@ export default function OrderConfirmationPage({ orderId }: OrderConfirmationPage
         </div>
 
         {/* Next Steps */}
-        <Card className="mt-8">
+        <Card className="mt-8 no-print">
           <CardHeader>
             <CardTitle>What happens next?</CardTitle>
           </CardHeader>

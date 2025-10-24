@@ -3,8 +3,8 @@ import { createClient } from '@supabase/supabase-js';
 
 import type { User } from '@supabase/supabase-js';
 
-import { otpManager } from '../../../../lib/otp-manager';
 import { logger } from '../../../../lib/logger';
+import MultiChannelOTPManager from '../../../../lib/multi-channel-otp-manager';
 
 // Rate limiting storage (in production, use Redis)
 const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
@@ -40,18 +40,21 @@ function validatePassword(password: string): string | null {
   return null;
 }
 
+const otpService = new MultiChannelOTPManager();
+
 export async function POST(request: NextRequest) {
   try {
   const body = await request.json();
   const otp = (body?.otp || body?.code || '').toString().trim();
   const email = (body?.email || body?.userEmail || '').toString().trim();
   const mobile = (body?.mobile || '').toString().trim();
+  const otpId = (body?.otpId || body?.otp_id || '').toString().trim();
   // Accept multiple client keys and normalize
   const password: string = (body?.password || body?.newPassword || body?.new_password || '').toString();
 
-    if (!otp || (!email && !mobile) || !password) {
+    if (!otp || !otpId || (!email && !mobile) || !password) {
       return NextResponse.json(
-        { error: 'OTP, email or mobile, and password are required' },
+        { error: 'OTP, otpId, email or mobile, and password are required' },
         { status: 400 }
       );
     }
@@ -74,38 +77,42 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verify OTP via DB/memory
-    let verify = await otpManager.verifyOTP(identifier, otp, 'recovery');
-    // As a fallback (dev/local), accept cookie-stored OTP if present and valid
-    if (!verify.success) {
-      const c = request.cookies.get('recovery_otp')?.value;
-      if (c) {
-        try {
-          const json = JSON.parse(Buffer.from(c, 'base64').toString('utf8')) as { identifier: string; otp: string; type: string; exp: number };
-          if (json.identifier === identifier && json.type === 'recovery' && json.otp === otp && Date.now() < json.exp) {
-            verify = { success: true, message: 'OTP verified via cookie fallback' } as const;
-          }
-        } catch {}
-      }
+    // Verify OTP via multi-channel manager
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      { auth: { autoRefreshToken: false, persistSession: false } }
+    );
+
+    const { data: otpRecord, error: otpError } = await supabase
+      .from('otp_verifications')
+      .select('*')
+      .eq('id', otpId)
+      .maybeSingle();
+
+    if (otpError || !otpRecord) {
+      logger.warn('auth.reset_password.otp_record_missing', { otpId, identifier });
+      return NextResponse.json(
+        { error: 'Invalid or expired OTP reference' },
+        { status: 400 }
+      );
     }
+
+    if (otpRecord.purpose !== 'password_reset') {
+      return NextResponse.json(
+        { error: 'OTP type mismatch. Please request a new reset code.' },
+        { status: 400 }
+      );
+    }
+
+    const verify = await otpService.verifyOTP({ otpId, code: otp, channel: otpRecord.channel || undefined });
+
     if (!verify.success) {
       return NextResponse.json(
         { error: verify.message || 'Invalid or expired OTP' },
         { status: 400 }
       );
     }
-
-    // Create admin client for password update
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false
-        }
-      }
-    );
 
     // Get user by email or mobile
     const { data: { users }, error: getUserError } = await supabase.auth.admin.listUsers();

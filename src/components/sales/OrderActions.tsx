@@ -43,6 +43,11 @@ import { useAuth } from '../../lib/hooks';
 import { isManagerClient, isSalesClient } from '../../lib/permissions-client';
 import type { Order, OrderStatus } from '../../lib/types';
 
+const ADMIN_NOTIFICATION_EMAIL = (() => {
+  const envValue = (process.env.NEXT_PUBLIC_ORDER_ADMIN_EMAIL || '').trim();
+  return envValue || 'tecbunnysolution@gmail.com';
+})();
+
 interface OrderActionsProps {
   order: Order;
   onStatusUpdate: () => void;
@@ -102,13 +107,153 @@ export function OrderActions({ order, onStatusUpdate, variant = 'dropdown' }: Or
 
   const hasPermission = order.type === 'Pickup' ? canManagePickupOrders : canManageOrders;
 
+  const resolvePaymentStatusUpdate = (newStatus: OrderStatus) => {
+    const method = order.payment_method?.toLowerCase() ?? '';
+    switch (newStatus) {
+      case 'Awaiting Payment':
+        return { payment_status: 'Payment Confirmation Pending' };
+      case 'Payment Confirmed':
+        return { payment_status: 'Payment Confirmed' };
+      case 'Confirmed':
+        if (method === 'cod' && order.payment_status !== 'Payment Confirmed') {
+          return {};
+        }
+        return order.payment_status === 'Payment Confirmed' ? {} : { payment_status: 'Payment Confirmed' };
+      case 'Processing':
+      case 'Ready to Ship':
+      case 'Shipped':
+      case 'Ready for Pickup':
+      case 'Completed':
+      case 'Delivered':
+        if (order.payment_status === 'Payment Confirmed' || method === 'cod') {
+          return {};
+        }
+        return { payment_status: 'Payment Confirmed' };
+      case 'Cancelled':
+      case 'Rejected':
+        return { payment_status: 'Payment Cancelled' };
+      default:
+        return {};
+    }
+  };
+
+  const notifyStatusChange = async (status: OrderStatus) => {
+    const notifyPickupCustomer = async () => {
+      if (!order.customer_email) {
+        return;
+      }
+
+      try {
+        const pickupCode = order.id.slice(0, 8).toUpperCase();
+        const response = await fetch('/api/email/pickup', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            to: order.customer_email,
+            orderData: {
+              id: order.id,
+              customer_name: order.customer_name,
+              total: order.total,
+              type: order.type,
+              delivery_address: order.pickup_store || order.delivery_address,
+              pickup_store: order.pickup_store || order.delivery_address
+            },
+            pickupCode
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`pickup email failed with status ${response.status}`);
+        }
+      } catch (error) {
+        logger.warn('pickup_notification_email_failed', {
+          error: error instanceof Error ? error.message : String(error),
+          orderId: order.id
+        });
+      }
+    };
+
+    const notifyPickupAdmin = async () => {
+      if (!ADMIN_NOTIFICATION_EMAIL) {
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/email/notify-sales-pickup', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            to: ADMIN_NOTIFICATION_EMAIL,
+            orderId: order.id,
+            orderType: 'pickup'
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`pickup admin email failed with status ${response.status}`);
+        }
+      } catch (error) {
+        logger.warn('pickup_admin_notification_failed', {
+          error: error instanceof Error ? error.message : String(error),
+          orderId: order.id
+        });
+      }
+    };
+
+    const notifyOrderApproved = async () => {
+      if (!ADMIN_NOTIFICATION_EMAIL) {
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/email/order-approved', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            to: ADMIN_NOTIFICATION_EMAIL,
+            orderId: order.id,
+            orderTotal: order.total,
+            orderType: order.type === 'Pickup' ? 'pickup' : order.type === 'Delivery' ? 'delivery' : undefined,
+            customerName: order.customer_name
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`order approved email failed with status ${response.status}`);
+        }
+      } catch (error) {
+        logger.warn('order_approved_email_failed', {
+          error: error instanceof Error ? error.message : String(error),
+          orderId: order.id
+        });
+      }
+    };
+
+    if (status === 'Ready for Pickup' && order.type === 'Pickup') {
+      await notifyPickupCustomer();
+      await notifyPickupAdmin();
+    }
+
+    if (status === 'Confirmed') {
+      await notifyOrderApproved();
+    }
+  };
+
   const updateOrderStatus = async (newStatus: OrderStatus, additionalData?: any) => {
     setIsProcessing(true);
     try {
+      const paymentUpdates = resolvePaymentStatusUpdate(newStatus);
       const updateData = {
         status: newStatus,
         processed_by: user?.id || 'unknown',
         updated_at: new Date().toISOString(),
+        ...paymentUpdates,
         ...additionalData
       };
 
@@ -125,6 +270,8 @@ export function OrderActions({ order, onStatusUpdate, variant = 'dropdown' }: Or
         });
         return;
       }
+
+      await notifyStatusChange(newStatus);
 
       onStatusUpdate();
       toast({
@@ -174,8 +321,8 @@ export function OrderActions({ order, onStatusUpdate, variant = 'dropdown' }: Or
   };
 
   const handlePrintInvoice = () => {
-    // Open invoice in new window for printing
-    window.open(`/orders/${order.id}?print=invoice`, '_blank');
+    const invoiceUrl = `/orders/${order.id}/invoice?print=1`;
+    window.open(invoiceUrl, '_blank', 'noopener,noreferrer');
   };
 
   const getAvailableActions = () => {
@@ -246,26 +393,46 @@ export function OrderActions({ order, onStatusUpdate, variant = 'dropdown' }: Or
         break;
 
       case 'Processing':
-        actions.push({
-          label: 'Ready to Ship',
-          icon: <Clock className="h-4 w-4" />,
-          action: () => updateOrderStatus('Ready to Ship')
-        });
+        if (order.type === 'Pickup') {
+          actions.push({
+            label: 'Ready for Pickup',
+            icon: <Clock className="h-4 w-4" />,
+            action: () => updateOrderStatus('Ready for Pickup')
+          });
+        } else {
+          actions.push({
+            label: 'Ready to Ship',
+            icon: <Clock className="h-4 w-4" />,
+            action: () => updateOrderStatus('Ready to Ship')
+          });
+        }
         break;
 
       case 'Ready to Ship':
-        actions.push({
-          label: 'Mark as Shipped',
-          icon: <Truck className="h-4 w-4" />,
-          action: () => updateOrderStatus('Shipped')
-        });
+        if (order.type !== 'Pickup') {
+          actions.push({
+            label: 'Mark as Shipped',
+            icon: <Truck className="h-4 w-4" />,
+            action: () => updateOrderStatus('Shipped')
+          });
+        }
         break;
 
       case 'Shipped':
+        if (order.type !== 'Pickup') {
+          actions.push({
+            label: 'Mark as Delivered',
+            icon: <CheckCircle className="h-4 w-4" />,
+            action: () => updateOrderStatus('Delivered')
+          });
+        }
+        break;
+
+      case 'Ready for Pickup':
         actions.push({
-          label: 'Mark as Delivered',
+          label: 'Mark as Completed',
           icon: <CheckCircle className="h-4 w-4" />,
-          action: () => updateOrderStatus('Delivered')
+          action: () => updateOrderStatus('Completed')
         });
         break;
     }
@@ -294,6 +461,7 @@ export function OrderActions({ order, onStatusUpdate, variant = 'dropdown' }: Or
       case 'Payment Confirmed': return 'default';
       case 'Confirmed': return 'default';
       case 'Processing': return 'default';
+  case 'Ready for Pickup': return 'default';
       case 'Ready to Ship': return 'default';
       case 'Shipped': return 'secondary';
       case 'Delivered': return 'outline';

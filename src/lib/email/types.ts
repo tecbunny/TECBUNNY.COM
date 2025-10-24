@@ -108,7 +108,8 @@ export const EMAIL_TEMPLATES = {
 
   // 12. Internal order notifications
   ORDER_NOTIFICATION_MANAGER: 'order_notification_manager',
-  ORDER_NOTIFICATION_SALES_PICKUP: 'order_notification_sales_pickup'
+  ORDER_NOTIFICATION_SALES_PICKUP: 'order_notification_sales_pickup',
+  ORDER_APPROVED_ADMIN: 'order_approved_admin'
 } as const;
 
 export type EmailTemplateType = typeof EMAIL_TEMPLATES[keyof typeof EMAIL_TEMPLATES];

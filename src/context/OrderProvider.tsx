@@ -8,21 +8,7 @@ import { useToast } from '../hooks/use-toast';
 import { useCart } from '../lib/hooks';
 import { useAuth } from '../lib/hooks';
 import { logger } from '../lib/logger';
-
-const STATUS_MAP: Record<string, OrderStatus> = {
-  pending: 'Pending',
-  'awaiting payment': 'Awaiting Payment',
-  'payment confirmed': 'Payment Confirmed',
-  confirmed: 'Confirmed',
-  processing: 'Processing',
-  'ready to ship': 'Ready to Ship',
-  shipped: 'Shipped',
-  'ready for pickup': 'Ready for Pickup',
-  completed: 'Completed',
-  delivered: 'Delivered',
-  cancelled: 'Cancelled',
-  rejected: 'Rejected'
-};
+import { deserializeOrder, normalizeOrderStatus } from '../lib/orders/normalizers';
 
 interface OrderContextType {
   orders: Order[];
@@ -46,54 +32,21 @@ export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const { user } = useAuth();
   const supabase = createClient();
 
-  const parseOrderItemsBlob = useCallback((rawItems: unknown) => {
-    if (!rawItems) return null;
-    try {
-      if (typeof rawItems === 'string') {
-        return JSON.parse(rawItems);
-      }
-      if (typeof rawItems === 'object') {
-        return rawItems as Record<string, unknown>;
-      }
-    } catch (error) {
-      logger.warn('OrderProvider failed to parse order items blob', {
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-    return null;
-  }, []);
-
-  const deserializeOrder = useCallback((rawOrder: any): Order => {
-    const itemsPayload = parseOrderItemsBlob(rawOrder?.items);
-
-    const parsedItems: OrderItem[] = Array.isArray(rawOrder?.items)
-      ? rawOrder.items as OrderItem[]
-      : Array.isArray(itemsPayload?.cart_items)
-        ? itemsPayload.cart_items as OrderItem[]
-        : [];
-
-    const statusKey = typeof rawOrder?.status === 'string' ? rawOrder.status.toLowerCase() : '';
-    const normalizedStatus = STATUS_MAP[statusKey] ?? (rawOrder?.status ?? 'Pending');
-
-    return {
-      ...rawOrder,
-      status: normalizedStatus,
-      items: parsedItems,
-      customer_email: itemsPayload?.customer_email ?? rawOrder?.customer_email ?? undefined,
-      customer_phone: itemsPayload?.customer_phone ?? rawOrder?.customer_phone ?? undefined,
-      delivery_address: itemsPayload?.delivery_address ?? rawOrder?.delivery_address ?? undefined,
-      payment_method: itemsPayload?.payment_method ?? rawOrder?.payment_method ?? undefined,
-      notes: itemsPayload?.customer_notes ?? rawOrder?.notes ?? undefined,
-    } as Order;
-  }, [parseOrderItemsBlob]);
-
   const createOrder = useCallback(async (orderData: Partial<Order>): Promise<Order | null> => {
     setIsProcessingOrder(true);
     try {
-      // Allow guest orders - use provided customer info or fallback to user info
-      const customerName = orderData.customer_name || user?.name || 'Guest Customer';
-      const customerEmail = orderData.customer_email || user?.email || '';
-      const customerPhone = orderData.customer_phone || user?.mobile || '';
+      if (!user) {
+        toast({
+          title: 'Login Required',
+          description: 'Please sign in before placing an order.',
+          variant: 'destructive'
+        });
+        return null;
+      }
+
+      const customerName = orderData.customer_name || user.name || 'Customer';
+      const customerEmail = orderData.customer_email || user.email || '';
+      const customerPhone = orderData.customer_phone || user.mobile || '';
       
       // Validate required fields
       if (!customerName || !customerEmail || !customerPhone) {
@@ -105,7 +58,7 @@ export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         return null;
       }
 
-      // Calculate totals
+  // Calculate totals
       const subtotal = cartItems.reduce((total, item) => {
         const price = item.price;
         const gstRate = item.gstRate || 18; // Default 18% GST
@@ -134,74 +87,60 @@ export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         serialNumbers: []
       }));
 
-      const newOrder: Omit<Order, 'id'> = {
+      const orderPayload = {
         customer_name: customerName,
-        customer_id: user?.id || null, // Allow null for guest orders
-        created_at: new Date().toISOString(),
-        status: 'Pending',
+        customer_id: user?.id || null,
+        status: orderData.status || 'Pending',
         subtotal: Math.round(subtotal * 100) / 100,
         gst_amount: Math.round(gstAmount * 100) / 100,
         total: Math.round(total * 100) / 100,
         type: orderData.type || 'Delivery',
         items: orderItems,
-        processed_by: orderData.processed_by,
-        // Store additional info in a temporary way until we can add the columns
-        customer_email: customerEmail,
-        customer_phone: customerPhone,
-        delivery_address: orderData.delivery_address,
-        notes: orderData.notes,
-        payment_method: orderData.payment_method
+        processed_by: orderData.processed_by || null,
+        customer_email: customerEmail || null,
+        customer_phone: customerPhone || null,
+        delivery_address: orderData.delivery_address || null,
+        pickup_store: orderData.pickup_store || null,
+        notes: orderData.notes || null,
+        payment_method: orderData.payment_method || null,
+        payment_status: orderData.payment_status || null,
+        discount_amount: Math.round(((orderData.discount_amount || 0) as number) * 100) / 100,
+        shipping_amount: Math.round(((orderData.shipping_amount || 0) as number) * 100) / 100,
+        agent_id: orderData.agent_id || null
       };
 
-      // For now, only insert the fields that exist in the database
-      // Store additional info in notes field as JSON until we add proper columns
-      // Store additional customer info in items field as JSON
-      // Since the database has customer_name but we need email, phone, address, etc.
-      const orderItemsWithCustomerInfo = {
-        cart_items: orderItems,
-        customer_email: customerEmail,
-        customer_phone: customerPhone,
-        delivery_address: orderData.delivery_address,
-        payment_method: orderData.payment_method,
-        customer_notes: orderData.notes
-      };
+      const response = await fetch('/api/orders', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(orderPayload)
+      });
 
-      // Only insert fields that exist in the database schema
-      // Available fields: id, customer_name, customer_id, status, subtotal, gst_amount, total, type, items, processed_by, created_at
-      const orderToInsert = {
-        customer_name: newOrder.customer_name,
-        customer_id: newOrder.customer_id,
-        status: newOrder.status,
-        subtotal: newOrder.subtotal,
-        gst_amount: newOrder.gst_amount,
-        total: newOrder.total,
-        type: newOrder.type,
-        items: JSON.stringify(orderItemsWithCustomerInfo),
-        processed_by: null
-      };
+      const result = await response.json().catch(() => null);
 
-      // Insert order into database
-      const { data, error } = await supabase
-        .from('orders')
-        .insert([orderToInsert])
-        .select()
-        .single();
-
-      if (error) {
+      if (!response.ok || !result?.success) {
+        const errorMessage = result?.error?.message || 'Failed to create order. Please try again.';
+        logger.error('OrderProvider API order creation failed', {
+          status: response.status,
+          error: result?.error,
+        });
         toast({
           title: "Order Failed",
-          description: "Failed to create order. Please try again.",
+          description: errorMessage,
           variant: "destructive"
         });
         return null;
       }
 
       // Merge the database result with our full order data
-      const createdOrder = deserializeOrder(data);
+      const createdOrder = deserializeOrder(result.order);
       const hydratedOrder: Order = {
         ...createdOrder,
         customer_email: createdOrder.customer_email ?? customerEmail,
         customer_phone: createdOrder.customer_phone ?? customerPhone,
+        pickup_store: createdOrder.pickup_store ?? (orderData.pickup_store as string | undefined) ?? undefined,
+        delivery_address: createdOrder.delivery_address ?? (orderData.delivery_address as string | undefined) ?? undefined,
       };
 
       setCurrentOrder(hydratedOrder);
@@ -210,28 +149,12 @@ export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       // Clear cart after successful order
       clearCart();
 
-      // Send order confirmation email
-      try {
-        await fetch('/api/email/order-confirmation', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            to: customerEmail,
-            orderData: hydratedOrder
-          }),
-        });
-  } catch (_emailError) {
-        // Don't fail the order creation if email fails
-      }
-
       toast({
         title: "Order Created Successfully!",
         description: `Order #${createdOrder.id.slice(0, 8)} has been placed.`,
       });
 
-  return hydratedOrder;
+      return hydratedOrder;
     } catch (error) {
       logger.error('OrderProvider failed to create order', {
         error: error instanceof Error ? error.message : String(error),
@@ -246,7 +169,7 @@ export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     } finally {
       setIsProcessingOrder(false);
     }
-  }, [cartItems, clearCart, deserializeOrder, supabase, toast, user]);
+  }, [cartItems, clearCart, toast, user]);
 
   const updateOrderStatus = useCallback(async (orderId: string, status: OrderStatus): Promise<boolean> => {
     try {
@@ -267,9 +190,7 @@ export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         return false;
       }
 
-      const normalizedStatus = typeof status === 'string'
-        ? STATUS_MAP[status.toLowerCase()] ?? status
-        : status;
+      const normalizedStatus = normalizeOrderStatus(status);
 
       // Update local state
       setOrders(prev => prev.map(order => 
@@ -309,7 +230,7 @@ export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         return;
       }
 
-  const normalizedOrders = (data ?? []).map(deserializeOrder);
+    const normalizedOrders = (data ?? []).map(deserializeOrder);
       setOrders(normalizedOrders);
     } catch (error) {
       logger.error('OrderProvider getOrders failed', {
@@ -317,7 +238,7 @@ export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         customerId,
       });
     }
-  }, [deserializeOrder, supabase]);
+  }, [supabase]);
 
   const getOrderById = useCallback(async (orderId: string): Promise<Order | null> => {
     try {
@@ -341,7 +262,7 @@ export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       });
       return null;
     }
-  }, [deserializeOrder, supabase]);
+  }, [supabase]);
 
   const cancelOrder = useCallback(async (orderId: string): Promise<boolean> => {
     try {

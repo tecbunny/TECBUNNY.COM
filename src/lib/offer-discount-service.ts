@@ -18,21 +18,65 @@ export class OfferDiscountService {
     async getActiveOffers(): Promise<AutoOffer[]> {
         const now = new Date().toISOString();
         
-        const { data, error } = await this.supabase
-            .from('auto_offers')
-            .select('*')
-            .eq('is_active', true)
-            .eq('auto_apply', true)
-            .lte('conditions->valid_from', now)
-            .gte('conditions->valid_to', now)
-            .order('priority', { ascending: false }); // Higher priority first
-            
-        if (error) {
-            logger.error('Error fetching offers', { error });
-            return [];
+        try {
+            const response = await fetch(`/api/auto-offers?active=true&t=${encodeURIComponent(now)}`, {
+                headers: { 'Cache-Control': 'no-store' }
+            });
+
+            if (response.ok) {
+                const payload = await response.json();
+                const offers = Array.isArray(payload) ? payload : (Array.isArray(payload?.data) ? payload.data : []);
+                return this.normalizeOffers(offers, now);
+            } else {
+                const details = await response.json().catch(() => null);
+                logger.warn('OfferDiscountService.getActiveOffers.api_failed', { status: response.status, details });
+            }
+        } catch (err) {
+            logger.warn('OfferDiscountService.getActiveOffers.api_error', { error: err });
         }
-        
-        return data || [];
+
+        return [];
+    }
+
+    private normalizeOffers(rawOffers: AutoOffer[], nowIso: string): AutoOffer[] {
+        const nowTime = new Date(nowIso);
+
+        return (rawOffers || [])
+            .filter((offer) => offer?.is_active && offer?.auto_apply)
+            .map((offer) => {
+                let parsedConditions: AutoOffer['conditions'] = offer.conditions;
+
+                if (typeof parsedConditions === 'string') {
+                    try {
+                        parsedConditions = JSON.parse(parsedConditions);
+                    } catch (parseError) {
+                        logger.warn('OfferDiscountService.getActiveOffers.condition_parse_failed', {
+                            offerId: offer.id,
+                            error: parseError
+                        });
+                        parsedConditions = {} as AutoOffer['conditions'];
+                    }
+                }
+
+                const normalizedConditions = parsedConditions || {} as AutoOffer['conditions'];
+
+                const validFrom = normalizedConditions?.valid_from ? new Date(normalizedConditions.valid_from) : null;
+                const validTo = normalizedConditions?.valid_to ? new Date(normalizedConditions.valid_to) : null;
+
+                if (validFrom && Number.isFinite(validFrom.getTime()) && validFrom > nowTime) {
+                    return null;
+                }
+
+                if (validTo && Number.isFinite(validTo.getTime()) && validTo < nowTime) {
+                    return null;
+                }
+
+                return {
+                    ...offer,
+                    conditions: normalizedConditions
+                };
+            })
+            .filter((offer): offer is AutoOffer => Boolean(offer));
     }
     
     /**

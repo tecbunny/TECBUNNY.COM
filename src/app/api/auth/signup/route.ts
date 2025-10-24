@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-import { otpManager } from '../../../../lib/otp-manager';
 import { verifyCaptcha } from '../../../../lib/captcha/captcha-service';
 import { logger } from '../../../../lib/logger';
-import { sendSms } from '../../../../lib/sms/twofactor';
+import MultiChannelOTPManager, { type OTPChannel } from '../../../../lib/multi-channel-otp-manager';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 'service-role-placeholder';
@@ -20,6 +19,7 @@ function getSupabaseAdmin() {
     }
   });
 }
+const otpService = new MultiChannelOTPManager();
 
 export async function POST(request: NextRequest) {
   try {
@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    const { email, password, name, mobile: _mobile, captchaToken } = await request.json();
+  const { email, password, name, mobile: _mobile, captchaToken, channel: requestedChannel } = await request.json();
 
     // CAPTCHA verification (conditional if configured). Allow runtime bypass via header in non-production
     const bypassHeader = request.headers.get('x-bypass-captcha');
@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (password.length < 6) {
+  if (password.length < 6) {
       return NextResponse.json(
         { error: 'Password must be at least 6 characters long' },
         { status: 400 }
@@ -121,50 +121,45 @@ export async function POST(request: NextRequest) {
     // The user will be created AFTER OTP verification
     logger.info('signup.sending_email_otp', { email });
 
-    // Generate and send email OTP
-    const otpResult = await otpManager.sendOTP(email, 'signup');
-    if (!otpResult.success) {
-      logger.error('signup.email_otp_failed', { email, message: otpResult.message });
+    const normalizedMobile = mobile || undefined;
+    const preferredChannel: OTPChannel = requestedChannel && ['sms', 'email', 'whatsapp'].includes(requestedChannel)
+      ? requestedChannel
+      : (email ? 'email' : (normalizedMobile ? 'sms' : 'email'));
+
+    const otpResult = await otpService.generateOTP({
+      email,
+      phone: normalizedMobile,
+      purpose: 'registration',
+      preferredChannel,
+    });
+
+    if (!otpResult.success || !otpResult.otpId) {
+      logger.error('signup.otp_generation_failed', { email, mobile: normalizedMobile, message: otpResult.message });
       return NextResponse.json(
         { error: otpResult.message || 'Failed to send verification code' },
         { status: 500 }
       );
     }
 
-    // Send SMS OTP if mobile is provided
-    let smsOtpResult = null;
-    if (mobile) {
-      logger.info('signup.sending_sms_otp', { mobile });
-      try {
-        // Generate a 4-digit OTP for SMS
-        const smsOtp = Math.floor(1000 + Math.random() * 9000).toString();
-        smsOtpResult = await sendSms({
-          to: mobile,
-          message: `Your TecBunny verification code is: ${smsOtp}`
-        });
-        if (!smsOtpResult.success) {
-          logger.warn('signup.sms_otp_failed', { mobile, error: smsOtpResult.error });
-        } else {
-          logger.info('signup.sms_otp_sent', { mobile });
-          // Note: SMS OTP is not stored in database, only email OTP is verified
-          // In production, you might want to store SMS OTP separately or use Supabase's SMS auth
-        }
-      } catch (smsError) {
-        logger.warn('signup.sms_otp_send_error', { mobile, error: smsError });
-      }
-    }
-
-    logger.info('signup.otp_dispatch_complete', { email, mobile: !!mobile });
+    logger.info('signup.otp_dispatch_complete', {
+      email,
+      mobile: !!normalizedMobile,
+      otpId: otpResult.otpId,
+      channel: otpResult.channel,
+      fallbackAvailable: otpResult.fallbackAvailable,
+    });
 
     return NextResponse.json({
-      message: smsOtpResult?.success
-        ? 'Verification codes sent to email and mobile! Please check both to complete signup.'
-        : 'Verification code sent successfully! Please check your email to complete signup.',
+      message: otpResult.message ?? `Verification code sent via ${otpResult.channel}.`,
       otpSent: true,
-      email,
-      mobile: mobile ? true : false,
-      verificationRequired: true
-    });  } catch (error) {
+      verificationRequired: true,
+      otpId: otpResult.otpId,
+      channel: otpResult.channel,
+      fallbackAvailable: otpResult.fallbackAvailable,
+      fallbackProvider: otpResult.provider,
+      preferredChannel,
+    });
+  } catch (error) {
     logger.error('signup.internal_error', { error });
     return NextResponse.json(
       { error: 'Internal server error' },

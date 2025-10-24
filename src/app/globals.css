@@ -150,6 +150,16 @@
     outline: 2px solid hsl(var(--ring));
     outline-offset: 2px;
   }
+
+  @media (max-width: 640px) {
+    html {
+      font-size: 15px;
+    }
+
+    body {
+      line-height: 1.55;
+    }
+  }
 }
 
 @layer components {
@@ -399,6 +409,39 @@
     transition: all 0.2s ease;
   }
   
+
+@media print {
+  body.order-print-active {
+    background: #ffffff !important;
+  }
+
+  body.order-print-active * {
+    visibility: hidden;
+  }
+
+  body.order-print-active #order-print-area,
+  body.order-print-active #order-print-area * {
+    visibility: visible;
+  }
+
+  body.order-print-active #order-print-area {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    margin: 0 !important;
+    padding: 1.5rem !important;
+    background: #ffffff !important;
+  }
+
+  body.order-print-active .order-print-page {
+    background: #ffffff !important;
+    padding: 0 !important;
+  }
+
+  body.order-print-active .no-print {
+    display: none !important;
+  }
+}
   .shadow-button:hover {
     box-shadow: 0 6px 12px -2px rgb(0 0 0 / 0.25), 0 4px 8px -2px rgb(0 0 0 / 0.15);
     transform: translateY(-1px);

@@ -2,7 +2,7 @@ import { Metadata } from 'next';
 
 import ServicesPage from '../../components/services-page';
 import { logger } from '../../lib/logger';
-import { createServiceClient } from '../../lib/supabase/server';
+import { createClient, createServiceClient, isSupabaseServiceConfigured } from '../../lib/supabase/server';
 
 // Static metadata for better SEO and performance
 export const metadata: Metadata = {
@@ -16,21 +16,16 @@ export const metadata: Metadata = {
   },
 };
 
-// Force static generation
-export const dynamic = 'force-static';
+// Always fetch fresh data so admin updates appear immediately
+export const dynamic = 'force-dynamic';
 
 export default async function Page() {
   let services = [];
   
   try {
-    // Check if we're in a build environment where database might not be available
-    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      // Silent fallback during build - no warning needed for static generation
-      return <ServicesPage services={[]} />;
-    }
-
-    // Use service client on the server to avoid RLS recursion issues
-    const supabase = createServiceClient();
+    const supabase = isSupabaseServiceConfigured
+      ? createServiceClient()
+      : await createClient();
     
     // Fetch all available columns without assuming schema; avoid ORDER BY to prevent missing-column errors
     const { data, error } = await supabase
@@ -48,7 +43,8 @@ export default async function Page() {
       return <ServicesPage services={[]} />;
     }
 
-    services = (data || []).map((s: any) => {
+    services = (data || [])
+      .map((s: any) => {
     const statusVal = s.status;
     const isActive = typeof s.is_active === 'boolean'
       ? s.is_active
@@ -74,7 +70,8 @@ export default async function Page() {
       category: s.category || 'Support',
       display_order: typeof s.display_order === 'number' ? s.display_order : 0,
     };
-  });
+  })
+      .filter((service: any) => service.is_active !== false);
 
   // Prefer server-side order when column exists; otherwise do a stable client-side sort by title
   services.sort((a: any, b: any) => {

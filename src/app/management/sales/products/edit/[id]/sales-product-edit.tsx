@@ -136,9 +136,20 @@ export default function EditProductPage() {
             });
             router.push('/management/sales/products');
         } else {
+            
+            // Handle PostgreSQL array format if needed
+            let additionalImagesArray = foundProduct.additional_images || [];
+            if (additionalImagesArray && typeof additionalImagesArray === 'string') {
+              try {
+                additionalImagesArray = JSON.parse(additionalImagesArray);
+              } catch (_e) {
+                additionalImagesArray = [];
+              }
+            }
+            
             setProduct(foundProduct);
             setImagePreview(foundProduct.image || '');
-            setAdditionalImages(foundProduct.additional_images || []);
+            setAdditionalImages(additionalImagesArray);
             
             // Convert specifications back to string format if it exists
             let specificationsString = '';
@@ -197,13 +208,13 @@ export default function EditProductPage() {
             additional_images: additionalImages,
             specifications: Object.keys(specifications).length > 0 ? specifications : undefined,
         };
+        
         const { error } = await supabase
             .from('products')
             .update(updateData)
             .eq('id', product.id);
 
         if (error) {
-            console.error('Product update error:', error);
             throw new Error(`Failed to update product: ${error.message}`);
         }
         
@@ -211,7 +222,7 @@ export default function EditProductPage() {
             title: "Product Updated",
             description: `${data.name} has been updated successfully.`,
         });
-        router.push('/management/sales/products');
+        router.push(`/management/sales/products?refresh=${Date.now()}`);
     } catch(e: any) {
         toast({
             variant: "destructive",

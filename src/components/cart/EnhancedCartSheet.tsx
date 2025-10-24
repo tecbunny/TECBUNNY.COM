@@ -285,6 +285,9 @@ export function EnhancedCartSheet({ children }: EnhancedCartSheetProps) {
                 <Button className="w-full" size="lg" asChild>
                   <Link href="/checkout">Proceed to Checkout</Link>
                 </Button>
+                <Button variant="secondary" className="w-full" asChild>
+                  <Link href="/cart">View Full Cart</Link>
+                </Button>
               </div>
             </SheetFooter>
           </>

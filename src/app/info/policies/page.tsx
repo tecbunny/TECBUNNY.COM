@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { ArrowLeft, FileText, Shield, Truck, RotateCcw } from 'lucide-react';
+import { ArrowLeft, FileText, Shield, Truck, RotateCcw, Undo2 } from 'lucide-react';
 
 import { Metadata } from 'next';
 
@@ -49,6 +49,13 @@ export default function PoliciesPage() {
       icon: RotateCcw,
       href: '/info/policies/return',
       color: 'text-red-600',
+    },
+    {
+      title: 'Refund & Cancellation Policy',
+      description: 'How cancellations work and when refunds are completed',
+      icon: Undo2,
+      href: '/info/policies/refund-cancellation',
+      color: 'text-purple-600',
     },
   ];
 

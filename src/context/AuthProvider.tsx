@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
+import React, { createContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 
 import type { SupabaseClient, User as SupabaseUser } from '@supabase/supabase-js';
 
@@ -60,6 +60,8 @@ const extractRoleFromMetadata = (metadata: Record<string, unknown> | undefined |
   return null;
 };
 
+type OTPChannel = 'email' | 'sms' | 'whatsapp';
+
 interface SignupDetails {
   email: string;
   password: string;
@@ -67,6 +69,7 @@ interface SignupDetails {
   lastName: string;
   phone?: string;
   captchaToken?: string;
+  preferredChannel?: OTPChannel;
 }
 
 interface AuthData {
@@ -102,6 +105,88 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
   const supabase = useMemo(() => createClient(), []);
   const sessionManager = SessionManager.getInstance();
+  const firstLoginAttemptedRef = useRef<Set<string>>(new Set());
+
+  const triggerFirstLoginWhatsApp = useCallback(async (profile?: User | null) => {
+    if (!profile || !profile.id || !profile.mobile || profile.first_login_whatsapp_sent) {
+      return;
+    }
+
+    if (firstLoginAttemptedRef.current.has(profile.id)) {
+      return;
+    }
+
+    firstLoginAttemptedRef.current.add(profile.id);
+
+    try {
+      const payload = {
+        userId: profile.id,
+        phone: profile.mobile,
+        name: profile.name,
+        loginUrl: typeof window !== 'undefined' ? `${window.location.origin}/auth/login` : undefined
+      };
+
+      const response = await fetch('/api/auth/first-login-whatsapp', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        const errorPayload = await response.json().catch(() => null);
+        logger.warn('first_login_whatsapp_failed', {
+          status: response.status,
+          error: errorPayload?.error,
+          userId: profile.id
+        });
+        firstLoginAttemptedRef.current.delete(profile.id);
+        return;
+      }
+
+      const result = await response.json();
+
+      if (!result?.success) {
+        logger.warn('first_login_whatsapp_not_sent', {
+          userId: profile.id,
+          reason: result?.error,
+          alreadySent: result?.alreadySent
+        });
+        if (result?.alreadySent) {
+          setUser((prev) => {
+            if (!prev || prev.id !== profile.id) {
+              return prev;
+            }
+
+            return {
+              ...prev,
+              first_login_whatsapp_sent: true,
+              first_login_notified_at: result.sentAt ?? prev.first_login_notified_at ?? null
+            };
+          });
+        } else {
+          firstLoginAttemptedRef.current.delete(profile.id);
+        }
+        return;
+      }
+
+      setUser((prev) => {
+        if (!prev || prev.id !== profile.id) {
+          return prev;
+        }
+
+        return {
+          ...prev,
+          first_login_whatsapp_sent: true,
+          first_login_notified_at: result.sentAt ?? new Date().toISOString()
+        };
+      });
+    } catch (error) {
+      logger.error('first_login_whatsapp_error', { error, userId: profile.id });
+      firstLoginAttemptedRef.current.delete(profile.id);
+    }
+  }, [setUser]);
 
   const fetchUserProfile = useCallback(async (supabaseUser: SupabaseUser) => {
     // Pre-compute metadata-derived fields so we always have a usable profile
@@ -115,7 +200,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       mobile: supabaseUser.user_metadata?.mobile || '',
       role: resolvedRole,
       emailVerified: Boolean(supabaseUser.email_confirmed_at),
-      email_confirmed_at: supabaseUser.email_confirmed_at ?? null
+      email_confirmed_at: supabaseUser.email_confirmed_at ?? null,
+      first_login_whatsapp_sent: false,
+      first_login_notified_at: null
     };
 
     try {
@@ -158,7 +245,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             return {
               ...newProfile,
               emailVerified: Boolean(supabaseUser.email_confirmed_at),
-              email_confirmed_at: supabaseUser.email_confirmed_at ?? null
+              email_confirmed_at: supabaseUser.email_confirmed_at ?? null,
+              first_login_whatsapp_sent: false,
+              first_login_notified_at: null
             };
           }
           
@@ -166,7 +255,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             ...insertedProfile,
             email: newProfile.email,
             emailVerified: Boolean(supabaseUser.email_confirmed_at || insertedProfile.email_confirmed_at),
-            email_confirmed_at: supabaseUser.email_confirmed_at ?? insertedProfile.email_confirmed_at
+            email_confirmed_at: supabaseUser.email_confirmed_at ?? insertedProfile.email_confirmed_at,
+            first_login_whatsapp_sent: Boolean(insertedProfile.first_login_whatsapp_sent),
+            first_login_notified_at: insertedProfile.first_login_notified_at ?? null
           } as User;
         } else {
           logger.error('Error fetching profile', { error, userId: supabaseUser.id });
@@ -199,7 +290,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         email: supabaseUser.email || profile.email || '',
         role: userRole,
         emailVerified: Boolean(supabaseUser.email_confirmed_at || profile.email_confirmed_at),
-        email_confirmed_at: supabaseUser.email_confirmed_at ?? profile.email_confirmed_at
+        email_confirmed_at: supabaseUser.email_confirmed_at ?? profile.email_confirmed_at,
+        first_login_whatsapp_sent: Boolean(profile.first_login_whatsapp_sent),
+        first_login_notified_at: profile.first_login_notified_at ?? null
       } as User;
     } catch (err) {
       logger.error('Unexpected error in fetchUserProfile', { error: err, userId: supabaseUser?.id });
@@ -228,7 +321,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             // Merge email verification information from auth session
             const emailConfirmedAt = session.user.email_confirmed_at ?? null;
             if (profile) {
-              setUser({ ...profile, emailVerified: Boolean(emailConfirmedAt || profile.email_confirmed_at), email_confirmed_at: emailConfirmedAt ?? profile.email_confirmed_at });
+              const normalizedProfile: User = {
+                ...profile,
+                emailVerified: Boolean(emailConfirmedAt || profile.email_confirmed_at),
+                email_confirmed_at: emailConfirmedAt ?? profile.email_confirmed_at
+              };
+              setUser(normalizedProfile);
+              void triggerFirstLoginWhatsApp(normalizedProfile);
             } else {
               setUser(null);
             }
@@ -270,6 +369,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (mounted) {
           setUser(profile);
           setLoading(false);
+          void triggerFirstLoginWhatsApp(profile);
         }
 
         if (typeof window !== 'undefined') {
@@ -291,7 +391,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       mounted = false;
       subscription?.unsubscribe();
     };
-  }, [supabase.auth, fetchUserProfile, sessionManager]);
+  }, [supabase.auth, fetchUserProfile, sessionManager, triggerFirstLoginWhatsApp]);
 
   const login = async (email: string, password: string): Promise<AuthResponse> => {
     try {
@@ -327,6 +427,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (data.session.user) {
         const profile = await fetchUserProfile(data.session.user);
         setUser(profile);
+        void triggerFirstLoginWhatsApp(profile);
 
         if (typeof window !== 'undefined') {
           const lastSignInAtRaw = data.session.user.last_sign_in_at;
@@ -427,6 +528,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (captchaBypassed) headers['x-bypass-captcha'] = '1';
 
+      const preferredChannel: OTPChannel = details.preferredChannel && ['email', 'sms', 'whatsapp'].includes(details.preferredChannel)
+        ? details.preferredChannel
+        : (details.email ? 'email' : (details.phone ? 'sms' : 'email'));
+
       const response = await fetch('/api/auth/signup', {
         method: 'POST',
         headers,
@@ -436,7 +541,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           mobile: details.phone,
           password: details.password,
           role: 'customer',
-          captchaToken: details.captchaToken
+          captchaToken: details.captchaToken,
+          channel: preferredChannel
         }),
       });
 
@@ -459,15 +565,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 mobile: details.phone,
                 password: details.password,
                 role: 'customer',
-                captchaToken: details.captchaToken
+                captchaToken: details.captchaToken,
+                channel: preferredChannel
               }),
             });
             const retryData = await retryResp.json();
             if (retryResp.ok) {
               return {
                 success: true,
-                message: 'Signup successful. Please check your email for verification.',
-                data: { user: retryData.user }
+                message: retryData.message || `Verification code sent via ${retryData.channel || preferredChannel}.`,
+                data: {
+                  otpId: retryData.otpId,
+                  channel: retryData.channel || preferredChannel,
+                  fallbackAvailable: retryData.fallbackAvailable ?? false,
+                  preferredChannel
+                }
               };
             }
             // fallthrough to return error with original message
@@ -483,10 +595,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       // Return data in the format expected by calling components
+      if (!data?.otpId) {
+        return {
+          success: false,
+          message: 'Could not create verification reference. Please try again.',
+          error: 'Missing otpId'
+        };
+      }
+
       return {
         success: true,
-        message: 'Signup successful. Please check your email for verification.',
-        data: { user: data.user }
+        message: data.message || `Verification code sent via ${data.channel || preferredChannel}.`,
+        data: {
+          otpId: data.otpId,
+          channel: data.channel || preferredChannel,
+          fallbackAvailable: data.fallbackAvailable ?? false,
+          preferredChannel
+        }
       };
     } catch (error) {
       logger.error('Signup error', { error, email: details.email });
@@ -500,7 +625,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const resendConfirmation = async (email: string, captchaToken?: string): Promise<AuthResponse> => {
     try {
-      // Include mobile from local signup session when available to support SMS resend flows
+  // Include mobile from local signup session when available to support OTP-on-call resend flows
       const stored = localStorage.getItem('signup_session');
       let storedMobile: string | undefined = undefined;
       if (stored) {

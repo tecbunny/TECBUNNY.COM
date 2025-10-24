@@ -11,9 +11,9 @@ import {
   Shield,
   Truck,
   RotateCcw,
+  Undo2,
   Eye,
-  ExternalLink,
-  X
+  ExternalLink
 } from 'lucide-react';
 
 import Link from 'next/link';
@@ -40,16 +40,7 @@ interface PolicyContent {
   id: string;
   page_key: string;
   title: string;
-  content: {
-    title?: string;
-    lastUpdated?: string;
-    introduction?: string[];
-    sections?: Array<{
-      title: string;
-      content?: string[];
-      list?: string[];
-    }>;
-  };
+  content: Record<string, any> | string | null;
   meta_description?: string;
   meta_keywords?: string;
   status: string;
@@ -57,10 +48,55 @@ interface PolicyContent {
   updated_at: string;
 }
 
-interface PolicySection {
-  title: string;
-  content?: string[];
-  list?: string[];
+function normalizePolicyContent(raw: unknown): Record<string, any> {
+  if (!raw) return {};
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        return parsed;
+      }
+      return { description: raw };
+    } catch (error) {
+      logger.warn('PoliciesManagement.normalizePolicyContent.parse_failed', {
+        error,
+        rawSnippet: String(raw).slice(0, 120)
+      });
+      return { description: raw };
+    }
+  }
+  return (raw && typeof raw === 'object') ? (raw as Record<string, any>) : {};
+}
+
+function extractDescriptionFromContent(content: unknown): string {
+  const normalized = normalizePolicyContent(content);
+  if (!normalized) return '';
+  if (typeof normalized.description === 'string') return normalized.description;
+  if (typeof normalized.descriptionHtml === 'string') return normalized.descriptionHtml;
+
+  const parts: string[] = [];
+
+  if (typeof normalized.introduction === 'string') {
+    parts.push(normalized.introduction);
+  } else if (Array.isArray(normalized.introduction)) {
+    parts.push(...normalized.introduction);
+  }
+
+  if (Array.isArray(normalized.sections)) {
+    for (const section of normalized.sections) {
+      if (section?.title) {
+        parts.push(section.title);
+      }
+      if (Array.isArray(section?.content)) {
+        parts.push(...section.content.filter(Boolean));
+      }
+      if (Array.isArray(section?.list)) {
+        parts.push(...section.list.filter(Boolean));
+      }
+    }
+  }
+
+  return parts.join('\n\n');
 }
 
 export default function PoliciesManagement() {
@@ -73,11 +109,10 @@ export default function PoliciesManagement() {
 
   const [formData, setFormData] = useState({
     title: '',
-    introduction: '',
+    description: '',
     meta_description: '',
     meta_keywords: '',
-    status: 'published',
-    sections: [] as PolicySection[]
+    status: 'published'
   });
 
   const policyTypes = useMemo(() => [
@@ -108,6 +143,13 @@ export default function PoliciesManagement() {
       description: 'Guidelines for returns, exchanges, and refunds',
       icon: RotateCcw,
       defaultTitle: 'Return & Exchange Policy'
+    },
+    {
+      key: 'refund_cancellation_policy',
+      title: 'Refund & Cancellation Policy',
+      description: 'How cancellations are handled and when refunds are issued',
+      icon: Undo2,
+      defaultTitle: 'Refund & Cancellation Policy'
     }
   ], []);
 
@@ -124,9 +166,12 @@ export default function PoliciesManagement() {
       if (response.ok) {
         // Filter only policy-related content
         const policyKeys = policyTypes.map(p => p.key);
-        const policyContents = result.data.filter((content: PolicyContent) => 
-          policyKeys.includes(content.page_key)
-        );
+        const policyContents = result.data
+          .filter((content: PolicyContent) => policyKeys.includes(content.page_key))
+          .map((content: PolicyContent) => ({
+            ...content,
+            content: normalizePolicyContent(content.content)
+          }));
         setPolicies(policyContents);
       } else {
         throw new Error(result.error || 'Failed to fetch policies');
@@ -149,19 +194,19 @@ export default function PoliciesManagement() {
 
   const handleEditPolicy = (policy: PolicyContent | null, policyKey?: string) => {
     if (policy) {
-      setSelectedPolicy(policy);
-      const content = policy.content || {};
+      const normalizedContent = normalizePolicyContent(policy.content);
+      setSelectedPolicy({
+        ...policy,
+        content: normalizedContent
+      });
       setFormData({
-        title: content.title || policy.title,
-        introduction: Array.isArray(content.introduction) ? content.introduction.join('\n\n') : '',
+        title: (typeof normalizedContent.title === 'string' && normalizedContent.title.trim().length > 0)
+          ? normalizedContent.title
+          : policy.title,
+        description: extractDescriptionFromContent(normalizedContent),
         meta_description: policy.meta_description || '',
         meta_keywords: policy.meta_keywords || '',
-        status: policy.status || 'published',
-        sections: (content.sections || []).map(section => ({
-          title: section.title || '',
-          content: section.content || [],
-          list: section.list || []
-        }))
+        status: policy.status || 'published'
       });
     } else if (policyKey) {
       // Creating new policy
@@ -177,11 +222,10 @@ export default function PoliciesManagement() {
       } as PolicyContent);
       setFormData({
         title: policyType?.defaultTitle || 'New Policy',
-        introduction: '',
+        description: '',
         meta_description: policyType?.description || '',
         meta_keywords: '',
-        status: 'draft',
-        sections: []
+        status: 'draft'
       });
     }
     setShowEditDialog(true);
@@ -192,8 +236,10 @@ export default function PoliciesManagement() {
 
     try {
       setSaving(true);
+      const pageKey = selectedPolicy.page_key;
+      const isUpdate = Boolean(selectedPolicy.id);
       
-      // Prepare content structure
+      // Prepare simplified content structure
       const content = {
         title: formData.title,
         lastUpdated: new Date().toLocaleDateString('en-US', {
@@ -201,15 +247,14 @@ export default function PoliciesManagement() {
           month: 'long',
           day: 'numeric'
         }),
-        introduction: formData.introduction.split('\n\n').filter(Boolean),
-        sections: formData.sections
+        description: formData.description
       };
 
       const response = await fetch('/api/page-content', {
-        method: selectedPolicy.id ? 'PUT' : 'POST',
+        method: isUpdate ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          pageKey: selectedPolicy.page_key,
+          pageKey,
           title: formData.title,
           content,
           metaDescription: formData.meta_description,
@@ -241,84 +286,6 @@ export default function PoliciesManagement() {
     } finally {
       setSaving(false);
     }
-  };
-
-  const addSection = () => {
-    setFormData({
-      ...formData,
-      sections: [...formData.sections, { title: '', content: [], list: [] }]
-    });
-  };
-
-  const updateSection = (index: number, field: keyof PolicySection, value: any) => {
-    const newSections = [...formData.sections];
-    if (field === 'content' && Array.isArray(value)) {
-      newSections[index] = { ...newSections[index], content: value };
-    } else if (field === 'list' && Array.isArray(value)) {
-      newSections[index] = { ...newSections[index], list: value };
-    } else {
-      newSections[index] = { ...newSections[index], [field]: value };
-    }
-    setFormData({ ...formData, sections: newSections });
-  };
-
-  const removeSection = (index: number) => {
-    setFormData({
-      ...formData,
-      sections: formData.sections.filter((_, i) => i !== index)
-    });
-  };
-
-  const addContentParagraph = (sectionIndex: number) => {
-    const newSections = [...formData.sections];
-    if (!newSections[sectionIndex].content) {
-      newSections[sectionIndex].content = [];
-    }
-    newSections[sectionIndex].content!.push('');
-    setFormData({ ...formData, sections: newSections });
-  };
-
-  const updateContentParagraph = (sectionIndex: number, paragraphIndex: number, value: string) => {
-    const newSections = [...formData.sections];
-    if (!newSections[sectionIndex].content) {
-      newSections[sectionIndex].content = [];
-    }
-    newSections[sectionIndex].content![paragraphIndex] = value;
-    setFormData({ ...formData, sections: newSections });
-  };
-
-  const removeContentParagraph = (sectionIndex: number, paragraphIndex: number) => {
-    const newSections = [...formData.sections];
-    if (newSections[sectionIndex].content) {
-      newSections[sectionIndex].content = newSections[sectionIndex].content!.filter((_, i) => i !== paragraphIndex);
-    }
-    setFormData({ ...formData, sections: newSections });
-  };
-
-  const addListItem = (sectionIndex: number) => {
-    const newSections = [...formData.sections];
-    if (!newSections[sectionIndex].list) {
-      newSections[sectionIndex].list = [];
-    }
-    newSections[sectionIndex].list!.push('');
-    setFormData({ ...formData, sections: newSections });
-  };
-
-  const updateListItem = (sectionIndex: number, itemIndex: number, value: string) => {
-    const newSections = [...formData.sections];
-    if (!newSections[sectionIndex].list) {
-      newSections[sectionIndex].list = [];
-    }
-    newSections[sectionIndex].list![itemIndex] = value;
-    setFormData({ ...formData, sections: newSections });
-  };
-
-  const removeListItem = (sectionIndex: number, itemIndex: number) => {
-    const newSections = [...formData.sections];
-    if (newSections[sectionIndex].list) {
-      newSections[sectionIndex].list = newSections[sectionIndex].list!.filter((_, i) => i !== itemIndex);
-    }
-    setFormData({ ...formData, sections: newSections });
   };
 
   const getPolicyInfo = (pageKey: string) => {
@@ -484,123 +451,20 @@ export default function PoliciesManagement() {
                 </div>
               </div>
 
-              {/* Introduction */}
+              {/* Description */}
               <div>
-                <Label htmlFor="introduction">Introduction</Label>
+                <Label htmlFor="description">Policy Description</Label>
                 <Textarea
-                  id="introduction"
-                  value={formData.introduction}
-                  onChange={(e) => setFormData({ ...formData, introduction: e.target.value })}
-                  placeholder="Enter introduction paragraphs. Separate paragraphs with double line breaks."
-                  rows={4}
+                  id="description"
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  placeholder="Enter the full policy content. Supports plain text or HTML markup."
+                  rows={10}
+                  className="font-mono"
                 />
                 <p className="text-sm text-muted-foreground mt-1">
-                  Separate paragraphs with double line breaks (press Enter twice)
+                  Paste formatted HTML or plain text. Use HTML tags for advanced formatting if needed.
                 </p>
-              </div>
-
-              {/* Sections */}
-              <div>
-                <div className="flex items-center justify-between mb-4">
-                  <Label>Policy Sections</Label>
-                  <Button type="button" variant="outline" size="sm" onClick={addSection}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Section
-                  </Button>
-                </div>
-
-                {formData.sections.map((section, sectionIndex) => (
-                  <Card key={sectionIndex} className="mb-4">
-                    <CardHeader>
-                      <div className="flex items-center justify-between">
-                        <Label>Section {sectionIndex + 1}</Label>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => removeSection(sectionIndex)}
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                      <Input
-                        value={section.title}
-                        onChange={(e) => updateSection(sectionIndex, 'title', e.target.value)}
-                        placeholder="Section title"
-                      />
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      {/* Content Paragraphs */}
-                      <div>
-                        <div className="flex items-center justify-between mb-2">
-                          <Label className="text-sm">Content Paragraphs</Label>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => addContentParagraph(sectionIndex)}
-                          >
-                            <Plus className="h-4 w-4 mr-1" />
-                            Add Paragraph
-                          </Button>
-                        </div>
-                        {(section.content || []).map((paragraph, paragraphIndex) => (
-                          <div key={paragraphIndex} className="flex gap-2 mb-2">
-                            <Textarea
-                              value={paragraph}
-                              onChange={(e) => updateContentParagraph(sectionIndex, paragraphIndex, e.target.value)}
-                              placeholder="Enter paragraph content"
-                              rows={2}
-                              className="flex-1"
-                            />
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => removeContentParagraph(sectionIndex, paragraphIndex)}
-                            >
-                              <X className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
-
-                      {/* List Items */}
-                      <div>
-                        <div className="flex items-center justify-between mb-2">
-                          <Label className="text-sm">List Items (Optional)</Label>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => addListItem(sectionIndex)}
-                          >
-                            <Plus className="h-4 w-4 mr-1" />
-                            Add Item
-                          </Button>
-                        </div>
-                        {(section.list || []).map((item, itemIndex) => (
-                          <div key={itemIndex} className="flex gap-2 mb-2">
-                            <Input
-                              value={item}
-                              onChange={(e) => updateListItem(sectionIndex, itemIndex, e.target.value)}
-                              placeholder="Enter list item"
-                              className="flex-1"
-                            />
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => removeListItem(sectionIndex, itemIndex)}
-                            >
-                              <X className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
               </div>
             </div>
 

@@ -3,7 +3,9 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { Heart, LogOut, ShoppingCart, User, Shield, Briefcase, FileText, Menu, X, Package } from 'lucide-react';
+import { Heart, LogOut, ShoppingCart, User, Shield, Briefcase, FileText, Menu, X, Package, ChevronDown } from 'lucide-react';
+
+import { usePathname } from 'next/navigation';
 
 import { logger } from '../../lib/logger';
 
@@ -30,9 +32,19 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTr
     { name: 'Home', href: '/' },
     { name: 'Products', href: '/products' },
     { name: 'Services', href: '/services' },
+    { name: 'Customised Setups', href: '/customised-setups' },
     { name: 'Offers', href: '/offers' },
+    { name: 'Cart', href: '/cart' },
     { name: 'About Us', href: '/about' },
     { name: 'Contact', href: '/contact' },
+  ];
+
+  const policyLinks = [
+    { name: 'Privacy Policy', href: '/info/policies/privacy' },
+    { name: 'Terms & Conditions', href: '/info/policies/terms' },
+    { name: 'Return Policy', href: '/info/policies/return' },
+    { name: 'Shipping Policy', href: '/info/policies/shipping' },
+    { name: 'Refund & Cancellation', href: '/info/policies/refund-cancellation' },
   ];
 
 export function Header() {
@@ -40,6 +52,11 @@ export function Header() {
   const { wishlistCount } = useWishlist();
   const { user, logout } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
+  const pathname = usePathname();
+
+  React.useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [pathname]);
 
   const handleLogout = async () => {
     try {
@@ -112,6 +129,38 @@ export function Header() {
                       {link.name}
                   </Link>
                ))}
+               <DropdownMenu>
+                 <DropdownMenuTrigger asChild>
+                   <Button
+                     type="button"
+                     variant="ghost"
+                     className="text-sm font-medium text-blue-700 transition-all duration-200 hover:text-blue-900 hover:bg-blue-100/50 rounded-md px-3 py-2 shadow-button flex items-center gap-1"
+                   >
+                     Policies
+                     <ChevronDown className="h-4 w-4" />
+                   </Button>
+                 </DropdownMenuTrigger>
+                 <DropdownMenuContent align="start" className="w-52">
+                   <DropdownMenuLabel className="text-[11px] font-semibold tracking-wider text-muted-foreground">
+                     POLICIES
+                   </DropdownMenuLabel>
+                   <DropdownMenuSeparator />
+                   {policyLinks.map(link => (
+                     <DropdownMenuItem
+                       key={link.href}
+                       className="cursor-pointer"
+                       onSelect={(event) => {
+                         event.preventDefault();
+                         if (window.location.pathname !== link.href) {
+                           window.location.href = link.href;
+                         }
+                       }}
+                     >
+                       {link.name}
+                     </DropdownMenuItem>
+                   ))}
+                 </DropdownMenuContent>
+               </DropdownMenu>
             </nav>
           </div>
 
@@ -261,6 +310,29 @@ export function Header() {
                                   {link.name}
                               </Link>
                           ))}
+                          <div className="mt-4">
+                            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground mb-2">POLICIES</p>
+                            <div className="flex flex-col gap-3 pl-1">
+                              {policyLinks.map(link => (
+                                <Link
+                                  key={link.name}
+                                  href={link.href}
+                                  className="text-base font-medium text-foreground hover:text-primary"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    setMobileMenuOpen(false);
+                                    setTimeout(() => {
+                                      if (window.location.pathname !== link.href) {
+                                        window.location.href = link.href;
+                                      }
+                                    }, 100);
+                                  }}
+                                >
+                                  {link.name}
+                                </Link>
+                              ))}
+                            </div>
+                          </div>
                        </nav>
                        <div className="flex items-center gap-4">
                           <CartSheet>

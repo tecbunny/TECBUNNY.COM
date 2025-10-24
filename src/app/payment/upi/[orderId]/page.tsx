@@ -22,6 +22,8 @@ interface Order {
   status: string;
   created_at: string;
   customer_name: string;
+  payment_status?: string | null;
+  payment_method?: string | null;
   items?: string | Record<string, unknown> | null;
 }
 
@@ -70,8 +72,16 @@ export default function UPIPaymentPage() {
     return {};
   }, []);
 
-  const resolvePaymentState = useCallback((status?: string): PaymentState => {
-    if (!status) return 'pending';
+  const resolvePaymentState = useCallback((status?: string, paymentStatus?: string | null): PaymentState => {
+    const paymentStatusText = paymentStatus?.toLowerCase() ?? '';
+    if (paymentStatusText === 'payment confirmed') {
+      return 'paid';
+    }
+
+    if (!status) {
+      return 'pending';
+    }
+
     const normalized = status.toLowerCase();
     return ['payment confirmed', 'confirmed', 'completed', 'delivered'].includes(normalized)
       ? 'paid'
@@ -93,7 +103,7 @@ export default function UPIPaymentPage() {
       setLoading(true);
       const { data, error } = await supabase
         .from('orders')
-        .select('id, total, status, created_at, customer_name, items')
+        .select('id, total, status, payment_status, payment_method, created_at, customer_name, items')
         .eq('id', orderId)
         .single();
 
@@ -105,15 +115,26 @@ export default function UPIPaymentPage() {
         status: data.status ?? 'Pending',
         created_at: data.created_at,
         customer_name: data.customer_name ?? 'Customer',
+        payment_status: typeof data.payment_status === 'string' ? data.payment_status : null,
+        payment_method: typeof data.payment_method === 'string' ? data.payment_method : null,
         items: data.items ?? null,
       };
 
-      setOrder(normalizedOrder);
+  const extras = parseOrderExtras(data.items ?? null);
+  const resolvedPaymentMethod = normalizedOrder.payment_method ?? extras.payment_method ?? 'upi';
+      setOrder({
+        ...normalizedOrder,
+        payment_method: resolvedPaymentMethod,
+      });
 
-      const extras = parseOrderExtras(data.items ?? null);
       setCustomerEmail(typeof extras.customer_email === 'string' ? extras.customer_email : null);
       setCustomerPhone(typeof extras.customer_phone === 'string' ? extras.customer_phone : null);
-      setPaymentStatus(resolvePaymentState(normalizedOrder.status));
+
+      const resolvedPaymentState = resolvePaymentState(
+        normalizedOrder.status,
+        normalizedOrder.payment_status
+      );
+      setPaymentStatus(resolvedPaymentState);
 
       const upiLink = generateUPILink(normalizedOrder);
       const qrDataUrl = await QRCode.toDataURL(upiLink, {
@@ -167,14 +188,15 @@ export default function UPIPaymentPage() {
         .from('orders')
         .update({ 
           status: 'Payment Confirmed',
+          payment_status: 'Payment Confirmed',
           updated_at: new Date().toISOString()
         })
         .eq('id', orderId);
 
       if (error) throw error;
 
-      setPaymentStatus('paid');
-      setOrder(prev => prev ? { ...prev, status: 'Payment Confirmed' } : prev);
+  setPaymentStatus('paid');
+  setOrder(prev => prev ? { ...prev, status: 'Payment Confirmed', payment_status: 'Payment Confirmed' } : prev);
 
       toast({
         title: "Payment Confirmed!",
@@ -192,6 +214,10 @@ export default function UPIPaymentPage() {
       });
     }
   };
+
+  const paymentStatusLabel = paymentStatus === 'paid'
+    ? 'Payment Confirmed'
+    : 'Payment Confirmation Pending';
 
   if (loading) {
     return (
@@ -266,7 +292,7 @@ export default function UPIPaymentPage() {
               <div className="flex justify-between">
                 <span>Status</span>
                 <Badge variant={paymentStatus === 'paid' ? 'default' : 'secondary'}>
-                  {paymentStatus.toUpperCase()}
+                  {paymentStatusLabel}
                 </Badge>
               </div>
             </div>

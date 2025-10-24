@@ -1,6 +1,7 @@
 import { Suspense } from 'react';
 
 import { ShopPageContent } from '../../components/products/ShopPageContent';
+import HeroCarousel from '../../components/HeroCarousel';
 
 function ProductsPageSkeleton() {
   return (
@@ -29,7 +30,10 @@ function ProductsPageSkeleton() {
 export default function Page() {
   return (
     <Suspense fallback={<ProductsPageSkeleton />}>
-      <ShopPageContent />
+      <div className="space-y-8">
+        <HeroCarousel pageKey="products" />
+        <ShopPageContent />
+      </div>
     </Suspense>
   );
 }

@@ -18,6 +18,7 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import HeroUploadDialog from './admin/HeroUploadDialog';
 import HeroBanner from './HeroBanner';
+import HeroCarousel from './HeroCarousel';
 
 
 
@@ -141,11 +142,20 @@ function DefaultHomePage({ sectionFilter }: { sectionFilter?: string | null }) {
               return null;
             }
             
+            // Extract primary image from images array (handles both string arrays and object arrays)
+            let primaryImage = 'https://placehold.co/600x400.png?text=No+Image';
+            if (Array.isArray(p.images) && p.images.length > 0) {
+              const firstImage = p.images[0];
+              // Handle both string URLs and {url: string} objects
+              primaryImage = typeof firstImage === 'string' ? firstImage : firstImage?.url || primaryImage;
+            }
+            
             return {
               ...p,
               name: p.title, // Backwards compatibility - always set name to title
               title: p.title, // Ensure title is set
-              image: Array.isArray(p.images) && p.images.length > 0 ? p.images[0] : 'https://placehold.co/600x400.png?text=No+Image',
+              image: primaryImage,
+              images: p.images, // Keep original images array for ProductCard
               category: p.product_type || 'General',
               popularity: p.popularity || 0,
               rating: p.rating || 0,
@@ -395,14 +405,14 @@ function DefaultHomePage({ sectionFilter }: { sectionFilter?: string | null }) {
 
       {/* Welcome Banner */}
       {!sectionFilter && !loading && (
-        <section className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white py-20">
+        <section className="bg-gradient-to-r from-blue-600 to-indigo-700 py-16 text-white sm:py-20">
           <div className="container mx-auto px-4 text-center">
-            <h1 className="text-5xl font-bold mb-6">{heroData.title}</h1>
-            <p className="text-xl mb-8 max-w-2xl mx-auto opacity-90">{heroData.subtitle}</p>
+            <h1 className="mb-6 text-3xl font-bold leading-tight sm:text-4xl lg:text-5xl">{heroData.title}</h1>
+            <p className="mx-auto mb-6 max-w-2xl text-base opacity-90 sm:mb-8 sm:text-lg lg:text-xl">{heroData.subtitle}</p>
             {heroData.description && (
-              <p className="text-lg mb-8 max-w-xl mx-auto opacity-80">{heroData.description}</p>
+              <p className="mx-auto mb-8 max-w-xl text-sm opacity-80 sm:text-base lg:text-lg">{heroData.description}</p>
             )}
-            <div className="flex gap-4 justify-center flex-wrap">
+            <div className="flex flex-wrap justify-center gap-3 sm:gap-4">
               {heroData.buttons && Array.isArray(heroData.buttons) &&
                 heroData.buttons.map((button: HeroButton, idx: number) => (
                   <Link key={idx} href={button.link} passHref>
@@ -424,6 +434,11 @@ function DefaultHomePage({ sectionFilter }: { sectionFilter?: string | null }) {
       )}
       {/* Promo Hero Banner */}
       {!sectionFilter && !loading && <HeroBanner />}
+
+  {/* Additional Hero Carousel */}
+      {!sectionFilter && !loading && (
+        <HeroCarousel pageKey="homepage" className="pt-4 sm:pt-6" />
+      )}
 
       {/* Error Banner - Only show for actual errors, not missing content */}
       {error && !error.includes('Page not found') && (

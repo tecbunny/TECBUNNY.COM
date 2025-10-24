@@ -1,16 +1,29 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 import { toast } from 'react-hot-toast';
 
 import { logger } from '../../../lib/logger';
 
+type OTPChannel = 'email' | 'sms' | 'whatsapp';
+type ChannelOption = {
+  id: OTPChannel;
+  label: string;
+  helper: string;
+  enabled: boolean;
+};
+
 export function OTPVerificationContent() {
   const [otp, setOtp] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [email, setEmail] = useState('');
+  const [mobile, setMobile] = useState('');
+  const [otpId, setOtpId] = useState<string | null>(null);
+  const [channel, setChannel] = useState<OTPChannel>('email');
+  const [channelOptions, setChannelOptions] = useState<ChannelOption[]>([]);
+  const [fallbackAvailable, setFallbackAvailable] = useState(false);
   const [resendCount, setResendCount] = useState(0);
   const [lastResendTime, setLastResendTime] = useState(0);
   const [isResending, setIsResending] = useState(false);
@@ -19,38 +32,123 @@ export function OTPVerificationContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
+  const channelDisplayName = useMemo(() => {
+    return {
+      email: 'Email',
+      sms: 'OTP on Call',
+      whatsapp: 'WhatsApp'
+    } as const;
+  }, []);
+
+  const verificationPrompt = (targetChannel?: OTPChannel | null) => {
+    switch (targetChannel) {
+      case 'sms':
+        return 'Answer the automated call to hear your code.';
+      case 'whatsapp':
+        return 'Enter the code we sent via WhatsApp.';
+      default:
+        return 'Enter the code we emailed to you.';
+    }
+  };
+
   useEffect(() => {
-    // Get email from URL parameters or localStorage
-    const urlEmail = searchParams.get('email');
-    
-    if (urlEmail) {
-      setEmail(urlEmail);
-    } else {
-      // Fallback to localStorage
-      const storedData = localStorage.getItem('signup_session');
-      if (storedData) {
-        try {
-          const { email: storedEmail } = JSON.parse(storedData);
-          if (storedEmail) {
-            setEmail(storedEmail);
-          }
-        } catch (error) {
-          logger.error('Error parsing stored signup data:', { error });
-        }
-      } else {
-        logger.error('No signup session found');
-        toast.error('No signup session found. Please start signup process again.');
-        router.push('/');
+    const storedDataRaw = typeof window !== 'undefined' ? localStorage.getItem('signup_session') : null;
+    let storedData: any = null;
+    if (storedDataRaw) {
+      try {
+        storedData = JSON.parse(storedDataRaw);
+      } catch (error) {
+        logger.error('Error parsing stored signup data:', { error });
       }
     }
 
-    // Update cooldown timer
+    const urlEmail = searchParams.get('email') || '';
+    const urlOtpId = searchParams.get('otpId') || '';
+    const urlChannel = searchParams.get('channel') || '';
+    const urlMobile = searchParams.get('mobile') || '';
+
+    logger.debug('OTP screen bootstrap', {
+      urlEmail,
+      urlOtpId,
+      urlChannel,
+      urlMobile,
+      storedData
+    });
+
+    const resolvedEmail = urlEmail || storedData?.email || '';
+    const resolvedMobile = urlMobile || storedData?.mobile || '';
+    const sanitizedMobile = resolvedMobile.replace(/\D/g, '');
+    const hasMobile = sanitizedMobile.length >= 10;
+
+    if (!resolvedEmail && !hasMobile) {
+      logger.error('No signup session found');
+      toast.error('No signup session found. Please start signup process again.');
+      router.push('/');
+      return;
+    }
+
+    setEmail(resolvedEmail);
+    setMobile(sanitizedMobile);
+    setFallbackAvailable(Boolean(storedData?.fallbackAvailable));
+
+    const preferredChannel = ((): OTPChannel => {
+      const candidate = (urlChannel || storedData?.channel) as OTPChannel | undefined;
+      if (candidate) {
+        if (candidate === 'sms' || candidate === 'whatsapp') {
+          return hasMobile ? candidate : 'email';
+        }
+        if (candidate === 'email') return resolvedEmail ? 'email' : hasMobile ? 'sms' : 'email';
+      }
+      if (hasMobile) {
+        return 'sms';
+      }
+      return 'email';
+    })();
+
+    const candidateOtpId = [urlOtpId, storedData?.otpId]
+      .map(value => (typeof value === 'string' ? value.trim() : ''))
+      .find(value => value && value.toLowerCase() !== 'undefined' && value.toLowerCase() !== 'null') || null;
+
+    if (!candidateOtpId) {
+      logger.warn('No otpId available on OTP screen init', {
+        urlOtpId,
+        storedOtpId: storedData?.otpId
+      });
+    }
+
+    setChannel(preferredChannel);
+    setOtpId(candidateOtpId);
+
+    const options: ChannelOption[] = [
+      {
+        id: 'email',
+        label: 'Email',
+        helper: resolvedEmail ? `Send to ${resolvedEmail}` : 'Email delivery unavailable',
+        enabled: Boolean(resolvedEmail)
+      },
+      {
+        id: 'sms',
+        label: 'OTP on Call',
+        helper: hasMobile ? `Receive a call at +${sanitizedMobile}` : 'Add a mobile number to enable OTP on Call',
+        enabled: hasMobile
+      },
+      {
+        id: 'whatsapp',
+        label: 'WhatsApp',
+        helper: hasMobile ? `Send WhatsApp message to +${sanitizedMobile}` : 'Add a mobile number to enable WhatsApp',
+        enabled: hasMobile
+      }
+    ];
+
+    setChannelOptions(options);
+  }, [router, searchParams]);
+
+  useEffect(() => {
     const updateCooldown = () => {
       if (lastResendTime > 0) {
         const elapsed = Date.now() - lastResendTime;
-        const remaining = Math.max(0, 60000 - elapsed); // 60 second cooldown
+        const remaining = Math.max(0, 60000 - elapsed);
         setResendCooldown(Math.ceil(remaining / 1000));
-        
         if (remaining <= 0) {
           setLastResendTime(0);
         }
@@ -59,9 +157,8 @@ export function OTPVerificationContent() {
 
     updateCooldown();
     const interval = setInterval(updateCooldown, 1000);
-
     return () => clearInterval(interval);
-  }, [searchParams, router, lastResendTime]);
+  }, [lastResendTime]);
 
   // Debug button state
   useEffect(() => {
@@ -74,6 +171,19 @@ export function OTPVerificationContent() {
       otp
     });
   }, [isLoading, otp, verified]);
+
+  const handleChannelSelection = (nextChannel: OTPChannel) => {
+    if (verified) return;
+    if (nextChannel === channel) return;
+    const option = channelOptions.find(opt => opt.id === nextChannel);
+    if (!option || !option.enabled) {
+      toast.error('This verification method is not available.');
+      return;
+    }
+    setChannel(nextChannel);
+    setOtp('');
+    toast(`Switched to ${channelDisplayName[nextChannel]} verification. Use Resend to get a new code.`);
+  };
 
   const handleVerifyOTP = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -100,26 +210,33 @@ export function OTPVerificationContent() {
       return;
     }
 
+    if (!otpId) {
+      logger.warn('Missing otpId in verify attempt');
+      toast.error('Verification reference expired. Please request a new code.');
+      return;
+    }
+
     logger.info('All validations passed, proceeding with OTP verification');
     setIsLoading(true);
 
     try {
       // Step 1: Verify OTP
-    // include mobile from local signup session if available so SMS flows can be verified
     const stored = localStorage.getItem('signup_session');
     let storedMobile: string | undefined = undefined;
     if (stored) {
       try { storedMobile = JSON.parse(stored).mobile; } catch {}
     }
 
-    const headers: any = { 'Content-Type': 'application/json' };
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     // Always bypass CAPTCHA for OTP verification
     headers['x-bypass-captcha'] = '1';
 
     const requestBody = {
       email,
-      mobile: storedMobile,
+      mobile: storedMobile || mobile || undefined,
       otp,
+      otpId,
+      channel,
       type: 'signup'
     };
 
@@ -176,6 +293,9 @@ export function OTPVerificationContent() {
 
       // OTP verified successfully
       logger.info('OTP verified successfully', { verifyResult });
+      if (verifyResult?.otpId) {
+        setOtpId(verifyResult.otpId);
+      }
 
       // Show verified state in UI and feedback
       setVerified(true);
@@ -274,8 +394,21 @@ export function OTPVerificationContent() {
   };
 
   const handleResendOTP = async () => {
+    logger.debug('Resend requested', { email, otpId, channel, resendCount, resendCooldown });
+
     if (!email) {
       toast.error('Email not found. Please restart the signup process.');
+      return;
+    }
+
+    if (!otpId) {
+      toast.error('Verification reference missing. Please restart signup.');
+      return;
+    }
+
+    const selectedChannel = channelOptions.find(option => option.id === channel);
+    if (!selectedChannel || !selectedChannel.enabled) {
+      toast.error('Selected channel is unavailable. Please choose a different option.');
       return;
     }
 
@@ -285,26 +418,19 @@ export function OTPVerificationContent() {
       return;
     }
 
-    // include mobile from local signup session when available (supports SMS flows)
-    const stored = localStorage.getItem('signup_session');
-    let storedMobile: string | undefined = undefined;
-    if (stored) {
-      try { storedMobile = JSON.parse(stored).mobile; } catch {}
-    }
-
     setIsResending(true);
 
-    try {
-    const headers: any = { 'Content-Type': 'application/json' };
+  try {
+  logger.debug('Resend request payload', { otpId, channel });
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     headers['x-bypass-captcha'] = '1';
 
     const response = await fetch('/api/auth/resend-verification', {
         method: 'POST',
         headers,
         body: JSON.stringify({
-          email,
-      mobile: storedMobile,
-      type: 'signup',
+          otpId,
+      channel,
         }),
       });
 
@@ -313,8 +439,33 @@ export function OTPVerificationContent() {
       if (response.ok) {
         setResendCount(prev => prev + 1);
         setLastResendTime(Date.now());
-        toast.success(result.message || 'New verification code sent!');
         setOtp(''); // Clear current OTP input
+
+        const resolvedChannel = (result?.channel && ['email', 'sms', 'whatsapp'].includes(result.channel))
+          ? (result.channel as OTPChannel)
+          : channel;
+
+        if (resolvedChannel !== channel) {
+          setChannel(resolvedChannel);
+        }
+
+        if (result?.otpId) {
+          setOtpId(result.otpId);
+        }
+
+        toast.success(
+          result?.message
+            ? `${result.message}`
+            : `New verification code sent via ${channelDisplayName[resolvedChannel]}.`
+        );
+
+        if (Array.isArray(result?.availableFallbacks)) {
+          setFallbackAvailable(result.availableFallbacks.length > 0);
+          setChannelOptions(current => current.map(option => ({
+            ...option,
+            enabled: option.enabled || result.availableFallbacks.includes(option.id)
+          })));
+        }
       } else {
         throw new Error(result.error || 'Failed to resend verification code');
       }
@@ -340,14 +491,43 @@ export function OTPVerificationContent() {
         )}
         <div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Verify Your Email
+            Verify Your Account
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
-            We've sent a 4-digit code to
-            <span className="font-medium text-gray-900 block">{email}</span>
+            {verificationPrompt(channel)}
+            {channel === 'email' && email && (
+              <span className="font-medium text-gray-900 block">{email}</span>
+            )}
+            {channel !== 'email' && mobile && (
+              <span className="font-medium text-gray-900 block">+{mobile}</span>
+            )}
           </p>
+          {fallbackAvailable && (
+            <p className="mt-1 text-center text-xs text-gray-500">
+              Having trouble? Try a different verification method below.
+            </p>
+          )}
         </div>
         <form className="mt-8 space-y-6" onSubmit={handleVerifyOTP}>
+          <div className="space-y-2">
+            <span className="text-sm font-medium text-gray-700">Verification method</span>
+            <div className="grid gap-2">
+              {channelOptions.map(option => (
+                <button
+                  key={option.id}
+                  type="button"
+                  disabled={!option.enabled || verified}
+                  onClick={() => handleChannelSelection(option.id)}
+                  className={`flex w-full flex-col rounded-lg border p-3 text-left transition ${
+                    channel === option.id ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 bg-white'
+                  } ${!option.enabled ? 'opacity-60 cursor-not-allowed' : 'hover:border-blue-300 hover:bg-blue-50'}`}
+                >
+                  <span className="text-sm font-medium">{option.label}</span>
+                  <span className="text-xs text-gray-500">{option.helper}</span>
+                </button>
+              ))}
+            </div>
+          </div>
           <div>
             <label htmlFor="otp" className="block text-sm font-medium text-gray-700 mb-2">
               Verification Code
@@ -409,12 +589,12 @@ export function OTPVerificationContent() {
               ) : resendCooldown > 0 ? (
                 `Wait ${resendCooldown}s to resend`
               ) : (
-                `Didn't receive the code? Resend (${resendCount}/5)`
+                `Resend via ${channelDisplayName[channel]} (${resendCount}/3)`
               )}
             </button>
             {resendCount > 0 && resendCooldown === 0 && (
               <div className="text-xs text-gray-500 mt-1">
-                {resendCount}/5 resend attempts used
+                {resendCount}/3 resend attempts used
               </div>
             )}
           </div>

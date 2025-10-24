@@ -1,26 +1,29 @@
 'use client';
 
-import Link from 'next/link';
-
-import {
-  Wrench,
-  Shield,
-  Truck,
-  HeadphonesIcon,
-  RefreshCw,
-  Award,
-  ArrowRight,
-} from 'lucide-react';
-
+import { useState } from 'react';
 import type { ComponentType } from 'react';
 
-import type { LucideProps } from 'lucide-react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
+import type { LucideProps } from 'lucide-react';
+import {
+  Award,
+  HeadphonesIcon,
+  RefreshCw,
+  Shield,
+  ShoppingCart,
+  Truck,
+  Wrench,
+} from 'lucide-react';
+
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
+import { useCart } from '../lib/hooks';
+import type { Product, Service } from '../lib/types';
 
-import type { Service } from '../lib/types';
+import HeroCarousel from './HeroCarousel';
 
 
 const iconMap: Record<string, ComponentType<LucideProps>> = {
@@ -37,8 +40,57 @@ export interface ServicesPageProps {
 }
 
 export default function ServicesPage({ services }: ServicesPageProps) {
+  const router = useRouter();
+  const { addToCart } = useCart();
+  const [busyServiceId, setBusyServiceId] = useState<string | null>(null);
+
+  const buildServiceProduct = (service: Service): Product => {
+    const title = service.title || 'TecBunny Service';
+    const parsedPrice = typeof service.price === 'number'
+      ? service.price
+      : Number(service.price ?? 0);
+    const price = Number.isFinite(parsedPrice) ? parsedPrice : 0;
+    const product: Product = {
+      id: `service-${service.id}`,
+      title,
+      name: title,
+      description: service.description || 'TecBunny expert service request.',
+      price,
+      mrp: price,
+      offer_price: price,
+      discount_percentage: 0,
+      category: service.category || 'Services',
+      image: '/brand.png',
+      images: ['/brand.png'],
+      product_type: 'service',
+      tags: ['service', service.category || 'Services'],
+      status: 'active',
+      brand: 'TecBunny Services',
+      popularity: 0,
+      rating: 0,
+      reviewCount: 0,
+      created_at: service.created_at || new Date().toISOString(),
+      updated_at: service.updated_at || undefined,
+      gstRate: price > 0 ? 18 : 0,
+      product_url: '/services',
+      additional_images: [],
+    };
+
+    return product;
+  };
+
+  const handleRaiseRequest = (service: Service) => {
+    if (busyServiceId === service.id) return;
+    setBusyServiceId(service.id);
+    const product = buildServiceProduct(service);
+    addToCart(product);
+    router.push('/checkout?source=services');
+  };
+
   return (
-    <div className="container mx-auto px-4 py-8">
+    <>
+      <HeroCarousel pageKey="services" />
+      <div className="container mx-auto px-4 py-8">
       {/* Header */}
       <div className="text-center mb-12">
         <h1 className="text-4xl font-bold text-primary mb-4">Our Services</h1>
@@ -85,10 +137,14 @@ export default function ServicesPage({ services }: ServicesPageProps) {
                     </li>
                   ))}
                 </ul>
-                <Button variant="outline" className="w-full" asChild>
-                  <Link href="/contact">
-                    Learn More <ArrowRight className="ml-2 h-4 w-4" />
-                  </Link>
+                <Button
+                  variant="default"
+                  className="w-full"
+                  disabled={busyServiceId === service.id}
+                  onClick={() => handleRaiseRequest(service)}
+                >
+                  <ShoppingCart className="mr-2 h-4 w-4" />
+                  Raise Request
                 </Button>
               </CardContent>
             </Card>
@@ -108,6 +164,7 @@ export default function ServicesPage({ services }: ServicesPageProps) {
           </Link>
         </Button>
       </div>
-    </div>
+      </div>
+    </>
   );
 }

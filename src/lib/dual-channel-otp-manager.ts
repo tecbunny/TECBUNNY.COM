@@ -32,6 +32,19 @@ export interface OTPDeliveryResult {
   retryAvailable?: boolean;
 }
 
+type StoredOTPRecord = {
+  id: string;
+  email: string | null;
+  phone: string | null;
+  otp: string | null;
+  otp_code: string | null;
+  type: string;
+  channel: string | null;
+  used: boolean;
+  expires_at: string;
+  created_at: string;
+};
+
 export interface UserCommunicationPreferences {
   id: string;
   userId: string;
@@ -378,52 +391,84 @@ export class DualChannelOTPManager {
 
     try {
       // Build query based on available information
+      const nowIso = new Date().toISOString();
       let query = this.supabase
         .from('otp_codes')
         .select('*')
-        .eq('otp', otp)
         .eq('type', purpose)
         .eq('used', false)
-        .gt('expires_at', new Date().toISOString());
+        .gt('expires_at', nowIso);
 
-      // Add identifier filter based on channel or auto-detect
-      if (channel === 'email' || (!channel && identifier.includes('@'))) {
-        query = query.eq('email', identifier);
-      } else if (channel === 'sms' || (!channel && /^\+?[\d\s-()]+$/.test(identifier))) {
-        query = query.eq('phone', identifier);
+      const normalizedIdentifier = identifier.trim();
+
+      if (channel === 'email' || (!channel && normalizedIdentifier.includes('@'))) {
+        query = query.eq('email', normalizedIdentifier.toLowerCase());
+      } else if (channel === 'sms' || (!channel && /^\+?[\d\s-()]+$/.test(normalizedIdentifier))) {
+        const candidates = new Set<string>();
+        if (normalizedIdentifier) candidates.add(normalizedIdentifier);
+        const digitsOnly = normalizedIdentifier.replace(/[^\d]/g, '');
+        if (digitsOnly) candidates.add(digitsOnly);
+        const lowered = normalizedIdentifier.toLowerCase();
+        if (lowered && lowered !== normalizedIdentifier) candidates.add(lowered);
+
+        const orFilters = Array.from(candidates)
+          .map(value => {
+            const safe = value.replace(/[,]/g, '');
+            return [`phone.eq.${safe}`, `email.eq.${safe}`];
+          })
+          .flat()
+          .join(',');
+
+        if (orFilters.length > 0) {
+          query = query.or(orFilters);
+        }
       } else {
-        // Try both if channel not specified and identifier ambiguous
-        query = query.or(`email.eq.${identifier},phone.eq.${identifier}`);
+        query = query.or(`email.eq.${normalizedIdentifier},phone.eq.${normalizedIdentifier}`);
       }
 
-      const { data, error } = await query.single();
+      const { data, error } = await query
+        .order('created_at', { ascending: false })
+        .limit(5);
 
-      if (error || !data) {
-        logger.info('OTP verification failed: not found or expired', { 
-          identifier, 
+      const records = (data as StoredOTPRecord[] | null) || [];
+
+      if (error || records.length === 0) {
+        logger.info('OTP verification failed: not found or expired', {
+          identifier,
           purpose,
-          channel 
+          channel
         });
         return { valid: false, expired: true };
       }
 
-      // Mark as used - force type casting to avoid Supabase type issues
-      const otpId = (data as any)[0]?.id;
+      const matchingRecord = records.find(row => row.otp === otp || row.otp_code === otp);
+
+      if (!matchingRecord) {
+        logger.info('OTP verification failed: value mismatch', {
+          identifier,
+          purpose,
+          channel,
+          sampleRecord: records[0]?.id
+        });
+        return { valid: false };
+      }
+
+      const otpId = matchingRecord.id;
       if (otpId) {
         const { error: updateError } = await (this.supabase! as any)
           .from('otp_codes')
           .update({ used: true })
           .eq('id', otpId);
-        
+
         if (updateError) {
           logger.error('Failed to mark OTP as used:', updateError);
         }
       }
 
-      logger.info('OTP verified successfully', { 
-        identifier, 
+      logger.info('OTP verified successfully', {
+        identifier,
         purpose,
-        channel: (data as any).channel 
+        channel: (matchingRecord as any).channel
       });
 
       return { valid: true };

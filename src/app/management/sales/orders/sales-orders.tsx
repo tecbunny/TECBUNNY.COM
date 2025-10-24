@@ -49,6 +49,7 @@ export default function PickupOrdersPage() {
         case 'Payment Confirmed': return 'default';
         case 'Confirmed': return 'default';
         case 'Processing': return 'default';
+  case 'Ready for Pickup': return 'default';
         case 'Ready to Ship': return 'default';
         case 'Shipped': return 'secondary';
         case 'Delivered': return 'outline';

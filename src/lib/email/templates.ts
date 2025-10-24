@@ -919,6 +919,64 @@ export function generateEmailTemplate(templateType: string, data: EmailTemplateD
         text: `New order #${data.orderId} received. Total: ₹${data.orderTotal?.toFixed(2) || '0.00'}`
       };
 
+    case 'order_approved_admin':
+      return {
+        subject: `Order #${data.orderId} Approved`,
+        html: `
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Order Approved</title>
+            ${EMAIL_STYLES}
+          </head>
+          <body>
+            <div class="container">
+              <div class="header">
+                <h1>Order Approved</h1>
+              </div>
+              <div class="content">
+                <p>Order <strong>#${data.orderId}</strong> has been approved and is now confirmed.</p>
+                <div class="order-summary">
+                  <div class="order-item">
+                    <span>Status</span>
+                    <span><strong>Confirmed</strong></span>
+                  </div>
+                  ${data.userName ? `
+                    <div class="order-item">
+                      <span>Customer</span>
+                      <span>${data.userName}</span>
+                    </div>
+                  ` : ''}
+                  ${typeof data.orderTotal === 'number' ? `
+                    <div class="order-item">
+                      <span>Total Value</span>
+                      <span>₹${data.orderTotal.toFixed(2)}</span>
+                    </div>
+                  ` : ''}
+                  ${data.orderType ? `
+                    <div class="order-item">
+                      <span>Order Type</span>
+                      <span>${data.orderType}</span>
+                    </div>
+                  ` : ''}
+                </div>
+                <a href="${companyData.websiteUrl}/orders/${data.orderId}" class="button">View Order</a>
+                <p class="mt-4">This message confirms that the order has passed the approval step and is ready for the next action.</p>
+              </div>
+              <div class="footer">
+                <p>${companyData.companyName} | ${companyData.companyEmail} | ${companyData.companyPhone}</p>
+                <p>${companyData.companyAddress}</p>
+              </div>
+            </div>
+          </body>
+          </html>
+        `,
+  text: `Order #${data.orderId} approved and confirmed.
+${data.userName ? `Customer: ${data.userName}\n` : ''}${typeof data.orderTotal === 'number' ? `Total: ₹${data.orderTotal.toFixed(2)}\n` : ''}${data.orderType ? `Type: ${data.orderType}\n` : ''}`
+      };
+
     case 'order_notification_sales_pickup':
       return {
         subject: `Pickup Order #${data.orderId} - Action Needed`,

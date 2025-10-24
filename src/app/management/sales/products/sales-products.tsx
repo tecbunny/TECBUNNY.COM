@@ -10,6 +10,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 
 import { useRouter } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 
 import {
   Card,
@@ -51,6 +52,8 @@ export default function ProductManagementPage() {
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const refresh = searchParams.get('refresh') || '';
   const [isClient, setIsClient] = React.useState(false);
   const supabase = createClient();
 
@@ -67,7 +70,7 @@ export default function ProductManagementPage() {
   React.useEffect(() => {
     setIsClient(true);
     fetchProducts();
-  }, [fetchProducts]);
+  }, [fetchProducts, refresh]);
 
   const handleExport = async () => {
     try {

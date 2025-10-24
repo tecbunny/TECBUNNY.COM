@@ -92,15 +92,24 @@ export async function POST(request: NextRequest) {
 
     // Create profile record explicitly
     try {
+      const profilePayload: Record<string, any> = {
+        id: userData.user.id,
+        email: userData.user.email,
+        name,
+        full_name: name,
+        role: 'customer',
+        is_active: true,
+        updated_at: new Date().toISOString()
+      };
+
+      if (mobile) {
+        profilePayload.mobile = mobile;
+        profilePayload.phone = mobile;
+      }
+
       const { error: profileError } = await supabaseAdmin
         .from('profiles')
-        .insert({
-          id: userData.user.id,
-          email: userData.user.email,
-          full_name: name,
-          role: 'customer',
-          ...(mobile && { phone: mobile })
-        });
+        .upsert(profilePayload, { onConflict: 'id' });
 
       if (profileError && !profileError.message.includes('duplicate key')) {
         logger.error('complete_signup.profile_create_failed', { error: profileError, userId: userData.user.id });

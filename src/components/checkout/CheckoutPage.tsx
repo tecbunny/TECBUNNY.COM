@@ -16,13 +16,23 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Textarea } from '../../components/ui/textarea';
 import { Separator } from '../../components/ui/separator';
 import { RadioGroup, RadioGroupItem } from '../../components/ui/radio-group';
-import type { OrderType } from '../../lib/types';
+import { LoginDialog } from '../../components/auth/LoginDialog';
+import type { OrderStatus, OrderType } from '../../lib/types';
+
+const PICKUP_STORES = [
+  {
+    id: 'tecbunny-store-parcem',
+    name: 'TecBunny Store Parcem',
+    address: 'TecBunny Store, Chawdewada, Parcem, Pernem, Goa'
+  }
+] as const;
 
 export default function CheckoutPage() {
   const { cartItems, cartCount } = useCart();
   const { createOrder, isProcessingOrder } = useOrder();
   const { getEnabledPaymentMethods, loading: paymentLoading } = usePaymentMethods();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
+  const pickupStores = PICKUP_STORES;
   
   const [customerInfo, setCustomerInfo] = useState({
     name: '',
@@ -36,8 +46,15 @@ export default function CheckoutPage() {
   });
   
   const [orderType, setOrderType] = useState<OrderType>('Delivery');
+  const [selectedPickupStoreId, setSelectedPickupStoreId] = useState<string>('tecbunny-store-parcem');
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>('');
   const [orderError, setOrderError] = useState<string>('');
+  const selectedPickupStore = pickupStores.find(store => store.id === selectedPickupStoreId) || pickupStores[0];
+
+  const serviceOnlyCart = React.useMemo(() => {
+    if (!cartItems.length) return false;
+    return cartItems.every(item => item.product_type === 'service' || item.id.startsWith('service-'));
+  }, [cartItems]);
 
   // Pre-fill user information when user data is available
   useEffect(() => {
@@ -69,6 +86,18 @@ export default function CheckoutPage() {
       setOrderError('');
     }
   }, [selectedPaymentMethod, orderError]);
+
+  useEffect(() => {
+    if (orderType === 'Pickup' && !selectedPickupStore && PICKUP_STORES.length > 0) {
+      setSelectedPickupStoreId(PICKUP_STORES[0].id);
+    }
+  }, [orderType, selectedPickupStore]);
+
+  useEffect(() => {
+    if (serviceOnlyCart && orderType !== 'Delivery') {
+      setOrderType('Delivery');
+    }
+  }, [serviceOnlyCart, orderType]);
 
   const handleInputChange = (field: string, value: string) => {
     setCustomerInfo(prev => ({
@@ -105,6 +134,11 @@ export default function CheckoutPage() {
   const handlePlaceOrder = async () => {
     try {
       setOrderError('');
+
+      if (!user) {
+        setOrderError('Please log in to place an order.');
+        return;
+      }
       
       if (!customerInfo.name || !customerInfo.email || !customerInfo.phone) {
         setOrderError('Please fill in all required fields (Name, Email, Phone)');
@@ -116,10 +150,18 @@ export default function CheckoutPage() {
         return;
       }
 
+      if (serviceOnlyCart && orderType === 'Pickup') {
+        setOrderError('Service requests cannot be scheduled for store pickup. Please choose delivery.');
+        setOrderType('Delivery');
+        return;
+      }
+
       if (!selectedPaymentMethod) {
         setOrderError('Please select a payment method');
         return;
       }
+
+  const pickupAddress = selectedPickupStore ? selectedPickupStore.address : '';
 
       // Convert cart items to order items format
       const orderItems = cartItems.map(item => ({
@@ -132,16 +174,31 @@ export default function CheckoutPage() {
         serialNumbers: item.serialNumbers || []
       }));
 
+      const paymentMethod = selectedPaymentMethod.toLowerCase();
+      const initialStatus: OrderStatus = paymentMethod === 'upi' ? 'Awaiting Payment' : 'Pending';
+      const initialPaymentStatus = (() => {
+        if (paymentMethod === 'upi') {
+          return 'Payment Confirmation Pending';
+        }
+        if (paymentMethod === 'cod') {
+          return 'Payment Due on Delivery';
+        }
+        return 'Awaiting Payment';
+      })();
+
       const orderData = {
         customer_name: customerInfo.name,
         customer_email: customerInfo.email,
         customer_phone: customerInfo.phone,
-        type: orderType,
+        type: serviceOnlyCart ? 'Delivery' : orderType,
         delivery_address: orderType === 'Delivery' ? 
           `${customerInfo.address}, ${customerInfo.city}, ${customerInfo.state} - ${customerInfo.pincode}` : 
-          undefined,
+          pickupAddress || undefined,
+        pickup_store: orderType === 'Pickup' && !serviceOnlyCart ? pickupAddress : undefined,
         notes: customerInfo.notes,
-        payment_method: selectedPaymentMethod,
+        status: initialStatus,
+        payment_method: paymentMethod,
+        payment_status: initialPaymentStatus,
         subtotal,
         gst_amount: gstAmount,
         total,
@@ -199,8 +256,13 @@ export default function CheckoutPage() {
     }
   };
 
-  // Redirect to login if user is not authenticated - BUT ALLOW GUEST CHECKOUT
-  // Remove this check to allow guest checkout, authentication happens inside createOrder
+  if (authLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-50">
+        <div className="text-gray-600">Checking your account...</div>
+      </div>
+    );
+  }
 
   // Show empty cart message if no items
   if (cartItems.length === 0) {
@@ -216,6 +278,56 @@ export default function CheckoutPage() {
           >
             Continue Shopping
           </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-gray-50 py-12">
+        <div className="mx-auto max-w-3xl px-4">
+          <Card className="shadow-lg">
+            <CardHeader>
+              <CardTitle className="text-2xl font-bold text-gray-900">Login Required</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-gray-600">
+                Please sign in to place your order. Items in your cart will be waiting for you after login.
+              </p>
+              {cartCount > 0 && (
+                <p className="text-sm text-gray-500">
+                  You currently have {cartCount} {cartCount === 1 ? 'item' : 'items'} in your cart.
+                </p>
+              )}
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <LoginDialog>
+                  <Button size="lg" className="w-full sm:w-auto">
+                    Login to Continue
+                  </Button>
+                </LoginDialog>
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="w-full sm:w-auto"
+                  onClick={() => {
+                    window.location.href = '/auth/signup';
+                  }}
+                >
+                  Create Account
+                </Button>
+              </div>
+              <Button
+                variant="ghost"
+                className="w-full sm:w-auto"
+                onClick={() => {
+                  window.location.href = '/';
+                }}
+              >
+                Continue Shopping
+              </Button>
+            </CardContent>
+          </Card>
         </div>
       </div>
     );
@@ -286,15 +398,26 @@ export default function CheckoutPage() {
               <CardContent className="space-y-4">
                 <div>
                   <Label htmlFor="orderType">Order Type</Label>
-                  <Select value={orderType} onValueChange={(value: OrderType) => setOrderType(value)}>
+                  <Select
+                    value={orderType}
+                    onValueChange={(value: OrderType) => setOrderType(value)}
+                    disabled={serviceOnlyCart}
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Select order type" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="Delivery">Home Delivery</SelectItem>
-                      <SelectItem value="Pickup">Store Pickup</SelectItem>
+                      {!serviceOnlyCart && (
+                        <SelectItem value="Pickup">Store Pickup</SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
+                  {serviceOnlyCart && (
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      Store pickup is unavailable for service requests. Our team will contact you after scheduling.
+                    </p>
+                  )}
                 </div>
 
                 {orderType === 'Delivery' && (
@@ -342,6 +465,34 @@ export default function CheckoutPage() {
                       </div>
                     </div>
                   </>
+                )}
+
+                {orderType === 'Pickup' && (
+                  <div className="space-y-3">
+                    <div>
+                      <Label htmlFor="pickupStore">Pickup Store</Label>
+                      <Select
+                        value={selectedPickupStoreId}
+                        onValueChange={(value) => setSelectedPickupStoreId(value)}
+                      >
+                        <SelectTrigger id="pickupStore">
+                          <SelectValue placeholder="Select pickup store" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {pickupStores.map((store) => (
+                            <SelectItem key={store.id} value={store.id}>
+                              {store.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="rounded-md border border-dashed border-gray-300 bg-gray-50 p-3 text-sm text-gray-700">
+                      <p className="font-medium">Pickup Address</p>
+                      <p>{selectedPickupStore?.address || PICKUP_STORES[0].address}</p>
+                      <p className="mt-2 text-xs text-gray-500">Bring a valid ID and your order confirmation email when collecting your order.</p>
+                    </div>
+                  </div>
                 )}
 
                 <div>

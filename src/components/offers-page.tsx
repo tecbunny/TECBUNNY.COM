@@ -11,6 +11,8 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { useToast } from '../hooks/use-toast';
 
+import HeroCarousel from './HeroCarousel';
+
 interface Offer {
   id: string;
   title: string;
@@ -36,6 +38,8 @@ export default function OffersPage() {
   const [email, setEmail] = useState('');
   const [subscribing, setSubscribing] = useState(false);
   const { toast } = useToast();
+
+  const heroSection = <HeroCarousel pageKey="offers" />;
 
   useEffect(() => {
     fetchOffers();
@@ -136,17 +140,22 @@ export default function OffersPage() {
 
   if (loading) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p>Loading amazing offers...</p>
+      <>
+        {heroSection}
+        <div className="container mx-auto px-4 py-8">
+          <div className="text-center">
+            <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-b-2 border-primary"></div>
+            <p>Loading amazing offers...</p>
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <>
+      {heroSection}
+      <div className="container mx-auto px-4 py-8">
       <div className="text-center mb-12">
         <h1 className="text-4xl font-bold mb-4">Special Offers</h1>
         <p className="text-lg text-muted-foreground">
@@ -295,6 +304,7 @@ export default function OffersPage() {
           </div>
         </CardContent>
       </Card>
-    </div>
+      </div>
+    </>
   );
 }

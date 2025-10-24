@@ -48,6 +48,22 @@ export interface Product {
   barcode?: string;             // Product barcode/SKU
 }
 
+export type HeroCarouselPageKey = 'homepage' | 'services' | 'offers' | 'products';
+
+export interface HeroCarouselItem {
+  id: string;
+  title: string;
+  subtitle?: string;
+  description?: string;
+  imageUrl: string;
+  ctaText?: string;
+  ctaLink?: string;
+  isActive?: boolean;
+  displayOrder?: number;
+}
+
+export type HeroCarouselContent = Record<HeroCarouselPageKey, HeroCarouselItem[]>;
+
 export interface CartItem extends Product {
   quantity: number;
   serialNumbers?: string[];
@@ -68,6 +84,9 @@ export interface User {
   emailVerified?: boolean;
   // Raw timestamp from auth provider when email was confirmed (if available)
   email_confirmed_at?: string | null;
+  // First-login WhatsApp onboarding handshake tracking
+  first_login_whatsapp_sent?: boolean;
+  first_login_notified_at?: string | null;
     address?: string;
     gstin?: string;
     customerCategory?: CustomerCategory;
@@ -134,10 +153,16 @@ export interface Order {
   gst_amount: number;
   total: number;
   total_amount?: number; // For backward compatibility
+  tax_amount?: number;
+  discount_amount?: number;
+  shipping_amount?: number;
   type: OrderType;
   delivery_address?: string;
+  pickup_store?: string;
   notes?: string;
   payment_method?: string;
+  payment_status?: string;
+  payment_reference?: string;
   items: OrderItem[];
   processed_by?: string; // Sales or Manager ID
   payment_confirmed_at?: string;
@@ -159,6 +184,25 @@ export interface Order {
   // Related data
   sales_agent?: SalesAgent;
   status_history?: OrderStatusHistory[];
+}
+
+export type ContactMessageStatus = 'New' | 'In Progress' | 'Resolved';
+
+export interface ContactMessage {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  subject?: string;
+  message: string;
+  status: ContactMessageStatus;
+  created_at: string;
+  updated_at?: string;
+  resolved_at?: string | null;
+  handled_by?: string | null;
+  handled_by_name?: string | null;
+  admin_notes?: string | null;
+  ip_address?: string | null;
 }
 
 export interface ActivityLog {

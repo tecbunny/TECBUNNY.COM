@@ -87,10 +87,16 @@ export class EnhancedCommissionService {
         };
       }
 
-      // Parse order items
-      const orderItems: OrderItem[] = typeof order.items === 'string' 
-        ? JSON.parse(order.items) 
+      // Parse order items (supports legacy JSON string or structured payload)
+      const rawItems = typeof order.items === 'string'
+        ? JSON.parse(order.items || '[]')
         : order.items;
+
+      const orderItems: OrderItem[] = Array.isArray(rawItems)
+        ? rawItems as OrderItem[]
+        : Array.isArray(rawItems?.cart_items)
+          ? rawItems.cart_items as OrderItem[]
+          : [];
 
       // Get agent commission rules
       const agentRules = await this.getAgentCommissionRules(agentId);

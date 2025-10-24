@@ -1,33 +1,29 @@
-
 'use client';
 
 import * as React from 'react';
 import Link from 'next/link';
 
+import { LoginDialog } from '../../components/auth/LoginDialog';
+import { Button } from '../../components/ui/button';
+import { Input } from '../../components/ui/input';
+import { ScrollArea } from '../../components/ui/scroll-area';
+import { Separator } from '../../components/ui/separator';
 import {
   Sheet,
   SheetContent,
+  SheetFooter,
   SheetHeader,
   SheetTitle,
   SheetTrigger,
-  SheetFooter,
 } from '../../components/ui/sheet';
-import { Button } from '../../components/ui/button';
-import { ScrollArea } from '../../components/ui/scroll-area';
-import { Separator } from '../../components/ui/separator';
-import { useCart } from '../../lib/hooks';
-import { useAuth } from '../../lib/hooks';
-
-import type { Coupon, CartItem, Discount } from '../../lib/types';
-import { Input } from '../../components/ui/input';
 import { useToast } from '../../hooks/use-toast';
-
-import { createClient } from '../../lib/supabase/client';
-
 import { logger } from '../../lib/logger';
+import { useAuth, useCart } from '../../lib/hooks';
+import { createClient } from '../../lib/supabase/client';
+import type { CartItem, Coupon, Discount } from '../../lib/types';
 
-import { CouponDialog } from './CouponDialog';
 import { CartItemCard } from './CartItemCard';
+import { CouponDialog } from './CouponDialog';
 
 interface CartSheetProps {
     children: React.ReactNode;
@@ -270,10 +266,26 @@ export function CartSheet({ children }: CartSheetProps) {
                         <span>₹{finalTotal < 0 ? '0.00' : finalTotal.toFixed(2)}</span>
                     </div>
                     <p className="text-xs text-muted-foreground">Shipping calculated at checkout.</p>
-                    <Button className="w-full" size="lg" asChild>
+                    {!user && (
+                      <div className="rounded-md bg-blue-50 px-3 py-2 text-xs text-blue-700">
+                        Login is required to complete checkout.
+                      </div>
+                    )}
+                    {user ? (
+                      <Button className="w-full" size="lg" asChild>
                         <Link href="/checkout" onClick={() => setOpen(false)}>
                             Proceed to Checkout
                         </Link>
+                      </Button>
+                    ) : (
+                      <LoginDialog>
+                        <Button className="w-full" size="lg" onClick={() => setOpen(false)}>
+                          Login to Checkout
+                        </Button>
+                      </LoginDialog>
+                    )}
+                    <Button variant="secondary" className="w-full" asChild>
+                      <Link href="/cart" onClick={() => setOpen(false)}>View Full Cart</Link>
                     </Button>
                     <Button variant="outline" className="w-full" asChild>
                       <Link href="/" onClick={() => setOpen(false)}>Continue Shopping</Link>

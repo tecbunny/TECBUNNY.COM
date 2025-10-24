@@ -1,8 +1,7 @@
 import { NextRequest } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-import { otpManager } from '../../../../lib/otp-manager';
-import { dualChannelOTPManager } from '../../../../lib/dual-channel-otp-manager';
+import MultiChannelOTPManager from '../../../../lib/multi-channel-otp-manager';
 import { logger } from '../../../../lib/logger';
 import { apiError, apiSuccess } from '../../../../lib/errors';
 
@@ -11,6 +10,8 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 'serv
 const isSupabaseConfigured = Boolean(
   process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY
 );
+
+const otpService = new MultiChannelOTPManager();
 
 function getSupabaseAdmin() {
   return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
@@ -33,84 +34,98 @@ export async function POST(request: NextRequest) {
     }
 
     const supabaseAdmin = getSupabaseAdmin();
-    let body: any; try { body = await request.json(); } catch { return apiError('VALIDATION_ERROR', { overrideMessage: 'Invalid JSON body', correlationId }); }
-  const { email, mobile, otp, type = 'signup' } = body || {};
+    let body: any;
+    try {
+      body = await request.json();
+    } catch {
+      return apiError('VALIDATION_ERROR', { overrideMessage: 'Invalid JSON body', correlationId });
+    }
+  const { email, mobile, otp, type = 'signup', otpId: rawOtpId } = body || {};
+  // Normalize identifiers
+  const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : undefined;
+  const normalizedMobile = mobile ? String(mobile).replace(/\D/g, '') : undefined;
 
   // Debug: log incoming body in development for easier tracing
   if (process.env.NODE_ENV !== 'production') {
-    logger.debug('verify_otp_incoming', { correlationId, body });
+    logger.debug('verify_otp_incoming', { correlationId, body, normalizedEmail, normalizedMobile });
   }
-    const clientIP = request.headers.get('x-forwarded-for') || 'unknown';
+  if (typeof otp !== 'string' || otp.length !== 4 || !/^\d{4}$/.test(otp)) {
+    return apiError('VALIDATION_ERROR', { overrideMessage: 'Valid 4-digit OTP is required', correlationId });
+  }
+  if (!['signup', 'recovery'].includes(type)) {
+    return apiError('VALIDATION_ERROR', { overrideMessage: 'Invalid OTP type. Must be either "signup" or "recovery"', correlationId });
+  }
+  const purpose = type === 'signup' ? 'registration' : 'password_reset';
 
-    // Validate that either email or mobile is provided
-    if ((!email || !email.includes('@')) && (!mobile || mobile.length < 10)) {
-      return apiError('VALIDATION_ERROR', { overrideMessage: 'Valid email address or mobile number is required', correlationId });
-    }
-    if (typeof otp !== 'string' || otp.length !== 4 || !/^\d{4}$/.test(otp)) {
-      return apiError('VALIDATION_ERROR', { overrideMessage: 'Valid 4-digit OTP is required', correlationId });
-    }
-    if (!['signup', 'recovery'].includes(type)) {
-      return apiError('VALIDATION_ERROR', { overrideMessage: 'Invalid OTP type. Must be either "signup" or "recovery"', correlationId });
-    }
+  let otpId: string | undefined = typeof rawOtpId === 'string' ? rawOtpId.trim() : undefined;
 
-    // Ad-hoc rate limiting based on recent attempts (kept as-is but with logging)
-    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-  // Prefer mobile if provided (SMS flows rely on phone session ids)
-  // But for signup OTPs, they are typically sent to email, so prefer email for signup type
-  const identifier = type === 'signup' ? (email || mobile) : (mobile || email);
+  if (!otpId) {
+    const lookupColumn = normalizedEmail ? 'email' : normalizedMobile ? 'phone' : null;
+    const lookupValue = normalizedEmail ?? normalizedMobile;
 
-  // Debug: log which identifier we will use
-  logger.debug('verify_otp_identifier', { correlationId, identifier, type, email, mobile });
-    try {
-      const { data: recentAttempts, error: attemptError } = await supabaseAdmin
-        .from('otp_codes')
-        .select('id')
-        .eq('email', identifier)
-        .eq('type', type)
-        .gte('created_at', fiveMinutesAgo);
-      if (!attemptError && recentAttempts && recentAttempts.length > 5) {
-        logger.warn('verify_otp_rate_limited', { correlationId, identifier, clientIP, attempts: recentAttempts.length });
-        return apiError('RATE_LIMITED', { overrideMessage: 'Too many verification attempts. Please wait 5 minutes before trying again.', correlationId });
-      }
-    } catch (rateLimitError) {
-      logger.warn('verify_otp_rate_check_failed', { correlationId, error: (rateLimitError as Error).message });
+    if (!lookupColumn || !lookupValue) {
+      return apiError('VALIDATION_ERROR', { overrideMessage: 'OTP reference not found. Please request a new code.', correlationId });
     }
 
-    // CAPTCHA completely disabled for OTP verification to ensure smooth user experience
-    logger.debug('verify_otp_captcha_bypassed', { correlationId, identifier, clientIP, reason: 'OTP verification does not require CAPTCHA' });
+    const { data: latestOtp, error: lookupError } = await supabaseAdmin
+      .from('otp_verifications')
+      .select('id')
+      .eq(lookupColumn, lookupValue)
+      .eq('purpose', purpose)
+      .eq('verified', false)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-    // Debug log the OTP verification attempt
-    logger.debug('verify_otp_attempt', { correlationId, identifier, otp, type });
-
-    // Try dual-channel verification first (new system)
-    let result: any;
-    try {
-      const dualChannelResult = await dualChannelOTPManager.verifyOTP(identifier, otp, type);
-      if (dualChannelResult.valid) {
-        result = { success: true, message: 'OTP verified successfully' };
-        logger.info('verify_otp_dual_channel_success', { correlationId, identifier, type });
-      } else {
-        // Fallback to legacy verification
-        result = await otpManager.verifyOTP(identifier, otp, type);
-        logger.debug('verify_otp_fallback_to_legacy', { correlationId, identifier, result });
-      }
-    } catch (dualChannelError) {
-      logger.warn('verify_otp_dual_channel_error', { 
-        correlationId, 
-        error: dualChannelError instanceof Error ? dualChannelError.message : 'Unknown error' 
-      });
-      // Fallback to legacy verification
-      result = await otpManager.verifyOTP(identifier, otp, type);
-    }
-    
-    logger.debug('verify_otp_result', { correlationId, identifier, success: result.success, message: result.message });
-    
-    if (!result.success) {
-      logger.warn('verify_otp_failed', { correlationId, reason: result.message });
-      return apiError('VALIDATION_ERROR', { overrideMessage: result.message, correlationId });
+    if (lookupError) {
+      logger.warn('verify_otp.lookup_failed', { correlationId, error: lookupError.message, column: lookupColumn, value: lookupValue });
     }
 
-    logger.info('verify_otp_success', { correlationId, type, identifier });
+    otpId = latestOtp?.id;
+  }
+
+  if (!otpId) {
+    return apiError('VALIDATION_ERROR', { overrideMessage: 'OTP reference is missing or expired. Please request a new code.', correlationId });
+  }
+
+  const { data: otpRecord, error: otpRecordError } = await supabaseAdmin
+    .from('otp_verifications')
+    .select('*')
+    .eq('id', otpId)
+    .maybeSingle();
+
+  if (otpRecordError || !otpRecord) {
+    logger.warn('verify_otp.record_not_found', { correlationId, otpId, error: otpRecordError?.message });
+    return apiError('VALIDATION_ERROR', { overrideMessage: 'Invalid or expired OTP reference. Please request a new code.', correlationId });
+  }
+
+  if (otpRecord.purpose !== purpose) {
+    logger.warn('verify_otp.purpose_mismatch', { correlationId, otpId, expected: purpose, actual: otpRecord.purpose });
+    return apiError('VALIDATION_ERROR', { overrideMessage: 'OTP type mismatch. Please request a new code.', correlationId });
+  }
+
+  logger.debug('verify_otp_attempt', {
+    correlationId,
+    otpId,
+    channel: otpRecord.channel,
+    purpose,
+    email: otpRecord.email,
+    phone: otpRecord.phone,
+  });
+
+  const verificationResult = await otpService.verifyOTP({
+    otpId,
+    code: otp,
+    channel: otpRecord.channel || undefined,
+  });
+
+  if (!verificationResult.success) {
+    logger.warn('verify_otp_failed', { correlationId, otpId, message: verificationResult.message });
+    return apiError('VALIDATION_ERROR', { overrideMessage: verificationResult.message || 'Invalid or expired OTP', correlationId });
+  }
+
+  const identifier = otpRecord.email || otpRecord.phone;
+  logger.info('verify_otp_success', { correlationId, otpId, type, identifier });
 
     if (type === 'signup') {
       // For signup, just return success - account creation will be handled by complete-signup endpoint
@@ -118,6 +133,7 @@ export async function POST(request: NextRequest) {
         message: 'OTP verified successfully! Creating your account...',
         type: 'signup',
         identifier,
+        otpId,
         requiresAccountCreation: true
       }, correlationId);
     }
@@ -127,8 +143,8 @@ export async function POST(request: NextRequest) {
       try {
         const { data: allUsers } = await supabaseAdmin.auth.admin.listUsers();
         const user = allUsers.users.find(u => 
-          (email && u.email === email) || 
-          (mobile && u.user_metadata?.mobile === mobile)
+          (otpRecord.email && u.email === otpRecord.email) || 
+          (otpRecord.phone && u.user_metadata?.mobile === otpRecord.phone)
         );
         
         if (user) {
@@ -142,6 +158,7 @@ export async function POST(request: NextRequest) {
               message: 'Account verified successfully!',
               type,
               identifier,
+              otpId,
               requiresSignIn: false
             }, correlationId);
           }
@@ -157,9 +174,10 @@ export async function POST(request: NextRequest) {
 
     // Default success response
     return apiSuccess({
-      message: result.message || 'Verification successful',
+      message: verificationResult.message || 'Verification successful',
       type,
       identifier,
+      otpId,
       requiresSignIn: type === 'signup'
     }, correlationId);
 

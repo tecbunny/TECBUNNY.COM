@@ -70,16 +70,30 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // Refresh session if it exists - this prevents automatic logouts
+  // Refresh session if it exists and enforce role-based access for management routes
   try {
     const { data: { session } } = await supabase.auth.getSession()
-    
     if (session) {
-      // Try to refresh the session to prevent token expiry
+      // Refresh session token
       await supabase.auth.refreshSession()
+      // Enforce admin roles for management routes
+      if (request.nextUrl.pathname.startsWith('/management')) {
+        // Fetch user role from profiles table
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', session.user.id)
+          .single()
+        const allowedRoles = ['admin', 'superadmin', 'manager']
+        if (!profile || !allowedRoles.includes(profile.role)) {
+          const url = request.nextUrl.clone()
+          url.pathname = '/'  // redirect to homepage if not authorized
+          return NextResponse.redirect(url)
+        }
+      }
     }
   } catch (error) {
-    console.error('Middleware session refresh error:', error)
+    console.error('Middleware session error:', error)
   }
 
   // Add cache-control headers to prevent caching of auth-related pages
@@ -100,11 +114,11 @@ export async function middleware(request: NextRequest) {
   const csp = [
     "default-src 'self'",
     "img-src 'self' data: https:",
-    // Allow Cloudflare Turnstile scripts
-    "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com",
+    // Allow Cloudflare Turnstile scripts and analytics beacon
+    "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com https://*.cloudflareinsights.com",
     "style-src 'self' 'unsafe-inline'",
-    // Allow API calls to any https and Turnstile verification
-    "connect-src 'self' https:",
+    // Allow API calls to any https, Turnstile verification, and analytics beacon uploads
+    "connect-src 'self' https: https://*.cloudflareinsights.com",
     "font-src 'self' data:",
     // Permit Turnstile widget iframe
     "frame-src 'self' https://challenges.cloudflare.com",

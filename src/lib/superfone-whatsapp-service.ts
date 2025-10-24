@@ -321,6 +321,33 @@ export async function sendWelcomeTemplate(
 }
 
 /**
+ * Send account creation confirmation template after first login
+ */
+export async function sendAccountCreationConfirmationTemplate(
+  phoneNumber: string,
+  customerName?: string
+): Promise<WhatsAppResponse> {
+  return sendWhatsAppTemplate({
+    templateName: 'account_creation_confirmation_3',
+    language: 'en',
+    recipient: phoneNumber,
+    components: customerName
+      ? [
+          {
+            type: 'text',
+            parameters: [
+              {
+                type: 'text',
+                text: customerName
+              }
+            ]
+          }
+        ]
+      : undefined
+  });
+}
+
+/**
  * Send order confirmation template
  */
 export async function sendOrderConfirmationTemplate(
@@ -343,6 +370,36 @@ export async function sendOrderConfirmationTemplate(
           {
             type: 'text',
             text: orderId
+          }
+        ]
+      }
+    ]
+  });
+}
+
+/**
+ * Send in-store order confirmation template
+ */
+export async function sendInstoreOrderConfirmationTemplate(
+  phoneNumber: string,
+  customerName: string,
+  orderType: string
+): Promise<WhatsAppResponse> {
+  return sendWhatsAppTemplate({
+    templateName: 'instore_order_conf',
+    language: 'en',
+    recipient: phoneNumber,
+    components: [
+      {
+        type: 'text',
+        parameters: [
+          {
+            type: 'text',
+            text: customerName
+          },
+          {
+            type: 'text',
+            text: orderType
           }
         ]
       }
@@ -413,6 +470,36 @@ export async function sendPaymentReminderTemplate(
 }
 
 /**
+ * Send payment success template
+ */
+export async function sendPaymentSuccessTemplate(
+  phoneNumber: string,
+  amount: string,
+  purpose: string
+): Promise<WhatsAppResponse> {
+  return sendWhatsAppTemplate({
+    templateName: 'payment_success',
+    language: 'en',
+    recipient: phoneNumber,
+    components: [
+      {
+        type: 'text',
+        parameters: [
+          {
+            type: 'text',
+            text: amount
+          },
+          {
+            type: 'text',
+            text: purpose
+          }
+        ]
+      }
+    ]
+  });
+}
+
+/**
  * Send shipping notification template
  */
 export async function sendShippingNotificationTemplate(
@@ -463,9 +550,12 @@ const superfoneWhatsappService = {
   sendWhatsAppTemplate,
   sendWhatsAppText,
   sendWelcomeTemplate,
+  sendAccountCreationConfirmationTemplate,
   sendOrderConfirmationTemplate,
+  sendInstoreOrderConfirmationTemplate,
   sendDynamicUrlTemplate,
   sendPaymentReminderTemplate,
+  sendPaymentSuccessTemplate,
   sendShippingNotificationTemplate,
   testWhatsAppConnection
 };

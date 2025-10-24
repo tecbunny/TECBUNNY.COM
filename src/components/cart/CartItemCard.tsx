@@ -16,6 +16,40 @@ interface CartItemCardProps {
 
 export function CartItemCard({ item }: CartItemCardProps) {
   const { updateQuantity, removeFromCart } = useCart();
+  const candidateImages: string[] = [];
+  if (typeof item.image === 'string') {
+    const trimmed = item.image.trim();
+    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          for (const img of parsed) {
+            if (typeof img === 'string') {
+              candidateImages.push(img);
+            }
+          }
+        }
+      } catch {
+        candidateImages.push(trimmed);
+      }
+    } else {
+      candidateImages.push(trimmed);
+    }
+  }
+  if (Array.isArray(item.images)) {
+    for (const img of item.images) {
+      if (typeof img === 'string') {
+        candidateImages.push(img);
+      }
+    }
+  }
+
+  const cleanSrc = candidateImages.find((src) => typeof src === 'string' && src.trim().length > 0);
+  const imageSrc = cleanSrc ? cleanSrc.trim() : '/brand.png';
+  const fallbackProductUrl = item.id?.startsWith('service-') ? '/services' : `/products/${item.id}`;
+  const productHref = typeof item.product_url === 'string' && item.product_url.length > 0
+    ? item.product_url
+    : fallbackProductUrl;
 
   const handleQuantityChange = (newQuantity: number) => {
     updateQuantity(item.id, newQuantity);
@@ -25,15 +59,16 @@ export function CartItemCard({ item }: CartItemCardProps) {
     <div className="flex items-start gap-4">
       <div className="relative h-20 w-20 flex-shrink-0 overflow-hidden rounded-md border">
         <Image
-          src={item.image}
+          src={imageSrc}
           alt={item.name}
           fill
           sizes="80px"
+          unoptimized
           className="object-cover"
         />
       </div>
       <div className="flex-1">
-        <Link href={`/products/${item.id}`} className="font-medium hover:text-primary">
+        <Link href={productHref} className="font-medium hover:text-primary">
           {item.name}
         </Link>
         <p className="text-sm text-muted-foreground">₹{item.price.toFixed(2)}</p>

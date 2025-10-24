@@ -30,7 +30,132 @@ function normalizePage(row: any | null) {
   if (!row) return null;
   const page_key = row.page_key ?? row.key ?? null;
   const status = row.status ?? (row.is_active === true ? 'published' : row.is_active === false ? 'draft' : undefined);
-  return { ...row, page_key, status };
+  let content = row.content ?? row.data ?? null;
+  if (typeof content === 'string') {
+    try {
+      content = JSON.parse(content);
+    } catch (_error) {
+      // leave as string
+    }
+  }
+  return { ...row, page_key, status, content };
+}
+
+function parseContentValue(content: unknown) {
+  if (typeof content === 'string') {
+    try {
+      return JSON.parse(content);
+    } catch (_error) {
+      throw new Error('Invalid JSON content payload');
+    }
+  }
+  return content;
+}
+
+interface ContentPayload {
+  pageKey: string;
+  title: string;
+  content: any;
+  metaDescription: string | null;
+  metaKeywords: string | null;
+  status: string;
+}
+
+function extractPayload(body: any): ContentPayload {
+  const pageKey = body?.pageKey || body?.page_key || body?.key;
+  const title = body?.title;
+  const metaDescription = body?.metaDescription ?? body?.meta_description ?? null;
+  const metaKeywords = body?.metaKeywords ?? body?.meta_keywords ?? null;
+  const status = body?.status || 'published';
+
+  if (!pageKey || !title || body?.content == null) {
+    throw new Error('Page key, title, and content are required');
+  }
+
+  const content = parseContentValue(body.content);
+
+  return { pageKey, title, content, metaDescription, metaKeywords, status };
+}
+
+async function upsertPageContent(supabase: any, payload: ContentPayload) {
+  const timestamp = new Date().toISOString();
+
+  const strategies: Array<{
+    data: Record<string, any>;
+    conflict: 'page_key' | 'key';
+    select: 'single' | 'maybeSingle';
+  }> = [
+    {
+      data: {
+        page_key: payload.pageKey,
+        title: payload.title,
+        content: payload.content,
+        meta_description: payload.metaDescription,
+        meta_keywords: payload.metaKeywords,
+        status: payload.status,
+        updated_at: timestamp
+      },
+      conflict: 'page_key',
+      select: 'single'
+    },
+    {
+      data: {
+        page_key: payload.pageKey,
+        title: payload.title,
+        content: payload.content,
+        status: payload.status,
+        updated_at: timestamp
+      },
+      conflict: 'page_key',
+      select: 'single'
+    },
+    {
+      data: {
+        key: payload.pageKey,
+        title: payload.title,
+        content: payload.content,
+        meta_description: payload.metaDescription,
+        meta_keywords: payload.metaKeywords,
+        updated_at: timestamp
+      },
+      conflict: 'key',
+      select: 'maybeSingle'
+    },
+    {
+      data: {
+        key: payload.pageKey,
+        title: payload.title,
+        content: payload.content,
+        updated_at: timestamp
+      },
+      conflict: 'key',
+      select: 'maybeSingle'
+    }
+  ];
+
+  let lastResult: any = null;
+
+  for (const strategy of strategies) {
+    const baseQuery = supabase
+      .from('page_content')
+      .upsert(strategy.data, { onConflict: strategy.conflict })
+      .select();
+
+    const result = strategy.select === 'single'
+      ? await baseQuery.single()
+      : await baseQuery.maybeSingle();
+    lastResult = result;
+
+    if (!result.error) {
+      return result;
+    }
+
+    if (!isUndefinedColumn(result.error)) {
+      return result;
+    }
+  }
+
+  return lastResult;
 }
 
 async function getPageByKey(pageKey: string, supabase: any) {
@@ -49,7 +174,7 @@ async function getPageByKey(pageKey: string, supabase: any) {
   ];
 
   for (const run of tries) {
-    const { data, error } = await run();
+  const { data, error } = await run();
     if (!error) return { data, error: null };
     if (isUndefinedColumn(error)) {
       continue;
@@ -91,67 +216,22 @@ export async function GET(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const supabase = getSupabaseClient();
-    const { page_key, key, title, content, meta_description, _seo, status, _is_active } = await request.json();
-    const pageKey = page_key || key;
-    
-    if (!pageKey || !title || !content) {
-      return NextResponse.json({ 
-        error: 'Page key, title, and content are required' 
-      }, { status: 400 });
+    const body = await request.json();
+    let payload: ContentPayload;
+    try {
+      payload = extractPayload(body);
+    } catch (err) {
+      return NextResponse.json({ error: (err as Error).message }, { status: 400 });
     }
 
-    // Update or insert page content (try modern schema first)
-    const payloadModern: any = {
-      page_key: pageKey,
-      title,
-      content: typeof content === 'string' ? JSON.parse(content) : content,
-      meta_description: meta_description || null,
-      meta_keywords: null,
-      status: status || 'published',
-      updated_at: new Date().toISOString()
-    };
-
-    let upsert = await supabase
-      .from('page_content')
-      .upsert(payloadModern, { onConflict: 'page_key' })
-      .select()
-      .single();
-
-    // Fallback to legacy schema if columns don’t exist
-    if (upsert.error && isUndefinedColumn(upsert.error)) {
-      // Legacy without status
-      const payloadLegacy: any = {
-        key: pageKey,
-        title,
-        content: typeof content === 'string' ? JSON.parse(content) : content,
-        meta_description: meta_description || null,
-        updated_at: new Date().toISOString()
-      };
-      upsert = await supabase
-        .from('page_content')
-        .upsert(payloadLegacy, { onConflict: 'key' })
-        .select()
-        .maybeSingle();
-
-      // If even that fails due to missing columns (e.g., meta_description), try a minimal payload
-      if (upsert.error && isUndefinedColumn(upsert.error)) {
-        const payloadMinimal: any = {
-          key: pageKey,
-          title,
-          content: typeof content === 'string' ? JSON.parse(content) : content,
-          updated_at: new Date().toISOString()
-        };
-        upsert = await supabase
-          .from('page_content')
-          .upsert(payloadMinimal, { onConflict: 'key' })
-          .select()
-          .maybeSingle();
-      }
-    }
+    const upsert = await upsertPageContent(supabase, payload);
 
     if (upsert.error) {
-      logger.error('page_content_update_failed', { error: upsert.error });
-      return NextResponse.json({ error: 'Failed to update page content' }, { status: 500 });
+      logger.error('page_content_update_failed', { error: upsert.error, payload });
+      return NextResponse.json({
+        error: upsert.error.message || 'Failed to update page content',
+        details: upsert.error
+      }, { status: 500 });
     }
 
     return NextResponse.json({
@@ -170,48 +250,136 @@ export async function PUT(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const supabase = getSupabaseClient();
-    const { action } = await request.json();
+    const body = await request.json();
 
-    if (action !== 'list_all') {
-      return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
-    }
+    if (body?.action === 'list_all') {
 
-    // Get all page contents, try modern order then legacy
-    let { data: pages, error } = await supabase
-      .from('page_content')
-      .select('*')
-      .order('page_key');
-
-    if (error && isUndefinedColumn(error)) {
-      const fallback = await supabase
+      // Get all page contents, try modern order then legacy
+      let { data: pages, error } = await supabase
         .from('page_content')
         .select('*')
-        .order('key');
-      pages = fallback.data || [];
-      error = fallback.error;
+        .order('page_key');
 
       if (error && isUndefinedColumn(error)) {
-        // Final fallback: no order
-        const noOrder = await supabase
+        const fallback = await supabase
           .from('page_content')
-          .select('*');
-        pages = noOrder.data || [];
-        error = noOrder.error;
+          .select('*')
+          .order('key');
+        pages = fallback.data || [];
+        error = fallback.error;
+
+        if (error && isUndefinedColumn(error)) {
+          // Final fallback: no order
+          const noOrder = await supabase
+            .from('page_content')
+            .select('*');
+          pages = noOrder.data || [];
+          error = noOrder.error;
+        }
       }
+
+      if (error) {
+        logger.error('page_content_list_failed', { error });
+        return NextResponse.json({ error: 'Failed to fetch page contents' }, { status: 500 });
+      }
+
+      return NextResponse.json({
+        success: true,
+        data: (pages || []).map(normalizePage)
+      });
     }
 
-    if (error) {
-      logger.error('page_content_list_failed', { error });
-      return NextResponse.json({ error: 'Failed to fetch page contents' }, { status: 500 });
+    let payload: ContentPayload;
+    try {
+      payload = extractPayload(body);
+    } catch (err) {
+      return NextResponse.json({ error: (err as Error).message }, { status: 400 });
+    }
+    const upsert = await upsertPageContent(supabase, payload);
+
+    if (upsert.error) {
+      logger.error('page_content_create_failed', { error: upsert.error, payload });
+      return NextResponse.json({
+        error: upsert.error.message || 'Failed to save page content',
+        details: upsert.error
+      }, { status: 500 });
     }
 
     return NextResponse.json({
       success: true,
-      data: (pages || []).map(normalizePage)
-    });
+      message: 'Page content saved successfully',
+      data: normalizePage(upsert.data)
+    }, { status: 201 });
 
   } catch (error) {
     logger.error('page_content_list_exception', { error });
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const supabase = getSupabaseClient();
+    const url = new URL(request.url);
+    let pageKey = url.searchParams.get('key') || url.searchParams.get('pageKey');
+
+    if (!pageKey) {
+      try {
+        const body = await request.json();
+        pageKey = body?.pageKey || body?.page_key || body?.key || null;
+      } catch (_error) {
+        // ignore body parse errors for DELETE without payload
+      }
+    }
+
+    if (!pageKey) {
+      return NextResponse.json({ error: 'Page key is required' }, { status: 400 });
+    }
+
+    const attempts: Array<'page_key' | 'key'> = ['page_key', 'key'];
+    let removed = false;
+    let lastError: any = null;
+
+    for (const column of attempts) {
+      try {
+        const { data, error } = await supabase
+          .from('page_content')
+          .delete()
+          .eq(column, pageKey)
+          .select()
+          .maybeSingle();
+
+        if (error) {
+          if (isUndefinedColumn(error)) {
+            continue;
+          }
+          lastError = error;
+          break;
+        }
+
+        if (data) {
+          removed = true;
+          break;
+        }
+      } catch (error) {
+        lastError = error;
+        break;
+      }
+    }
+
+    if (lastError) {
+      logger.error('page_content_delete_failed', { error: lastError, pageKey });
+      return NextResponse.json({ error: 'Failed to delete page content' }, { status: 500 });
+    }
+
+    if (!removed) {
+      return NextResponse.json({ error: 'Page content not found' }, { status: 404 });
+    }
+
+    return NextResponse.json({ success: true, message: 'Page content deleted successfully' });
+
+  } catch (error) {
+    logger.error('page_content_delete_exception', { error });
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

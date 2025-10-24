@@ -3,9 +3,10 @@
 
 import * as React from 'react';
 
-import { Users, Package, ShoppingCart, BarChart, TrendingUp, TrendingDown } from 'lucide-react';
+import { Users, Package, ShoppingCart, BarChart, TrendingUp, TrendingDown, RefreshCw } from 'lucide-react';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../../components/ui/card';
+import { Button } from '../../../components/ui/button';
 
 interface DashboardStats {
     totalUsers: number;
@@ -36,35 +37,41 @@ export default function AdminDashboard() {
     const [loading, setLoading] = React.useState(true);
     const [error, setError] = React.useState<string | null>(null);
 
-    React.useEffect(() => {
-        const fetchStats = async () => {
-            try {
-                setLoading(true);
-                setError(null);
-                
-                const response = await fetch('/api/admin/dashboard');
-                
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+    const fetchStats = React.useCallback(async () => {
+        try {
+            setLoading(true);
+            setError(null);
+            
+            // Add cache-busting parameter to force fresh data
+            const response = await fetch(`/api/admin/dashboard?t=${Date.now()}`, {
+                cache: 'no-store',
+                headers: {
+                    'Cache-Control': 'no-cache'
                 }
-                
-                const data = await response.json();
-                
-                if (data.success && data.stats) {
-                    setStats(data.stats);
-                } else {
-                    throw new Error(data.error || 'Failed to fetch dashboard data');
-                }
-            } catch (error) {
-                console.error('Error fetching dashboard stats:', error);
-                setError(error instanceof Error ? error.message : 'Failed to load dashboard');
-            } finally {
-                setLoading(false);
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
             }
-        };
-
-        fetchStats();
+            
+            const data = await response.json();
+            
+            if (data.success && data.stats) {
+                setStats(data.stats);
+            } else {
+                throw new Error(data.error || 'Failed to fetch dashboard data');
+            }
+        } catch (error) {
+            console.error('Error fetching dashboard stats:', error);
+            setError(error instanceof Error ? error.message : 'Failed to load dashboard');
+        } finally {
+            setLoading(false);
+        }
     }, []);
+
+    React.useEffect(() => {
+        fetchStats();
+    }, [fetchStats]);
 
     // Calculate growth indicators
     const orderGrowth = stats.lastMonthOrders > 0 
@@ -73,9 +80,20 @@ export default function AdminDashboard() {
     const isGrowthPositive = parseFloat(orderGrowth) >= 0;
     return (
         <div className="space-y-8">
-             <div>
-                <h1 className="text-3xl font-bold">Admin Dashboard</h1>
-                <p className="text-muted-foreground">A complete overview of your store's performance and operations.</p>
+             <div className="flex justify-between items-center">
+                <div>
+                    <h1 className="text-3xl font-bold">Admin Dashboard</h1>
+                    <p className="text-muted-foreground">A complete overview of your store's performance and operations.</p>
+                </div>
+                <Button 
+                    onClick={fetchStats} 
+                    disabled={loading}
+                    variant="outline"
+                    className="gap-2"
+                >
+                    <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                    Refresh
+                </Button>
             </div>
             
             {error && (

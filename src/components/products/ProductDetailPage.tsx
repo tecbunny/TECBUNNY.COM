@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import Image from 'next/image';
+// Use native img for detail page to avoid Next.js loader issues
+// import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Share2, Star, Truck, Shield, RefreshCw } from 'lucide-react';
 import DOMPurify from 'dompurify';
@@ -40,22 +41,29 @@ export function ProductDetailPage({ productId }: ProductDetailPageProps) {
     if (!product) return [];
     
     const images: string[] = [];
-    const normalizedArray: string[] = Array.isArray((product as any).images)
-      ? (product as any).images.map((img: any) => (typeof img === 'string' ? img : img?.url || ''))
-      : [];
-
-    // Prefer images[] if present, else fallback to top-level image
-    if (normalizedArray.length > 0) {
-      images.push(...normalizedArray.filter(Boolean));
-    } else if (product.image) {
+    
+    // Always start with the main image if it exists
+    if (product.image) {
       images.push(product.image);
     }
-
+    
+    // Add images from the images array if present
+    const normalizedArray: string[] = Array.isArray((product as any).images)
+      ? (product as any).images.map((img: any) => (typeof img === 'string' ? img : img?.url || '')).filter(Boolean)
+      : [];
+    images.push(...normalizedArray);
+    
     // Add additional_images if available
-    if (product.additional_images && Array.isArray(product.additional_images)) {
-      images.push(...product.additional_images);
+    if ((product as any).additional_images && Array.isArray((product as any).additional_images)) {
+      const additionalNormalized = (product as any).additional_images
+        .map((img: any) => (typeof img === 'string' ? img : img?.url || ''))
+        .filter(Boolean);
+      images.push(...additionalNormalized);
     }
-
+    
+    // Remove duplicates
+    const uniqueImages = [...new Set(images)];
+    
     // Helper to coerce any placeholder/SVG into a safe PNG URL
     const toPngPlaceholder = (size: string = '600x600') => `https://placehold.co/${size}/0066cc/ffffff.png?text=Product+Image`;
     const ensurePng = (url: string): string => {
@@ -82,7 +90,7 @@ export function ProductDetailPage({ productId }: ProductDetailPageProps) {
     };
 
     // Ensure at least one placeholder (use PNG to avoid Next/Image SVG block)
-    const finalized = images.length === 0 ? [toPngPlaceholder()] : images;
+    const finalized = uniqueImages.length === 0 ? [toPngPlaceholder()] : uniqueImages;
 
     // Sanitize all URLs to avoid SVGs
     return finalized.map(ensurePng);
@@ -116,6 +124,26 @@ export function ProductDetailPage({ productId }: ProductDetailPageProps) {
       if (error) {
         logger.error('Error fetching product:', { error });
       } else {
+        logger.info('Fetched product data:', { 
+          id: data.id,
+          image: data.image,
+          additional_images: data.additional_images,
+          additional_images_type: typeof data.additional_images,
+          images: data.images,
+          hasAdditionalImages: Array.isArray(data.additional_images),
+          additionalImagesLength: Array.isArray(data.additional_images) ? data.additional_images.length : 'not array'
+        });
+        
+        // Handle PostgreSQL array format if needed
+        if (data.additional_images && typeof data.additional_images === 'string') {
+          try {
+            data.additional_images = JSON.parse(data.additional_images);
+            logger.info('Parsed additional_images from string:', data.additional_images as any);
+          } catch (e) {
+            logger.warn('Failed to parse additional_images string:', { error: e });
+          }
+        }
+        
         setProduct(data);
       }
       setLoading(false);
@@ -182,14 +210,16 @@ export function ProductDetailPage({ productId }: ProductDetailPageProps) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
         {/* Product Images */}
         <div className="space-y-4">
-          <div className="aspect-square overflow-hidden rounded-xl bg-gradient-to-br from-blue-50 to-white shadow-harsh">
-            <Image
+          <div className="aspect-square overflow-hidden rounded-xl bg-gradient-to-br from-gray-50 to-gray-100 shadow-harsh flex items-center justify-center">
+            <img
               src={productImages[selectedImage]}
               alt={product.name}
-              width={600}
-              height={600}
-              className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
-              priority
+              className="w-full h-full object-contain p-8 transition-transform duration-300 hover:scale-105"
+              loading="lazy"
+              onError={(e) => {
+                const target = e.target as HTMLImageElement;
+                target.src = `https://placehold.co/600x600/e5e7eb/6b7280.png?text=${encodeURIComponent(product.name)}`;
+              }}
             />
           </div>
           
@@ -199,19 +229,22 @@ export function ProductDetailPage({ productId }: ProductDetailPageProps) {
               <button
                 key={index}
                 onClick={() => setSelectedImage(index)}
-                className={`aspect-square overflow-hidden rounded-lg transition-all duration-200 ${
+                className={`aspect-square overflow-hidden rounded-lg transition-all duration-200 bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center ${
                   selectedImage === index 
                     ? 'ring-2 ring-blue-500 ring-offset-2' 
                     : 'hover:opacity-75'
                 }`}
               >
-                <Image
-                  src={image}
-                  alt={`${product.name} view ${index + 1}`}
-                  width={150}
-                  height={150}
-                  className="w-full h-full object-cover"
-                />
+                  <img
+                    src={image}
+                    alt={`${product.name} view ${index + 1}`}
+                    className="w-full h-full object-contain p-2"
+                    loading="lazy"
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement;
+                      target.src = `https://placehold.co/150x150/e5e7eb/6b7280.png?text=View+${index + 1}`;
+                    }}
+                  />
               </button>
             ))}
           </div>

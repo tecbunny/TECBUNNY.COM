@@ -76,11 +76,28 @@ export async function POST(request: NextRequest) {
 
     // Create or update payment record in orders table (if you have payments tracking)
     // For now, we'll update the order status based on payment status
-    let newOrderStatus = order.status;
-    if (status === 'success') {
-      newOrderStatus = 'confirmed';
-    } else if (status === 'failed') {
-      newOrderStatus = 'payment_failed';
+    let newOrderStatus: string = order.status;
+    let newPaymentStatus: string | null = order.payment_status ?? null;
+
+    switch (status) {
+      case 'success':
+        newOrderStatus = 'Payment Confirmed';
+        newPaymentStatus = 'Payment Confirmed';
+        break;
+      case 'pending':
+        newOrderStatus = 'Awaiting Payment';
+        newPaymentStatus = 'Payment Confirmation Pending';
+        break;
+      case 'failed':
+        newOrderStatus = 'Awaiting Payment';
+        newPaymentStatus = 'Payment Failed';
+        break;
+      case 'refunded':
+        newPaymentStatus = 'Refund Initiated';
+        break;
+      default:
+        newPaymentStatus = status;
+        break;
     }
 
     // Update order status
@@ -88,6 +105,7 @@ export async function POST(request: NextRequest) {
       .from('orders')
       .update({ 
         status: newOrderStatus,
+        payment_status: newPaymentStatus,
         updated_at: new Date().toISOString()
       })
       .eq('id', order_id)
@@ -103,7 +121,7 @@ export async function POST(request: NextRequest) {
       order_id, 
       old_status: order.status, 
       new_status: newOrderStatus,
-      payment_status: status,
+      payment_status: newPaymentStatus,
       correlationId 
     });
 

@@ -3,12 +3,9 @@ import { createClient } from '@supabase/supabase-js';
 
 import type { User } from '@supabase/supabase-js';
 
-import { otpManager } from '../../../../lib/otp-manager';
 import { verifyCaptcha } from '../../../../lib/captcha/captcha-service';
-import { sendSms } from '../../../../lib/sms/twofactor';
-import improvedEmailService from '../../../../lib/improved-email-service';
-import { SuperfoneService } from '../../../../lib/superfone-service';
 import { logger } from '../../../../lib/logger';
+import MultiChannelOTPManager, { type OTPChannel } from '../../../../lib/multi-channel-otp-manager';
 
 // Rate limiting storage (in production, use Redis)
 const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
@@ -35,9 +32,11 @@ function isRateLimited(email: string): boolean {
   return false;
 }
 
+const otpService = new MultiChannelOTPManager();
+
 export async function POST(request: NextRequest) {
   try {
-  const { email, mobile, captchaToken } = await request.json();
+    const { email, mobile, captchaToken, channel: requestedChannel } = await request.json();
 
     if (!email && !mobile) {
       return NextResponse.json(
@@ -109,88 +108,38 @@ export async function POST(request: NextRequest) {
       }
       logger.info('forgot_password.profile_found', { identifier, userId: profile.id });
     }
+    const normalizedChannel: OTPChannel = requestedChannel && ['sms', 'email', 'whatsapp'].includes(requestedChannel)
+      ? requestedChannel
+      : (email ? 'email' : (mobile ? 'sms' : 'email'));
 
-  logger.info('forgot_password.sending_otp', { identifier, email, mobile });
-  // Generate 4-digit OTP for recovery
-  const otp = Math.floor(1000 + Math.random() * 9000).toString();
-  logger.info('forgot_password.otp_generated', { identifier, otp: `${otp.substring(0, 2)}**` });
-  
-  // Store OTP
-  const stored = await otpManager.storeOTP(identifier, otp, 'recovery');
-  if (!stored) {
-    logger.error('forgot_password.otp_store_failed', { identifier });
-    return NextResponse.json({ error: 'Failed to store OTP' }, { status: 500 });
-  }
-  logger.info('forgot_password.otp_stored', { identifier });
-  
-  const message = `Your TecBunny Store password reset code is: ${otp}`;
-  let successCount = 0;
-  const errors: Array<{ channel: string; error: unknown }> = [];
-  
-  // Send via SMS
-  if (mobile) {
-    try {
-      logger.info('forgot_password.attempting_sms', { mobile });
-      const smsResult = await sendSms({ to: mobile, message });
-      if (smsResult.success) {
-        successCount++;
-        logger.info('forgot_password.sms_sent', { mobile });
-      } else {
-        errors.push({ channel: 'SMS', error: smsResult.error });
-        logger.warn('forgot_password.sms_failed', { mobile, error: smsResult.error });
-      }
-    } catch (e) {
-      errors.push({ channel: 'SMS', error: e });
-      logger.error('forgot_password.sms_exception', { mobile, error: e });
+    logger.info('forgot_password.sending_otp', { identifier, preferredChannel: normalizedChannel });
+
+    const otpResult = await otpService.generateOTP({
+      email,
+      phone: mobile,
+      preferredChannel: normalizedChannel,
+      purpose: 'password_reset',
+    });
+
+    if (!otpResult.success || !otpResult.otpId) {
+      logger.error('forgot_password.otp_generation_failed', { identifier, message: otpResult.message });
+      return NextResponse.json({ error: otpResult.message || 'Failed to send OTP' }, { status: 500 });
     }
-  }
-  
-  // Send via WhatsApp using Superfone
-  if (mobile) {
-    try {
-      logger.info('forgot_password.attempting_whatsapp', { mobile });
-      const superfone = new SuperfoneService();
-      const waResult = await superfone.sendWhatsApp({ recipient: mobile, message, type: 'text' });
-      if (waResult.success) {
-        successCount++;
-        logger.info('forgot_password.whatsapp_sent', { mobile });
-      } else {
-        errors.push({ channel: 'WhatsApp', error: waResult.error });
-        logger.warn('forgot_password.whatsapp_failed', { mobile, error: waResult.error });
-      }
-    } catch (e) {
-      errors.push({ channel: 'WhatsApp', error: e });
-      logger.error('forgot_password.whatsapp_exception', { mobile, error: e });
-    }
-  }
-  
-  // Send via email
-  if (email) {
-    try {
-      logger.info('forgot_password.attempting_email', { email });
-      const emailResult = await improvedEmailService.sendOTPEmail(email, otp, 'recovery');
-      if (emailResult.success) {
-        successCount++;
-        logger.info('forgot_password.email_sent', { email });
-      } else {
-        errors.push({ channel: 'Email', error: emailResult.error });
-        logger.warn('forgot_password.email_failed', { email, error: emailResult.error });
-      }
-    } catch (e) {
-      errors.push({ channel: 'Email', error: e });
-      logger.error('forgot_password.email_exception', { email, error: e });
-    }
-  }
-  
-  logger.info('forgot_password.send_complete', { identifier, successCount, errorCount: errors.length, errors });
-  
-  // Always return success details including errors for debugging
-  const res = NextResponse.json({ 
-    success: true, 
-    message: `OTP sent successfully via ${successCount} channel(s)`,
-    successCount,
-    errors: errors.length > 0 ? errors : undefined
-  });
+
+    logger.info('forgot_password.otp_sent', {
+      identifier,
+      otpId: otpResult.otpId,
+      channel: otpResult.channel,
+      fallbackAvailable: otpResult.fallbackAvailable,
+    });
+
+    const res = NextResponse.json({
+      success: true,
+      message: otpResult.message || `OTP sent via ${otpResult.channel}`,
+      otpId: otpResult.otpId,
+      channel: otpResult.channel,
+      fallbackAvailable: otpResult.fallbackAvailable,
+    });
     try {
       const payload = Buffer.from(JSON.stringify({ identifier, type: 'recovery', exp: Date.now() + 15 * 60 * 1000 }), 'utf8').toString('base64');
       res.cookies.set('recovery_otp', payload, {
@@ -201,7 +150,6 @@ export async function POST(request: NextRequest) {
         path: '/',
       });
     } catch {}
-  logger.info('forgot_password.otp_sent', { identifier });
     return res;
 
   } catch (error) {

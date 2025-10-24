@@ -122,6 +122,13 @@ export async function uploadHeroBanner(file: File | Buffer): Promise<S3UploadRes
 }
 
 /**
+ * Upload product image to S3
+ */
+export async function uploadProductImage(file: File | Buffer): Promise<S3UploadResult> {
+  return uploadToS3(file, 'products', { publicAccess: true });
+}
+
+/**
  * Delete file from S3
  */
 export async function deleteFromS3(key: string): Promise<boolean> {

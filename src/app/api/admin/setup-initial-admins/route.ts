@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
         // Update existing user
         userId = existingProfile.id;
         await supabaseAdmin.auth.admin.updateUserById(userId, {
-          password: password,
+          password,
           email_confirm: true
         });
 
@@ -68,9 +68,9 @@ export async function POST(request: NextRequest) {
         await supabaseAdmin
           .from('profiles')
           .update({
-            name: name,
-            mobile: mobile,
-            role: role,
+            name,
+            mobile,
+            role,
             is_active: true,
             email_verified: true
           })
@@ -78,10 +78,10 @@ export async function POST(request: NextRequest) {
       } else {
         // Create new user
         const { data: created, error: createErr } = await supabaseAdmin.auth.admin.createUser({
-          email: email,
-          password: password,
+          email,
+          password,
           email_confirm: true,
-          user_metadata: { role: role, name: name }
+          user_metadata: { role, name }
         });
 
         if (createErr || !created.user) {
@@ -96,10 +96,10 @@ export async function POST(request: NextRequest) {
           .from('profiles')
           .upsert({
             id: userId,
-            email: email,
-            name: name,
-            mobile: mobile,
-            role: role,
+            email,
+            name,
+            mobile,
+            role,
             is_active: true,
             email_verified: true
           });
@@ -111,7 +111,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: 'Admin users setup completed',
-      results: results
+      results
     });
 
   } catch (e) {

@@ -45,11 +45,26 @@ import {
 } from '../components/ui/select';
 import { useToast } from '../hooks/use-toast';
 
+const SUBJECT_OPTIONS = ['general', 'support', 'sales', 'billing', 'partnership', 'feedback'] as const;
+const SUBJECT_LABELS: Record<(typeof SUBJECT_OPTIONS)[number], string> = {
+  general: 'General Inquiry',
+  support: 'Technical Support',
+  sales: 'Sales Question',
+  billing: 'Billing Issue',
+  partnership: 'Partnership',
+  feedback: 'Feedback',
+};
+
+const SUBJECT_SELECT_OPTIONS = SUBJECT_OPTIONS.map(value => ({
+  value,
+  label: SUBJECT_LABELS[value],
+}));
+
 const contactSchema = z.object({
   name: z.string().min(2, { message: 'Name must be at least 2 characters.' }),
   email: z.string().email({ message: 'Please enter a valid email address.' }),
   phone: z.string().min(10, { message: 'Please enter a valid phone number.' }),
-  subject: z.string().min(1, { message: 'Please select a subject.' }),
+  subject: z.enum(SUBJECT_OPTIONS, { errorMap: () => ({ message: 'Please select a subject.' }) }),
   message: z.string().min(10, { message: 'Message must be at least 10 characters.' }),
 });
 
@@ -131,24 +146,71 @@ export default function ContactPage() {
       name: '',
       email: '',
       phone: '',
-      subject: '',
+      subject: SUBJECT_OPTIONS[0],
       message: '',
     },
   });
 
-  const onSubmit = async () => {
+  const onSubmit = async (values: ContactFormValues) => {
     setIsSubmitting(true);
-    
-    // Simulate form submission
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    toast({
-      title: 'Message Sent!',
-      description: 'Thank you for contacting us. We\'ll get back to you within 24 hours.',
-    });
-    
-    form.reset();
-    setIsSubmitting(false);
+    try {
+      const normalizedSubject = SUBJECT_LABELS[values.subject] ?? values.subject;
+      const payload = {
+        name: values.name.trim(),
+        email: values.email.trim(),
+        phone: values.phone.trim(),
+        subject: normalizedSubject,
+        message: values.message.trim(),
+      };
+
+      const response = await fetch('/api/contact-messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        let errorMessage = 'We could not send your message. Please try again later.';
+        try {
+          const data = await response.json();
+          if (typeof data?.error === 'string' && data.error.length > 0) {
+            errorMessage = data.error;
+          }
+        } catch (parseError) {
+          logger.warn('contact_message_response_parse_failed', {
+            error: parseError instanceof Error ? parseError.message : String(parseError),
+          });
+        }
+        throw new Error(errorMessage);
+      }
+
+      toast({
+        title: 'Message sent!',
+        description: "Thank you for contacting us. We'll get back to you within 24 hours.",
+      });
+
+      form.reset({
+        name: '',
+        email: '',
+        phone: '',
+        subject: SUBJECT_OPTIONS[0],
+        message: '',
+      });
+    } catch (error) {
+      logger.error('contact_message_submit_failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+
+      toast({
+        variant: 'destructive',
+        title: 'Submission failed',
+        description: error instanceof Error ? error.message : 'We could not send your message. Please try again later.',
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -400,19 +462,18 @@ export default function ContactPage() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Subject</FormLabel>
-                          <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isSubmitting}>
+                          <Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting}>
                             <FormControl>
                               <SelectTrigger>
                                 <SelectValue placeholder="Select a subject" />
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="general">General Inquiry</SelectItem>
-                              <SelectItem value="support">Technical Support</SelectItem>
-                              <SelectItem value="sales">Sales Question</SelectItem>
-                              <SelectItem value="billing">Billing Issue</SelectItem>
-                              <SelectItem value="partnership">Partnership</SelectItem>
-                              <SelectItem value="feedback">Feedback</SelectItem>
+                              {SUBJECT_SELECT_OPTIONS.map(option => (
+                                <SelectItem key={option.value} value={option.value}>
+                                  {option.label}
+                                </SelectItem>
+                              ))}
                             </SelectContent>
                           </Select>
                           <FormMessage />

@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 
-import { createClient as createServerClient } from '../../../lib/supabase/server';
+import { createClient as createServerClient, createServiceClient } from '../../../lib/supabase/server';
 import { rateLimit } from '../../../lib/rate-limit';
 import { resolveSiteUrl } from '../../../lib/site-url';
 import { apiError, apiSuccess } from '../../../lib/errors';
@@ -11,13 +11,15 @@ import {
 } from '../../../lib/superfone-whatsapp-service';
 import { otpService } from '../../../lib/otp-service';
 import { enhancedCommissionService } from '../../../lib/enhanced-commission-service';
+import { emailHelpers } from '../../../lib/email';
 const RATE_LIMIT = 5; // 5 orders
 const RATE_WINDOW_MS = 60 * 1000; // per minute
 
 export async function POST(request: NextRequest) {
   try {
     const correlationId = request.headers.get('x-correlation-id') || null;
-    const supabase = await createServerClient();
+  const supabase = await createServerClient();
+  const serviceSupabase = createServiceClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       return apiError('UNAUTHORIZED', { correlationId, overrideMessage: 'Authentication required' });
@@ -39,16 +41,24 @@ export async function POST(request: NextRequest) {
     }
 
     // Calculate totals if not provided
-    const subtotal = orderData.subtotal || 0;
-    const gst_amount = orderData.gst_amount || (subtotal * 0.18);
-    const total = orderData.total || (subtotal + gst_amount);
+  const subtotal = orderData.subtotal || 0;
+  const gst_amount = orderData.gst_amount || (subtotal * 0.18);
+  const discount_amount = orderData.discount_amount || 0;
+  const shipping_amount = orderData.shipping_amount || 0;
+  const total = orderData.total || (subtotal + gst_amount);
+  const orderType = orderData.type || orderData.order_type || 'Delivery';
 
     // Store additional info that doesn't have dedicated columns in the items field
+    const pickupStore = orderType === 'Pickup'
+      ? (orderData.pickup_store || orderData.delivery_address || null)
+      : null;
+
     const orderItemsWithCustomerInfo = {
       cart_items: orderData.items || [],
       customer_email: orderData.customer_email,
       customer_phone: orderData.customer_phone,
       delivery_address: orderData.delivery_address,
+      pickup_store: pickupStore,
       payment_method: orderData.payment_method,
       customer_notes: orderData.notes,
       agent_id: orderData.agent_id || null, // Store agent info if this is an agent order
@@ -64,16 +74,24 @@ export async function POST(request: NextRequest) {
       subtotal: Math.round(subtotal * 100) / 100,
       gst_amount: Math.round(gst_amount * 100) / 100,
       total: Math.round(total * 100) / 100,
-      type: orderData.type || 'Delivery',
-      items: JSON.stringify(orderItemsWithCustomerInfo),
+      type: orderType,
+      items: orderItemsWithCustomerInfo,
       processed_by: null,
+  delivery_address: orderData.delivery_address || pickupStore || null,
+      notes: orderData.notes || null,
+      payment_method: orderData.payment_method || null,
+      customer_email: orderData.customer_email || null,
+      customer_phone: orderData.customer_phone || null,
+      discount_amount: Math.round(discount_amount * 100) / 100,
+      shipping_amount: Math.round(shipping_amount * 100) / 100,
+      payment_status: orderData.payment_status || null,
       created_at: new Date().toISOString()
     };
 
   logger.debug('order_insert_payload', { userId: user.id });
 
     // Insert order into database
-  const { data: createdOrder, error } = await supabase
+  const { data: createdOrder, error } = await serviceSupabase
       .from('orders')
       .insert([orderToInsert])
       .select()
@@ -87,15 +105,18 @@ export async function POST(request: NextRequest) {
     logger.info('order_created', { orderId: createdOrder.id, userId: user.id });
 
     // Parse the additional info back for the response
-    const orderItemsData = JSON.parse(createdOrder.items || '{}');
+    const orderItemsData = typeof createdOrder.items === 'string'
+      ? JSON.parse(createdOrder.items || '{}')
+      : (createdOrder.items || {});
     const fullOrder = {
       ...createdOrder,
-      customer_email: orderItemsData.customer_email,
-      customer_phone: orderItemsData.customer_phone,
-      delivery_address: orderItemsData.delivery_address,
-      payment_method: orderItemsData.payment_method,
-      notes: orderItemsData.customer_notes,
-      items: orderItemsData.cart_items || []
+      customer_email: createdOrder.customer_email || orderItemsData.customer_email,
+      customer_phone: createdOrder.customer_phone || orderItemsData.customer_phone,
+      delivery_address: createdOrder.delivery_address || orderItemsData.delivery_address,
+      payment_method: createdOrder.payment_method || orderItemsData.payment_method,
+      notes: createdOrder.notes || orderItemsData.customer_notes,
+      items: orderItemsData.cart_items || [],
+      pickup_store: orderItemsData.pickup_store || pickupStore || null
     };
 
     // Handle agent commission if this is an agent order
@@ -162,6 +183,25 @@ export async function POST(request: NextRequest) {
     } catch (emailError) {
       logger.warn('order_email_failure', { orderId: createdOrder.id, error: emailError instanceof Error ? emailError.message : 'unknown' });
       // Don't fail the order creation if email fails
+    }
+
+    const adminEmailList = (process.env.ADMIN_ORDER_NOTIFICATION_EMAILS || process.env.ADMIN_NOTIFICATION_EMAILS || '')
+      .split(',')
+      .map(email => email.trim())
+      .filter(Boolean);
+
+    if (adminEmailList.length > 0) {
+      try {
+        const sent = await emailHelpers.sendAdminOrderNotification(adminEmailList, fullOrder);
+        if (!sent) {
+          logger.warn('order_admin_email_partial_failure', { orderId: createdOrder.id, adminEmailCount: adminEmailList.length });
+        }
+      } catch (adminEmailError) {
+        logger.warn('order_admin_email_failure', { 
+          orderId: createdOrder.id, 
+          error: adminEmailError instanceof Error ? adminEmailError.message : 'unknown' 
+        });
+      }
     }
 
     // Send WhatsApp notifications

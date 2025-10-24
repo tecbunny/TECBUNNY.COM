@@ -17,6 +17,9 @@ interface PolicyPageProps {
 
 export default function PolicyPage({ pageKey, defaultTitle = 'Policy' }: PolicyPageProps) {
   const { content, loading, error } = usePageContent(pageKey);
+  const policyData = content?.content || {};
+  const rawDescription = extractRawDescription(policyData);
+  const descriptionHtml = formatDescriptionAsHtml(rawDescription);
 
   if (loading) {
     return (
@@ -83,8 +86,6 @@ export default function PolicyPage({ pageKey, defaultTitle = 'Policy' }: PolicyP
     );
   }
 
-  const policyData = content.content || {};
-
   return (
     <div className="container mx-auto px-4 py-12">
       <div className="max-w-4xl mx-auto">
@@ -107,7 +108,14 @@ export default function PolicyPage({ pageKey, defaultTitle = 'Policy' }: PolicyP
               <p>Last updated: {policyData.lastUpdated}</p>
             )}
             
-            {policyData.introduction && (
+            {descriptionHtml && (
+              <div
+                className="prose prose-neutral max-w-none"
+                dangerouslySetInnerHTML={{ __html: sanitizeHtml(descriptionHtml) }}
+              />
+            )}
+
+            {!descriptionHtml && policyData.introduction && (
               <div className="space-y-4">
                 {policyData.introduction.map((paragraph: string, index: number) => (
                   <p key={index}>{paragraph}</p>
@@ -115,7 +123,7 @@ export default function PolicyPage({ pageKey, defaultTitle = 'Policy' }: PolicyP
               </div>
             )}
 
-            {policyData.sections && policyData.sections.map((section: any, index: number) => (
+            {!descriptionHtml && policyData.sections && policyData.sections.map((section: any, index: number) => (
               <div key={index} className="space-y-4">
                 <h2 className="text-xl font-semibold text-foreground pt-4">
                   {section.title}
@@ -137,4 +145,28 @@ export default function PolicyPage({ pageKey, defaultTitle = 'Policy' }: PolicyP
       </div>
     </div>
   );
+}
+
+function extractRawDescription(policyData: Record<string, any>): string {
+  if (typeof policyData?.description === 'string') {
+    return policyData.description;
+  }
+  if (typeof policyData?.descriptionHtml === 'string') {
+    return policyData.descriptionHtml;
+  }
+  return '';
+}
+
+function formatDescriptionAsHtml(rawDescription: string): string {
+  if (!rawDescription) return '';
+  const trimmed = rawDescription.trim();
+  if (!trimmed) return '';
+  const looksLikeHtml = /<\/?[a-z][\s\S]*>/i.test(trimmed);
+  if (looksLikeHtml) {
+    return trimmed;
+  }
+  const paragraphs = trimmed
+    .split(/\n{2,}/)
+    .map((paragraph: string) => paragraph.replace(/\n/g, '<br />'));
+  return paragraphs.map((paragraph: string) => `<p>${paragraph}</p>`).join('');
 }

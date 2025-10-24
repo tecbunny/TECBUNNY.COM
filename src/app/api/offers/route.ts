@@ -3,7 +3,195 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient, createServiceClient, isSupabaseServiceConfigured } from '../../../lib/supabase/server';
 import { getSessionWithRole } from '../../../lib/auth/server-role';
 
+import { logger } from '../../../lib/logger';
+
 const ADMIN_ROLES = new Set(['admin', 'superadmin', 'manager']);
+
+interface OfferFilters {
+  activeOnly: boolean;
+  featuredOnly: boolean;
+  homepageOnly: boolean;
+  includeExpired: boolean;
+}
+
+interface NormalizedOffer {
+  id: string;
+  title: string;
+  description: string;
+  discount_type: string;
+  discount_value: number | null;
+  minimum_purchase_amount: number | null;
+  maximum_discount_amount: number | null;
+  offer_code: string | null;
+  start_date: string;
+  end_date: string;
+  is_active: boolean;
+  is_featured: boolean;
+  display_on_homepage: boolean;
+  customer_eligibility: string;
+  banner_text: string | null;
+  banner_color: string | null;
+  terms_and_conditions: string | null;
+  priority: number;
+  usage_limit: number | null;
+  usage_count: number;
+  usage_limit_per_customer: number | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+function toNumber(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim().length > 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function toBoolean(value: unknown): boolean {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    return normalized === 'true' || normalized === '1' || normalized === 'yes';
+  }
+  if (typeof value === 'number') {
+    return value !== 0;
+  }
+  return false;
+}
+
+function inferDiscountType(row: Record<string, any>): string {
+  const fromLegacyType = typeof row.type === 'string' ? row.type.toLowerCase() : '';
+  if (row.discount_percentage !== undefined && row.discount_percentage !== null) return 'percentage';
+  if (row.discount_amount !== undefined && row.discount_amount !== null) return 'fixed_amount';
+  if (fromLegacyType.includes('percentage')) return 'percentage';
+  if (fromLegacyType.includes('amount') || fromLegacyType.includes('fixed')) return 'fixed_amount';
+  if (fromLegacyType.includes('shipping')) return 'free_shipping';
+  return 'percentage';
+}
+
+function mapLegacyOffer(row: Record<string, any>): NormalizedOffer {
+  const discountType = inferDiscountType(row);
+    const discountValue = discountType === 'percentage'
+      ? toNumber(row.discount_percentage) ?? 0
+      : discountType === 'fixed_amount'
+        ? toNumber(row.discount_amount) ?? 0
+        : 0;
+
+  return {
+    id: row.id,
+    title: row.title ?? '',
+    description: row.description ?? '',
+    discount_type: discountType,
+      discount_value: discountValue,
+    minimum_purchase_amount: toNumber(row.minimum_order_amount),
+    maximum_discount_amount: null,
+    offer_code: null,
+    start_date: row.start_date,
+    end_date: row.end_date,
+    is_active: toBoolean(row.is_active ?? true),
+    is_featured: false,
+    display_on_homepage: false,
+    customer_eligibility: row.customer_tier ? String(row.customer_tier).toLowerCase() : 'all',
+    banner_text: null,
+    banner_color: null,
+    terms_and_conditions: null,
+    priority: 0,
+    usage_limit: null,
+    usage_count: 0,
+    usage_limit_per_customer: null,
+    created_at: row.created_at ?? null,
+    updated_at: row.updated_at ?? null
+  };
+}
+
+function normalizeOffer(row: Record<string, any>): NormalizedOffer {
+  if (!('discount_type' in row) && 'type' in row) {
+    return mapLegacyOffer(row);
+  }
+
+  const inferredDiscountType = typeof row.discount_type === 'string' && row.discount_type.trim().length > 0
+    ? row.discount_type
+    : inferDiscountType(row);
+
+  const priorityValue = toNumber(row.priority);
+  const resolvedPriority = typeof priorityValue === 'number' && Number.isFinite(priorityValue) ? priorityValue : 0;
+
+  return {
+    id: row.id,
+    title: row.title ?? '',
+    description: row.description ?? '',
+    discount_type: inferredDiscountType,
+      discount_value: toNumber(row.discount_value) ?? 0,
+    minimum_purchase_amount: toNumber(row.minimum_purchase_amount ?? row.minimum_order_amount),
+    maximum_discount_amount: toNumber(row.maximum_discount_amount),
+    offer_code: row.offer_code ?? null,
+    start_date: row.start_date,
+    end_date: row.end_date,
+    is_active: toBoolean(row.is_active),
+    is_featured: toBoolean(row.is_featured),
+    display_on_homepage: toBoolean(row.display_on_homepage),
+    customer_eligibility: typeof row.customer_eligibility === 'string' && row.customer_eligibility.trim().length > 0
+      ? row.customer_eligibility
+      : 'all',
+    banner_text: row.banner_text ?? null,
+    banner_color: row.banner_color ?? null,
+    terms_and_conditions: row.terms_and_conditions ?? null,
+    priority: resolvedPriority,
+    usage_limit: toNumber(row.usage_limit),
+    usage_count: toNumber(row.usage_count) ?? 0,
+    usage_limit_per_customer: toNumber(row.usage_limit_per_customer),
+    created_at: row.created_at ?? null,
+    updated_at: row.updated_at ?? null
+  };
+}
+
+function applyOfferFilters(offers: NormalizedOffer[], filters: OfferFilters): NormalizedOffer[] {
+  const now = new Date();
+
+  const filtered = offers.filter((offer) => {
+    if (filters.activeOnly && !offer.is_active) {
+      return false;
+    }
+
+    if (filters.featuredOnly && !offer.is_featured) {
+      return false;
+    }
+
+    if (filters.homepageOnly && !offer.display_on_homepage) {
+      return false;
+    }
+
+    if (!filters.includeExpired && offer.end_date) {
+      const end = new Date(offer.end_date);
+      if (Number.isFinite(end.getTime()) && end < now) {
+        return false;
+      }
+    }
+
+    return true;
+  });
+
+  return filtered.sort((a, b) => {
+    const priorityDiff = (b.priority ?? 0) - (a.priority ?? 0);
+    if (priorityDiff !== 0) {
+      return priorityDiff;
+    }
+
+    const getComparableDate = (offer: NormalizedOffer): number => {
+      const preferred = offer.updated_at ?? offer.created_at ?? offer.end_date ?? offer.start_date;
+      const parsed = preferred ? new Date(preferred).getTime() : NaN;
+      if (Number.isFinite(parsed)) {
+        return parsed as number;
+      }
+      return 0;
+    };
+
+    return getComparableDate(b) - getComparableDate(a);
+  });
+}
 
 // GET /api/offers - Fetch offers
 export async function GET(request: NextRequest) {
@@ -18,51 +206,54 @@ export async function GET(request: NextRequest) {
     const supabase = role && ADMIN_ROLES.has(role) && isSupabaseServiceConfigured
       ? createServiceClient()
       : authClient ?? await createClient();
-
-    let query = supabase
+    const fetchResult = await supabase
       .from('offers')
       .select('*')
       .order('priority', { ascending: false })
       .order('created_at', { ascending: false });
 
-    // Apply filters
-    if (activeOnly) {
-      query = query.eq('is_active', true);
+  let normalizedOffers: NormalizedOffer[] | null = null;
+
+    if (fetchResult.error) {
+      logger.warn('offers.fetch.modern_failed', {
+        code: fetchResult.error.code,
+        message: fetchResult.error.message,
+        details: fetchResult.error.details
+      });
+
+      const legacyResult = await supabase
+        .from('offers')
+        .select('id,title,description,type,discount_percentage,discount_amount,start_date,end_date,is_active,category,customer_tier,minimum_order_amount,created_at,updated_at')
+        .order('start_date', { ascending: false });
+
+      if (legacyResult.error) {
+        logger.error('offers.fetch.legacy_failed', {
+          code: legacyResult.error.code,
+          message: legacyResult.error.message,
+          details: legacyResult.error.details
+        });
+        return NextResponse.json({ error: 'Failed to fetch offers' }, { status: 500 });
+      }
+
+      normalizedOffers = (legacyResult.data || []).map((row) => mapLegacyOffer(row));
+    } else {
+      normalizedOffers = (fetchResult.data || []).map((row) => normalizeOffer(row));
     }
 
-    if (featuredOnly) {
-      query = query.eq('is_featured', true);
-    }
+    const filteredOffers = applyOfferFilters(normalizedOffers ?? [], {
+      activeOnly,
+      featuredOnly,
+      homepageOnly,
+      includeExpired
+    });
 
-    if (homepageOnly) {
-      query = query.eq('display_on_homepage', true);
-    }
-
-    if (!includeExpired) {
-      query = query.gte('end_date', new Date().toISOString());
-    }
-
-    const { data: offers, error } = await query;
-
-    if (error) {
-      console.error('Error fetching offers:', error);
-      return NextResponse.json({ error: 'Failed to fetch offers' }, { status: 500 });
-    }
-
-    // Filter out expired offers if not explicitly requested
-    let filteredOffers = offers || [];
-    if (!includeExpired) {
-      const now = new Date();
-      filteredOffers = filteredOffers.filter(offer => new Date(offer.end_date) > now);
-    }
-
-    return NextResponse.json({ 
+    return NextResponse.json({
       offers: filteredOffers,
-      count: filteredOffers.length 
+      count: filteredOffers.length
     });
 
   } catch (error) {
-    console.error('Offers API error:', error);
+    logger.error('offers.api.unexpected_error', { error });
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

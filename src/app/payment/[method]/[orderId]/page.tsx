@@ -18,6 +18,7 @@ interface Order {
   total: number;
   status: string;
   payment_method?: string | null;
+  payment_status?: string | null;
   created_at: string;
   customer_name: string;
   customer_email?: string | null;
@@ -67,7 +68,12 @@ export default function PaymentMethodPage() {
     return {};
   }, []);
 
-  const resolvePaymentState = useCallback((status?: string, method?: string | null): PaymentState => {
+  const resolvePaymentState = useCallback((status?: string, method?: string | null, paymentStatus?: string | null): PaymentState => {
+    const paymentStatusText = paymentStatus?.toLowerCase() ?? '';
+    if (paymentStatusText === 'payment confirmed') {
+      return 'paid';
+    }
+
     if (!status) return 'pending';
     const normalized = status.toLowerCase();
     const methodKey = (method ?? '').toLowerCase();
@@ -103,7 +109,7 @@ export default function PaymentMethodPage() {
       setLoading(true);
       const { data, error } = await supabase
         .from('orders')
-        .select('id, total, status, payment_method, created_at, customer_name, items')
+        .select('id, total, status, payment_method, payment_status, created_at, customer_name, items')
         .eq('id', orderId)
         .single();
 
@@ -115,6 +121,7 @@ export default function PaymentMethodPage() {
         total: Number(row.total ?? 0),
         status: typeof row.status === 'string' ? row.status : 'Pending',
         payment_method: typeof row.payment_method === 'string' ? row.payment_method : paymentMethod,
+        payment_status: typeof row.payment_status === 'string' ? row.payment_status : null,
         created_at: typeof row.created_at === 'string' ? row.created_at : new Date().toISOString(),
         customer_name: typeof row.customer_name === 'string' ? row.customer_name : 'Customer',
         items: (row.items as Order['items']) ?? null,
@@ -127,7 +134,11 @@ export default function PaymentMethodPage() {
   const phoneFromRow = typeof row.customer_phone === 'string' ? row.customer_phone : null;
 
       const resolvedPaymentMethod = normalizedOrder.payment_method ?? extras.payment_method ?? paymentMethod;
-      const resolvedPaymentState = resolvePaymentState(normalizedOrder.status, resolvedPaymentMethod);
+      const resolvedPaymentState = resolvePaymentState(
+        normalizedOrder.status,
+        resolvedPaymentMethod,
+        normalizedOrder.payment_status
+      );
 
   const customerEmailValue = emailFromExtras ?? emailFromRow;
   const customerPhoneValue = phoneFromExtras ?? phoneFromRow;
@@ -135,6 +146,7 @@ export default function PaymentMethodPage() {
       setOrder({
         ...normalizedOrder,
         payment_method: resolvedPaymentMethod,
+        payment_status: normalizedOrder.payment_status,
         customer_email: customerEmailValue,
         customer_phone: customerPhoneValue,
       });
@@ -235,11 +247,15 @@ export default function PaymentMethodPage() {
 
       const method = paymentMethod.toLowerCase();
       const nextStatus = method === 'cod' ? 'Confirmed' : 'Payment Confirmed';
+      const nextPaymentStatus = method === 'cod'
+        ? 'Payment Due on Delivery'
+        : 'Payment Confirmed';
 
       const { error } = await supabase
         .from('orders')
         .update({ 
           status: nextStatus,
+          payment_status: nextPaymentStatus,
           updated_at: new Date().toISOString()
         })
         .eq('id', orderId);
@@ -260,7 +276,7 @@ export default function PaymentMethodPage() {
         });
       }
 
-      setOrder(prev => prev ? { ...prev, status: nextStatus } : prev);
+      setOrder(prev => prev ? { ...prev, status: nextStatus, payment_status: nextPaymentStatus } : prev);
 
       // Redirect to order confirmation
       router.push(`/orders/${orderId}`);
@@ -325,10 +341,7 @@ export default function PaymentMethodPage() {
         <p className="text-gray-600">Order #{order.id.slice(0, 8)}</p>
       </div>
 
-      const paymentMethodLabel = (order.payment_method ?? paymentMethod ?? 'N/A').toString().toUpperCase();
-      const formattedAmount = Number.isFinite(order.total) ? order.total.toFixed(2) : '0.00';
-
-  <div className="space-y-6">
+    <div className="space-y-6">
         {/* Payment Summary */}
         <Card>
           <CardHeader>

@@ -41,7 +41,8 @@ class OTPManager {
 
   constructor() {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    // Use service role key from either SUPABASE_SERVICE_ROLE_KEY or override from NEXT_PUBLIC
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY;
     if (url && key) {
       this.supabase = createClient(url, key, {
         auth: { autoRefreshToken: false, persistSession: false },
@@ -86,10 +87,14 @@ class OTPManager {
   }
 
   // Store OTP in database with fallback to memory
-  async storeOTP(email: string, otp: string, type: 'signup' | 'recovery' = 'signup'): Promise<boolean> {
+    async storeOTP(email: string, otp: string, type: 'signup' | 'recovery' = 'signup'): Promise<boolean> {
+    // Normalize identifier to lower-case to match stored records
+    const normalizedEmail = email.trim().toLowerCase();
+
     try {
+      // If Supabase isn't available, fallback to in-memory storage
       if (!this.supabase) {
-        return this.storeOTPInMemory(email, otp, type);
+        return this.storeOTPInMemory(normalizedEmail, otp, type);
       }
       const expiresAt = new Date();
       expiresAt.setMinutes(expiresAt.getMinutes() + 15); // 15 minutes from now
@@ -97,7 +102,7 @@ class OTPManager {
       // First, try inserting into the new column name 'otp'
       const attemptInsert = async () => {
         const insertData: OTPInsertData = {
-          email,
+          email: normalizedEmail,
           otp, // preferred column name
           expires_at: expiresAt.toISOString(),
           type,
@@ -116,7 +121,7 @@ class OTPManager {
       // If table missing -> fallback to memory
       if (error?.code === '42P01') {
         logger.warn('OTP table not found; using memory storage fallback', { email, type });
-        return this.storeOTPInMemory(email, otp, type);
+        return this.storeOTPInMemory(normalizedEmail, otp, type);
       }
 
       // If column "otp" doesn't exist, retry with legacy column name 'otp_code'
@@ -126,7 +131,7 @@ class OTPManager {
 
       if (columnMissing) {
         const legacyData: OTPInsertData = {
-          email,
+          email: normalizedEmail,
           otp_code: otp, // legacy column
           expires_at: expiresAt.toISOString(),
           type,
@@ -140,15 +145,15 @@ class OTPManager {
           return true;
         }
         logger.error('Error storing OTP using legacy column', { error: legacyError });
-        return this.storeOTPInMemory(email, otp, type);
+        return this.storeOTPInMemory(normalizedEmail, otp, type);
       }
 
       // Any other DB error -> fallback to memory
-      logger.error('Error storing OTP', { error, email, type });
-      return this.storeOTPInMemory(email, otp, type);
+      logger.error('Error storing OTP', { error, normalizedEmail, type });
+      return this.storeOTPInMemory(normalizedEmail, otp, type);
     } catch (error) {
-      logger.error('Failed to store OTP', { error, email, type });
-      return this.storeOTPInMemory(email, otp, type);
+      logger.error('Failed to store OTP', { error, normalizedEmail, type });
+      return this.storeOTPInMemory(normalizedEmail, otp, type);
     }
   }
 
@@ -242,6 +247,9 @@ class OTPManager {
 
   // Send OTP email
   async sendOTP(email: string, type: 'signup' | 'recovery' = 'signup'): Promise<{ success: boolean; message: string; waitTime?: number }> {
+    // Normalize identifier to lower-case to match stored records
+    const normalizedEmail = email.trim().toLowerCase();
+
     try {
       
       // Generate OTP
@@ -269,13 +277,13 @@ class OTPManager {
         return { success: true, message: 'OTP sent via SMS', waitTime: undefined };
       } else {
         // Store in database as before for email/legacy fallback
-        const stored = await this.storeOTP(email, otp, type);
+        const stored = await this.storeOTP(normalizedEmail, otp, type);
         if (!stored) {
           return { success: false, message: 'Failed to store OTP in database' };
         }
       }
   // Send email
-    const emailResult = await improvedEmailService.sendOTPEmail(email, otp, type);
+    const emailResult = await improvedEmailService.sendOTPEmail(normalizedEmail, otp, type);
       if (!emailResult.success) {
         return { 
           success: false, 
@@ -296,6 +304,8 @@ class OTPManager {
 
   // Verify OTP with database and memory fallback
   async verifyOTP(email: string, otp: string, type: 'signup' | 'recovery' = 'signup'): Promise<{ success: boolean; message: string }> {
+    // Normalize identifier to lower-case
+    const normalizedEmail = email.trim().toLowerCase();
     logger.debug('Starting OTP verification', { email, type });
     try {
       // If there is a 2factor.in session for this identifier (phone), use the provider to verify first
@@ -365,12 +375,12 @@ class OTPManager {
       let otpRecord: OTPData | null = null;
       let error: { code?: string; message?: string } | null = null;
       if (this.supabase) {
-        logger.debug('Checking database for OTP record', { email, type });
+        logger.debug('Checking database for OTP record', { email: normalizedEmail, type });
         // Support both new ('otp') and legacy ('otp_code') column names
         const builder = (this.supabase as any)
           .from('otp_codes')
           .select('*')
-          .eq('email', email)
+          .eq('email', normalizedEmail)
           .eq('type', type)
           .eq('used', false)
           .gte('expires_at', new Date().toISOString())
@@ -385,6 +395,9 @@ class OTPManager {
         otpRecord = resp.data;
         error = resp.error;
 
+        // Debug: log the fetched OTP record
+        logger.debug('Database OTP record fetched', { email, type, otpRecord, error });
+
         logger.debug('Database OTP query result', { email, type, hasRecord: !!otpRecord, error });
       } else {
         logger.warn('No Supabase connection available for OTP verification', { email, type });
@@ -392,8 +405,8 @@ class OTPManager {
 
       if (error && error.code === '42P01') {
         // Table doesn't exist, check memory storage
-        logger.warn('OTP table missing; falling back to memory verification', { email, type });
-        return this.verifyOTPFromMemory(email, otp, type);
+        logger.warn('OTP table missing; falling back to memory verification', { normalizedEmail, type });
+        return this.verifyOTPFromMemory(normalizedEmail, otp, type);
       } else if (error || !otpRecord) {
         // Check memory storage as fallback
         logger.debug('Database OTP not found; falling back to memory', { email, type, error });
@@ -416,7 +429,7 @@ class OTPManager {
         .eq('id', otpRecord.id);
 
       if (updateError) {
-        logger.error('Error marking OTP as used', { email, type, otpId: otpRecord.id, error: updateError });
+        logger.error('Error marking OTP as used', { normalizedEmail, type, otpId: otpRecord.id, error: updateError });
         return { success: false, message: 'Failed to verify OTP' };
       }
 

@@ -4,22 +4,50 @@ import { createClient, createServiceClient, isSupabaseServiceConfigured } from '
 import { getSessionWithRole } from '../../../lib/auth/server-role';
 import { logger } from '../../../lib/logger';
 
-// Simple in-memory cache for products table columns (lifetime of lambda)
-let productColumnsCache: Set<string> | null = null;
-async function ensureProductColumns(supabase: any) {
-  if (productColumnsCache) return productColumnsCache;
-  try {
-    const { data } = await supabase
-      .from('information_schema.columns' as any)
-      .select('column_name')
-      .eq('table_name', 'products');
-    productColumnsCache = new Set((data || []).map((c: any) => c.column_name));
-    logger.debug('product_columns_cached', { columns: Array.from(productColumnsCache) });
-  } catch (e) {
-    logger.warn('product_columns_cache_failed', { error: (e as Error).message });
-    productColumnsCache = new Set();
+const COLUMN_ALIASES: Record<string, string[]> = {
+  hsnCode: ['hsn_code', 'hsncode'],
+  mrp: ['mrp', 'maximum_retail_price', 'list_price'],
+  price: ['price', 'selling_price', 'unit_price'],
+};
+
+function resolveColumnName(columns: Set<string> | null, key: string): string | undefined {
+  const candidates = COLUMN_ALIASES[key];
+  if (!columns) {
+    // Default to first alias so updates still proceed when metadata is unavailable
+    if (candidates && candidates.length > 0) {
+      return candidates[0];
+    }
+    return key;
   }
-  return productColumnsCache;
+  if (!candidates) {
+    return columns.has(key) ? key : undefined;
+  }
+  const match = candidates.find(column => columns.has(column));
+  return match ?? undefined;
+}
+
+async function ensureProductColumns(supabase: any): Promise<Set<string> | null> {
+  try {
+    const { data, error } = await supabase
+      .from('information_schema.columns' as any)
+      .select('column_name,table_schema')
+      .eq('table_name', 'products')
+      .eq('table_schema', 'public');
+    if (error) {
+      logger.warn('product_columns_fetch_failed', { error: error.message });
+      return null;
+    }
+    if (!data) {
+      return null;
+    }
+  const rawColumns = (data ?? []).map((c: any) => String(c.column_name));
+  const columns = new Set<string>(rawColumns);
+    logger.debug('product_columns_fetched', { columns: Array.from(columns) });
+    return columns;
+  } catch (e) {
+    logger.warn('product_columns_fetch_failed', { error: (e as Error).message });
+    return null;
+  }
 }
 
 const ADMIN_ROLES = new Set(['admin', 'superadmin', 'manager']);
@@ -53,9 +81,9 @@ export async function GET(request: NextRequest) {
         const columns = await ensureProductColumns(supabase);
         let fallbackQuery = supabase.from('products').select('*');
         
-        if (columns.has('title')) {
+        if (columns?.has('title')) {
           fallbackQuery = fallbackQuery.ilike('title', `%${handle}%`);
-        } else if (columns.has('name')) {
+        } else if (columns?.has('name')) {
           fallbackQuery = fallbackQuery.ilike('name', `%${handle}%`);
         } else {
           // Last resort: search by description
@@ -111,11 +139,26 @@ export async function GET(request: NextRequest) {
       const limit = parseInt(searchParams.get('limit') || '20');
       const offset = (page - 1) * limit;
 
+      // Get sort parameter (default to display_order)
+      const sortBy = searchParams.get('sort') || 'display_order';
+      const sortOrder = searchParams.get('order') || 'asc'; // Changed to 'asc' so display_order 1 appears first
+
       let query = supabase
         .from('products')
         .select('*', { count: 'exact' })
-        .range(offset, offset + limit - 1)
-        .order('created_at', { ascending: false });
+        .range(offset, offset + limit - 1);
+
+      // Apply sorting - use display_order first, then created_at as fallback
+      if (sortBy === 'display_order') {
+        query = query.order('display_order', { ascending: sortOrder === 'asc', nullsFirst: false })
+                     .order('created_at', { ascending: false });
+      } else if (sortBy === 'title' || sortBy === 'name') {
+        query = query.order(sortBy, { ascending: sortOrder === 'asc' });
+      } else if (sortBy === 'price') {
+        query = query.order('price', { ascending: sortOrder === 'asc' });
+      } else {
+        query = query.order('created_at', { ascending: sortOrder === 'asc' });
+      }
 
       // Add filters
       const status = searchParams.get('status');
@@ -132,9 +175,9 @@ export async function GET(request: NextRequest) {
       if (search) {
         // Check which columns exist and use appropriate search
         const columns = await ensureProductColumns(supabase);
-        if (columns.has('title')) {
+        if (columns?.has('title')) {
           query = query.or(`title.ilike.%${search}%,description.ilike.%${search}%`);
-        } else if (columns.has('name')) {
+        } else if (columns?.has('name')) {
           query = query.or(`name.ilike.%${search}%,description.ilike.%${search}%`);
         } else {
           // Fallback to description only if neither title nor name exist
@@ -224,7 +267,10 @@ export async function POST(request: NextRequest) {
       seo_title, 
       seo_description,
       options,
-      variants
+      variants,
+      mrp,
+      price,
+      hsnCode,
     } = body;
 
     // Normalize images to an array of URL strings (supports legacy object shape {url})
@@ -253,20 +299,38 @@ export async function POST(request: NextRequest) {
       description,
       vendor,
       product_type,
-      tags,
-      status: status || 'active',
-	images: normalizedImages,
+  tags,
+  status: status || 'active',
+  images: normalizedImages,
       seo_title,
       seo_description,
       created_by: user.id,
       updated_by: user.id
     };
-    // Remove tags if column absent
+    if (mrp !== undefined) {
+      basePayload.mrp = mrp;
+    }
+    if (price !== undefined) {
+      basePayload.price = price;
+    }
     const cols = await ensureProductColumns(supabase);
     const postWarnings: string[] = [];
-  if (!cols.has('tags')) { delete basePayload.tags; postWarnings.push('tags column missing; tags ignored'); }
-  if (!cols.has('created_by')) { delete basePayload.created_by; postWarnings.push('created_by column missing; ignored'); }
-  if (!cols.has('updated_by')) { delete basePayload.updated_by; postWarnings.push('updated_by column missing; ignored'); }
+    if (!cols) {
+      postWarnings.push('product schema metadata unavailable; attempted insert without column validation');
+    } else {
+      if (!cols.has('tags')) { delete basePayload.tags; postWarnings.push('tags column missing; tags ignored'); }
+      if (!cols.has('created_by')) { delete basePayload.created_by; postWarnings.push('created_by column missing; ignored'); }
+      if (!cols.has('updated_by')) { delete basePayload.updated_by; postWarnings.push('updated_by column missing; ignored'); }
+      if ('mrp' in basePayload && !cols.has('mrp')) { delete basePayload.mrp; postWarnings.push('mrp column missing; mrp ignored'); }
+      if ('price' in basePayload && !cols.has('price')) { delete basePayload.price; postWarnings.push('price column missing; price ignored'); }
+    }
+    if (hsnCode !== undefined) {
+      if (!cols || cols.has('hsn_code')) {
+        basePayload.hsn_code = hsnCode;
+      } else {
+        postWarnings.push('hsn_code column missing; hsnCode ignored');
+      }
+    }
     // Try upsert on handle
   const up = await supabase
       .from('products')
@@ -386,7 +450,14 @@ export async function PUT(request: NextRequest) {
 
     // Normalize images if passed (array of URLs or objects) - legacy support
     if (Array.isArray(images)) {
-      (updateData as any).images = images.map((img: any) => typeof img === 'string' ? img : img?.url).filter(Boolean);
+      const normalizedImages = images.map((img: any) => typeof img === 'string' ? img : img?.url).filter(Boolean);
+      (updateData as any).images = normalizedImages;
+      logger.info('product_update_images', { 
+        correlationId, 
+        receivedCount: images.length, 
+        normalizedCount: normalizedImages.length,
+        firstImage: normalizedImages[0] || 'none'
+      });
     }
 
     const { supabase: authClient, session, role } = await getSessionWithRole(request);
@@ -413,19 +484,39 @@ export async function PUT(request: NextRequest) {
     }
     const updateCols = await ensureProductColumns(supabase);
     const putWarnings: string[] = [];
-    if (!updateCols.has('tags')) {
+    if (!updateCols) {
+      putWarnings.push('product schema metadata unavailable; attempted update without column validation');
+    } else if (!updateCols.has('tags')) {
       delete (updateData as any).tags;
       putWarnings.push('tags column missing; tags ignored');
     }
+
+    const updateColumns = updateCols ? new Set<string>(updateCols) : null;
+    Object.keys(COLUMN_ALIASES).forEach((inputKey) => {
+      if (Object.prototype.hasOwnProperty.call(updateData, inputKey)) {
+        const value = (updateData as any)[inputKey];
+        const targetColumn = resolveColumnName(updateColumns, inputKey);
+        if (targetColumn) {
+          (updateData as any)[targetColumn] = value;
+          if (targetColumn !== inputKey) {
+            delete (updateData as any)[inputKey];
+          }
+        } else if (updateColumns) {
+          const aliases = COLUMN_ALIASES[inputKey];
+          putWarnings.push(`${aliases[0]} column missing; ${inputKey} ignored`);
+          delete (updateData as any)[inputKey];
+        }
+      }
+    });
 
     // Remove undefined keys to avoid PostgREST rejecting explicit undefined
     Object.keys(updateData).forEach(k => (updateData as any)[k] === undefined && delete (updateData as any)[k]);
 
   logger.debug('product_update_payload', { correlationId, id, keys: Object.keys(updateData), imagesCount: (updateData as any).images?.length, tagsType: typeof (updateData as any).tags });
 
-    const updateFields: any = { ...updateData };
-    if (updateCols.has('updated_by')) updateFields.updated_by = user.id;
-    if (updateCols.has('updated_at')) updateFields.updated_at = new Date().toISOString();
+  const updateFields: any = { ...updateData };
+  if (!updateCols || updateCols.has('updated_by')) updateFields.updated_by = user.id;
+  if (!updateCols || updateCols.has('updated_at')) updateFields.updated_at = new Date().toISOString();
 
     const { data: product, error } = await supabase
       .from('products')
