@@ -26,6 +26,8 @@ export function EnhancedProductCard({ product }: EnhancedProductCardProps) {
     return firstFromImages || '';
   }, [product]);
 
+  const isOutOfStock = product.stock_status === 'out_of_stock';
+
   return (
     <Card 
       className="group relative overflow-hidden transition-all duration-500 hover:scale-105 shadow-harsh hover:shadow-xl backdrop-blur-sm bg-gradient-to-br from-white/90 to-blue-50/60 border border-blue-200/50"
@@ -101,9 +103,18 @@ export function EnhancedProductCard({ product }: EnhancedProductCardProps) {
 
         {/* Action Button */}
         <div className="pt-4 mt-auto">
-          <div className="w-full bg-gradient-to-r from-blue-600 to-blue-600 hover:from-blue-700 hover:to-blue-700 text-white border-0 shadow-lg hover:shadow-xl transition-all duration-300 rounded-lg overflow-hidden">
-            <AddToCartButton product={product} />
-          </div>
+          {isOutOfStock ? (
+            <Button 
+              disabled 
+              className="w-full opacity-50 bg-gray-400 text-white cursor-not-allowed"
+            >
+              Out of Stock
+            </Button>
+          ) : (
+            <div className="w-full bg-gradient-to-r from-blue-600 to-blue-600 hover:from-blue-700 hover:to-blue-700 text-white border-0 shadow-lg hover:shadow-xl transition-all duration-300 rounded-lg overflow-hidden">
+              <AddToCartButton product={product} />
+            </div>
+          )}
         </div>
       </div>
 

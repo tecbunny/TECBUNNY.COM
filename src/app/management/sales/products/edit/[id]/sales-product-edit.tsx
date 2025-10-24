@@ -191,6 +191,7 @@ export default function EditProductPage() {
         
         const updateData = {
             ...data,
+            title: data.name, // Map name to title for database compatibility
             gstRate: data.gstRate ? parseFloat(data.gstRate) : undefined,
             image: imagePreview || product.image,
             additional_images: additionalImages,
@@ -201,7 +202,10 @@ export default function EditProductPage() {
             .update(updateData)
             .eq('id', product.id);
 
-        if (error) throw error;
+        if (error) {
+            console.error('Product update error:', error);
+            throw new Error(`Failed to update product: ${error.message}`);
+        }
         
         toast({
             title: "Product Updated",

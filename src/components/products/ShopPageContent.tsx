@@ -42,6 +42,7 @@ export function ShopPageContent() {
   const sortOption = searchParams.get('sort') || 'popularity';
   const categoryFilter = searchParams.get('category') || '';
   const brandFilter = searchParams.get('brand') || '';
+  const refresh = searchParams.get('refresh') || '';
   
   const [products, setProducts] = React.useState<Product[]>([]);
   const [filteredProducts, setFilteredProducts] = React.useState<Product[]>([]);
@@ -79,76 +80,103 @@ export function ShopPageContent() {
       setLoading(true);
       
       try {
+        logger.info('ShopPage: Fetching products...');
+        
+        // Fetch products sorted by display_order (higher first), then created_at
         const { data, error } = await supabase
           .from('products')
           .select('*')
+          .order('display_order', { ascending: false, nullsFirst: false })
           .order('created_at', { ascending: false });
+        
+        logger.info('ShopPage: Products fetched', { 
+          count: data?.length || 0, 
+          error: error?.message,
+          hasData: !!data 
+        });
         
         if (error) {
           logger.warn("Unable to fetch products:", { error: error.message });
           setProducts([]);
-        } else {
-          // Normalize products to ensure required fields exist and are properly typed
-          const normalized = (data || []).map((p: any) => {
-            const priceNum = typeof p.price === 'number' ? p.price : Number(p.price) || 0;
-            // Normalize image: prefer top-level image, else first item from images[] (string or {url})
-            const firstImage = Array.isArray(p.images) && p.images.length > 0
-              ? (typeof p.images[0] === 'string' ? p.images[0] : (p.images[0]?.url || ''))
-              : '';
-            return {
-              ...p,
-              id: p.id,
-              // Ensure name/title always present
-              name: p.name || p.title || 'Unnamed Product',
-              title: p.title || p.name || 'Product',
-              // Map category/brand from alternative fields when missing
-              category: p.category || p.product_type || 'General',
-              brand: p.brand || p.vendor || undefined,
-              // Provide safe defaults
-              price: priceNum,
-              popularity: p.popularity || 0,
-              rating: p.rating || 0,
-              reviewCount: p.review_count ?? p.reviewCount ?? 0,
-              created_at: p.created_at || new Date().toISOString(),
-              image: p.image || firstImage || 'https://placehold.co/600x400.png?text=No+Image',
-            } as Product;
-          });
+          setLoading(false); // Ensure we stop loading even on error
+          return; // Exit early
+        }
+        
+        if (!data || data.length === 0) {
+          logger.warn("No products found in database");
+          setProducts([]);
+          setCategories([]);
+          setBrands([]);
+          setLoading(false);
+          return;
+        }
+        
+        // Normalize products to ensure required fields exist and are properly typed
+        const normalized = (data || []).map((p: any) => {
+          const priceNum = typeof p.price === 'number' ? p.price : Number(p.price) || 0;
+          // Normalize image: prefer top-level image, else first item from images[], else first from additional_images
+          const firstImage = Array.isArray(p.images) && p.images.length > 0
+            ? (typeof p.images[0] === 'string' ? p.images[0] : (p.images[0]?.url || ''))
+            : '';
+          const firstAdditionalImage = Array.isArray(p.additional_images) && p.additional_images.length > 0
+            ? (typeof p.additional_images[0] === 'string' ? p.additional_images[0] : (p.additional_images[0]?.url || ''))
+            : '';
+          return {
+            ...p,
+            id: p.id,
+            // Ensure name/title always present
+            name: p.name || p.title || 'Unnamed Product',
+            title: p.title || p.name || 'Product',
+            // Map category/brand from alternative fields when missing
+            category: p.category || p.product_type || 'General',
+            brand: p.brand || p.vendor || undefined,
+            // Provide safe defaults
+            price: priceNum,
+            popularity: p.popularity || 0,
+            rating: p.rating || 0,
+            reviewCount: p.review_count ?? p.reviewCount ?? 0,
+            created_at: p.created_at || new Date().toISOString(),
+            image: p.image || firstImage || firstAdditionalImage || 'https://placehold.co/600x400.png?text=No+Image',
+          } as Product;
+        });
 
-          setProducts(normalized);
-          
-          // Extract unique categories and brands
-          const uniqueCategories = [...new Set(normalized.map(p => p.category).filter(Boolean))];
-          const uniqueBrands = [...new Set(
-            normalized
-              .map(p => p.brand)
-              .filter((b): b is string => typeof b === 'string' && b.length > 0)
-          )];
-          
-          setCategories(uniqueCategories);
-          setBrands(uniqueBrands);
-          
-          // Set price range based on actual product prices
-          if (normalized.length === 0) {
-            setMaxPrice(100000);
-            setPriceRange([0, 100000]);
-          } else {
-            const prices = normalized.map(p => p.price);
-            const min = Math.min(...prices);
-            const max = Math.max(...prices);
-            setMaxPrice(max);
-            setPriceRange([min, max]);
-          }
+        logger.info('ShopPage: Products normalized', { count: normalized.length });
+        setProducts(normalized);
+        
+        // Extract unique categories and brands
+        const uniqueCategories = [...new Set(normalized.map(p => p.category).filter(Boolean))];
+        const uniqueBrands = [...new Set(
+          normalized
+            .map(p => p.brand)
+            .filter((b): b is string => typeof b === 'string' && b.length > 0)
+        )];
+        
+        setCategories(uniqueCategories);
+        setBrands(uniqueBrands);
+        
+        // Set price range based on actual product prices
+        if (normalized.length === 0) {
+          setMaxPrice(100000);
+          setPriceRange([0, 100000]);
+        } else {
+          const prices = normalized.map(p => p.price);
+          const min = Math.min(...prices);
+          const max = Math.max(...prices);
+          setMaxPrice(max);
+          setPriceRange([min, max]);
         }
       } catch (error) {
         logger.error('Error fetching products:', { error });
         setProducts([]);
+      } finally {
+        // Always set loading to false, even if there's an error
+        setLoading(false);
+        logger.info('ShopPage: Loading complete');
       }
-      
-      setLoading(false);
     };
 
     fetchProducts();
-  }, [supabase]);
+  }, [supabase, refresh]);
 
   // Filter and sort products
   React.useEffect(() => {

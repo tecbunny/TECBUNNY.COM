@@ -7,6 +7,8 @@ import { useRouter } from 'next/navigation';
 
 import { Eye, Tag, Truck } from 'lucide-react';
 
+import { logger } from '../../lib/logger';
+
 import type { Product } from '../../lib/types';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -21,13 +23,44 @@ interface ProductCardProps {
 
 export function ProductCard({ product, viewMode = 'grid' }: ProductCardProps) {
   const router = useRouter();
-  // Normalize primary image: prefer product.image, else first of images (string or {url})
+  // State to track image load errors
+  const [hasImageError, setHasImageError] = React.useState(false);
+  const handleCardClick = React.useCallback((event: React.MouseEvent) => {
+    const target = event.target as HTMLElement | null;
+    if (target && (target.closest('button') || target.closest('a'))) {
+      return;
+    }
+    router.push(`/products/${product.id}`);
+  }, [router, product.id]);
+  const handleQuickView = React.useCallback((event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    router.push(`/products/${product.id}`);
+  }, [router, product.id]);
+  // Normalize primary image: prefer product.image, else first of images, else first of additional_images
   const displayImage = React.useMemo(() => {
+    logger.debug('product_card_image_sources', {
+      productId: product?.id,
+      hasPrimary: Boolean(product?.image),
+      imagesLength: Array.isArray((product as any)?.images) ? (product as any).images.length : 0,
+      additionalLength: Array.isArray((product as any)?.additional_images) ? (product as any).additional_images.length : 0
+    });
+
     if (product?.image) return product.image;
     const firstFromImages = Array.isArray((product as any)?.images) && (product as any).images.length > 0
       ? (typeof (product as any).images[0] === 'string' ? (product as any).images[0] : (product as any).images[0]?.url || '')
       : '';
-    return firstFromImages || '';
+    const firstFromAdditional = Array.isArray((product as any)?.additional_images) && (product as any).additional_images.length > 0
+      ? (typeof (product as any).additional_images[0] === 'string' ? (product as any).additional_images[0] : (product as any).additional_images[0]?.url || '')
+      : '';
+    
+    const finalImage = firstFromImages || firstFromAdditional || '';
+    logger.debug('product_card_final_image', {
+      productId: product?.id,
+      resolved: finalImage || null
+    });
+
+    return finalImage;
   }, [product]);
   // Calculate pricing with automatic discounts
   const pricing = React.useMemo(() => {
@@ -124,20 +157,30 @@ export function ProductCard({ product, viewMode = 'grid' }: ProductCardProps) {
   }, [product.description]);
   if (viewMode === 'list') {
     return (
-      <Card onClick={() => router.push(`/products/${product.id}`)} className="cursor-pointer flex flex-col md:flex-row overflow-hidden transition-all duration-300 hover:shadow-lg">
+      <Card onClick={handleCardClick} className="cursor-pointer flex flex-col md:flex-row overflow-hidden transition-all duration-300 hover:shadow-lg">
         <div className="w-full md:w-48 lg:w-64 relative">
           <div className="block">
-            <div className="aspect-square md:aspect-[4/3] w-full relative bg-gray-100">
-              <img
-                src={displayImage || 'https://placehold.co/300x300/e2e8f0/64748b.png?text=Product+Image'}
-                alt={product.name}
-                className="w-full h-full object-cover"
-                loading="lazy"
-                onError={(e) => {
-                  const target = e.target as HTMLImageElement;
-                  target.src = 'https://placehold.co/300x300/e2e8f0/64748b.png?text=Product+Image';
-                }}
-              />
+            <div className="aspect-square md:aspect-[4/3] w-full relative bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
+              {
+                !hasImageError && displayImage ? (
+                  <img
+                    src={displayImage}
+                    alt={product.name}
+                    className="w-full h-full object-contain p-4"
+                    loading="lazy"
+                    onError={() => setHasImageError(true)}
+                  />
+                ) : (
+                  <div className="flex items-center justify-center w-full h-full">
+                    <div className="text-center">
+                      <div className="w-16 h-16 mx-auto mb-2 rounded-full bg-gray-200 flex items-center justify-center">
+                        <span className="text-2xl font-bold text-gray-400">{product.name?.charAt(0).toUpperCase() || 'P'}</span>
+                      </div>
+                      <p className="text-xs text-gray-400">No Image</p>
+                    </div>
+                  </div>
+                )
+              }
             </div>
           </div>
         </div>
@@ -270,10 +313,16 @@ export function ProductCard({ product, viewMode = 'grid' }: ProductCardProps) {
               
               {/* Add to Cart */}
               <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm">
+                <Button variant="outline" size="sm" onClick={handleQuickView}>
                   <Eye className="h-4 w-4" />
                 </Button>
-                <AddToCartButton product={product} />
+                {stockInfo.text === 'Out of Stock' ? (
+                  <Button size="sm" disabled className="opacity-50">
+                    Out of Stock
+                  </Button>
+                ) : (
+                  <AddToCartButton product={product} />
+                )}
               </div>
             </div>
           </div>
@@ -284,22 +333,46 @@ export function ProductCard({ product, viewMode = 'grid' }: ProductCardProps) {
 
   // Grid view (default)
   return (
-    <Card onClick={() => router.push(`/products/${product.id}`)} className="cursor-pointer flex flex-col h-full overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-1 group">
-      <CardHeader className="p-0 relative">
+    <Card onClick={handleCardClick} className="cursor-pointer flex flex-col transition-all duration-300 hover:shadow-lg hover:-translate-y-1 group">
+      <CardHeader className="p-0 relative flex-shrink-0">
         <div className="block">
-          <div className="aspect-square w-full relative overflow-hidden bg-gray-100">
-            <img
-              src={displayImage || 'https://placehold.co/400x400/e2e8f0/64748b.png?text=Product+Image'}
-              alt={product.name}
-              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
-              loading="lazy"
-              onError={(e) => {
-                const target = e.target as HTMLImageElement;
-                target.src = 'https://placehold.co/400x400/e2e8f0/64748b.png?text=Product+Image';
-              }}
-            />
+          <div className="h-[280px] w-full relative overflow-hidden bg-gradient-to-br from-gray-50 to-gray-100">
+            {displayImage ? (
+              <img
+                src={displayImage}
+                alt={product.name}
+                className="w-full h-full object-contain p-4 transition-transform duration-300 group-hover:scale-105"
+                loading="lazy"
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement;
+                  target.style.display = 'none';
+                  const parent = target.parentElement;
+                  if (parent) {
+                    parent.innerHTML = `
+                      <div class="w-full h-full flex items-center justify-center">
+                        <div class="text-center">
+                          <div class="w-20 h-20 mx-auto mb-3 rounded-full bg-gray-200 flex items-center justify-center">
+                            <span class="text-3xl font-bold text-gray-400">${product.name?.charAt(0).toUpperCase() || 'P'}</span>
+                          </div>
+                          <p class="text-sm text-gray-400">No Image</p>
+                        </div>
+                      </div>
+                    `;
+                  }
+                }}
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center">
+                <div className="text-center">
+                  <div className="w-20 h-20 mx-auto mb-3 rounded-full bg-gray-200 flex items-center justify-center">
+                    <span className="text-3xl font-bold text-gray-400">{product.name?.charAt(0).toUpperCase() || 'P'}</span>
+                  </div>
+                  <p className="text-sm text-gray-400">No Image</p>
+                </div>
+              </div>
+            )}
           </div>
-  </div>
+        </div>
       </CardHeader>
       
       <CardContent className="flex-1 p-4 flex flex-col">
@@ -335,7 +408,7 @@ export function ProductCard({ product, viewMode = 'grid' }: ProductCardProps) {
           </div>
           
           {/* Product Name */}
-          <CardTitle className="text-lg font-bold leading-tight line-clamp-2 mb-3 text-foreground">
+          <CardTitle className="text-lg font-bold leading-tight line-clamp-2 mb-3 text-foreground min-h-[3.5rem] flex items-start">
             <span className="hover:text-primary transition-colors">{product.name}</span>
           </CardTitle>
           
@@ -430,7 +503,13 @@ export function ProductCard({ product, viewMode = 'grid' }: ProductCardProps) {
               Free delivery
             </span>
           </div>
-          <AddToCartButton product={product} size="sm" />
+          {stockInfo.text === 'Out of Stock' ? (
+            <Button size="sm" disabled className="opacity-50">
+              Out of Stock
+            </Button>
+          ) : (
+            <AddToCartButton product={product} size="sm" />
+          )}
         </div>
       </CardFooter>
     </Card>
