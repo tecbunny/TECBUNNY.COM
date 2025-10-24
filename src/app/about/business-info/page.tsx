@@ -82,11 +82,29 @@ export default function BusinessInfoPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="p-4 bg-green-50 rounded-lg border border-green-200">
                 <h3 className="text-lg font-semibold text-green-800 mb-2">Corporate Identity Number (CIN)</h3>
-                <p className="text-green-700 font-mono text-lg">U80200GA2025PTC017488</p>
+                <p className="text-green-700 font-mono text-lg mb-3">U80200GA2025PTC017488</p>
+                <a 
+                  href="/documents/COI.pdf" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 text-sm text-green-700 hover:text-green-800 font-medium"
+                >
+                  <FileText className="h-4 w-4" />
+                  Download Certificate of Incorporation
+                </a>
               </div>
               <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
                 <h3 className="text-lg font-semibold text-blue-800 mb-2">GST Identification Number (GSTIN)</h3>
-                <p className="text-blue-700 font-mono text-lg">30AAMCT1608G1ZO</p>
+                <p className="text-blue-700 font-mono text-lg mb-3">30AAMCT1608G1ZO</p>
+                <a 
+                  href="/documents/GSTIN.pdf" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 text-sm text-blue-700 hover:text-blue-800 font-medium"
+                >
+                  <FileText className="h-4 w-4" />
+                  Download GST Certificate
+                </a>
               </div>
               <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
                 <h3 className="text-lg font-semibold text-purple-800 mb-2">Permanent Account Number (PAN)</h3>
@@ -190,6 +208,77 @@ export default function BusinessInfoPage() {
                   We serve customers across India with online sales and delivery services. 
                   Our primary service areas include Goa, Maharashtra, Karnataka, and other major states.
                 </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Official Documents */}
+        <Card className="mb-8">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <FileText className="h-6 w-6 text-blue-600" />
+              Official Business Documents
+            </CardTitle>
+            <CardDescription>
+              Download authentic business registration documents for verification
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="flex items-center justify-between p-6 bg-gray-50 rounded-lg border border-gray-200 hover:border-gray-300 transition-colors">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
+                    <FileText className="h-6 w-6 text-red-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900">Certificate of Incorporation</h3>
+                    <p className="text-sm text-gray-600">Official company registration document</p>
+                  </div>
+                </div>
+                <a 
+                  href="/documents/COI.pdf" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors font-medium"
+                >
+                  <FileText className="h-4 w-4" />
+                  View PDF
+                </a>
+              </div>
+              
+              <div className="flex items-center justify-between p-6 bg-gray-50 rounded-lg border border-gray-200 hover:border-gray-300 transition-colors">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                    <Shield className="h-6 w-6 text-green-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900">GST Registration Certificate</h3>
+                    <p className="text-sm text-gray-600">Goods and Services Tax registration</p>
+                  </div>
+                </div>
+                <a 
+                  href="/documents/GSTIN.pdf" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors font-medium"
+                >
+                  <Shield className="h-4 w-4" />
+                  View PDF
+                </a>
+              </div>
+            </div>
+            
+            <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+              <div className="flex items-start gap-3">
+                <Shield className="h-5 w-5 text-blue-600 mt-0.5" />
+                <div>
+                  <h3 className="font-semibold text-blue-800 mb-1">Document Authenticity</h3>
+                  <p className="text-sm text-blue-700">
+                    These are official documents issued by the Government of India. All information is verifiable 
+                    through respective government portals. Documents are provided for transparency and business verification purposes.
+                  </p>
+                </div>
               </div>
             </div>
           </CardContent>

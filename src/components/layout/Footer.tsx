@@ -3,7 +3,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 
-import { Facebook, Twitter, Instagram, Linkedin, Youtube, Globe } from 'lucide-react';
+import { Facebook, Twitter, Instagram, Linkedin, Youtube, Globe, FileText, Shield } from 'lucide-react';
 
 import { Button } from '../../components/ui/enhanced-ui';
 import { Input } from '../../components/ui/enhanced-ui';
@@ -136,6 +136,31 @@ export function Footer() {
               <Link href="/info/policies/shipping" className="text-gray-300 hover:text-blue-400 transition-colors">Shipping Policy</Link>
               <Link href="/info/policies/refund-cancellation" className="text-gray-300 hover:text-blue-400 transition-colors">Refund & Cancellation</Link>
             </nav>
+            
+            {/* Business Documents */}
+            <div className="mt-4 pt-4 border-t border-gray-700">
+              <h5 className="text-sm font-semibold text-blue-300 mb-2">Official Documents</h5>
+              <div className="flex flex-col gap-1">
+                <a 
+                  href="/documents/COI.pdf" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-xs text-gray-400 hover:text-blue-400 transition-colors flex items-center gap-1"
+                >
+                  <FileText className="h-3 w-3" />
+                  Certificate of Incorporation
+                </a>
+                <a 
+                  href="/documents/GSTIN.pdf" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-xs text-gray-400 hover:text-blue-400 transition-colors flex items-center gap-1"
+                >
+                  <Shield className="h-3 w-3" />
+                  GST Registration
+                </a>
+              </div>
+            </div>
           </div>
           
           <div className="space-y-4">
