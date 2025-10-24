@@ -285,6 +285,73 @@ export default function AboutPage() {
         </div>
       </section>
 
+      {/* Business Credentials Section */}
+      <section className="py-20 bg-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-16">
+            <h2 className="text-4xl font-bold text-gray-900 mb-4">Business Credentials</h2>
+            <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+              TECBUNNY SOLUTIONS PRIVATE LIMITED - A legally registered and compliant business entity
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-12">
+            <div className="text-center p-6 bg-green-50 rounded-2xl border border-green-200">
+              <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+              </div>
+              <h3 className="text-lg font-bold text-green-800 mb-2">GST Registered</h3>
+              <p className="text-sm text-green-700 font-mono">30AAMCT1608G1ZO</p>
+            </div>
+
+            <div className="text-center p-6 bg-blue-50 rounded-2xl border border-blue-200">
+              <div className="w-16 h-16 bg-blue-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
+                </svg>
+              </div>
+              <h3 className="text-lg font-bold text-blue-800 mb-2">MCA Registered</h3>
+              <p className="text-sm text-blue-700 font-mono">U80200GA2025PTC017488</p>
+            </div>
+
+            <div className="text-center p-6 bg-purple-50 rounded-2xl border border-purple-200">
+              <div className="w-16 h-16 bg-purple-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v2a2 2 0 002 2z"></path>
+                </svg>
+              </div>
+              <h3 className="text-lg font-bold text-purple-800 mb-2">PAN Verified</h3>
+              <p className="text-sm text-purple-700 font-mono">AAMCT1608G</p>
+            </div>
+
+            <div className="text-center p-6 bg-orange-50 rounded-2xl border border-orange-200">
+              <div className="w-16 h-16 bg-orange-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                </svg>
+              </div>
+              <h3 className="text-lg font-bold text-orange-800 mb-2">Registered Office</h3>
+              <p className="text-sm text-orange-700">Goa, India</p>
+            </div>
+          </div>
+
+          <div className="text-center">
+            <p className="text-gray-600 mb-6">
+              We are a legally compliant business entity registered with all required authorities.
+            </p>
+            <Link 
+              href="/about/business-info"
+              className="bg-blue-600 text-white px-8 py-3 rounded-full font-semibold hover:bg-blue-700 smooth-transition inline-block"
+            >
+              View Complete Business Information
+            </Link>
+          </div>
+        </div>
+      </section>
+
       {/* Contact Section */}
       <section className="py-20 bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

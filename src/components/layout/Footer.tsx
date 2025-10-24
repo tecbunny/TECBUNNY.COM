@@ -128,6 +128,7 @@ export function Footer() {
             <h4 className="text-lg font-semibold text-blue-300">Company</h4>
             <nav className="flex flex-col gap-2">
               <Link href="/about" className="text-gray-300 hover:text-blue-400 transition-colors">About Us</Link>
+              <Link href="/about/business-info" className="text-gray-300 hover:text-blue-400 transition-colors">Business Info</Link>
               <Link href="/contact" className="text-gray-300 hover:text-blue-400 transition-colors">Contact</Link>
               <Link href="/info/policies/privacy" className="text-gray-300 hover:text-blue-400 transition-colors">Privacy Policy</Link>
               <Link href="/info/policies/terms" className="text-gray-300 hover:text-blue-400 transition-colors">Terms of Service</Link>
