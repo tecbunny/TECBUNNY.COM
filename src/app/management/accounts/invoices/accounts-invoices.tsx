@@ -5,6 +5,8 @@ import * as React from 'react';
 
 import { MoreHorizontal, Printer } from 'lucide-react';
 
+import { formatOrderNumber } from '../../../../lib/order-utils';
+
 import {
   Card,
   CardContent,
@@ -114,7 +116,7 @@ export default function InvoicesPage() {
                 ))
               ) : orders.map((order: Order) => (
                 <TableRow key={order.id}>
-                  <TableCell className="font-medium">{order.id.substring(0,8)}...</TableCell>
+                  <TableCell className="font-medium">{formatOrderNumber(order.id)}</TableCell>
                   <TableCell>{order.customer_name}</TableCell>
                   <TableCell>{new Date(order.created_at).toLocaleDateString()}</TableCell>
                   <TableCell>

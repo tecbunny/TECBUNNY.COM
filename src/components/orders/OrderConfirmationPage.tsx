@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { CheckCircle, Package, MapPin, Phone, Mail, Calendar, Hash } from 'lucide-react';
 
+import { formatOrderNumber } from '../../lib/order-utils';
+
 import { useOrder } from '../../context/OrderProvider';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -164,7 +166,7 @@ export default function OrderConfirmationPage({ orderId }: OrderConfirmationPage
           </p>
           <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
             <Hash className="h-4 w-4" />
-            Order ID: {order.id.slice(0, 8).toUpperCase()}
+            Order ID: {formatOrderNumber(order.id)}
           </div>
         </div>
 

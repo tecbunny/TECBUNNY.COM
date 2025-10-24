@@ -11,6 +11,7 @@ import { useToast } from '../../../../hooks/use-toast';
 import { Skeleton } from '../../../../components/ui/skeleton';
 import { createClient } from '../../../../lib/supabase/client';
 import { OrderActions } from '../../../../components/sales/OrderActions';
+import { formatOrderNumber } from '../../../../lib/order-utils';
 
 export default function PickupOrdersPage() {
   const [orders, setOrders] = React.useState<Order[]>([]);
@@ -109,7 +110,7 @@ export default function PickupOrdersPage() {
                         ))
                       ) : orders.map(order => (
                             <TableRow key={order.id}>
-                                <TableCell className="font-medium">{order.id.substring(0,8)}...</TableCell>
+                                <TableCell className="font-medium">{formatOrderNumber(order.id)}</TableCell>
                                 <TableCell>
                                   <div>
                                     <p className="font-medium">{order.customer_name}</p>

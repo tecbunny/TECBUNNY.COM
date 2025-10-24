@@ -9,6 +9,7 @@ import { useCart } from '../lib/hooks';
 import { useAuth } from '../lib/hooks';
 import { logger } from '../lib/logger';
 import { deserializeOrder, normalizeOrderStatus } from '../lib/orders/normalizers';
+import { formatOrderNumber } from '../lib/order-utils';
 
 interface OrderContextType {
   orders: Order[];
@@ -151,7 +152,7 @@ export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
       toast({
         title: "Order Created Successfully!",
-        description: `Order #${createdOrder.id.slice(0, 8)} has been placed.`,
+        description: `Order #${formatOrderNumber(createdOrder.id)} has been placed.`,
       });
 
       return hydratedOrder;

@@ -11,6 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../..
 import { Badge } from '../../../../components/ui/badge';
 import { Separator } from '../../../../components/ui/separator';
 import { useToast } from '../../../../hooks/use-toast';
+import { formatOrderNumber } from '../../../../lib/order-utils';
 
 interface Order {
   id: string;
@@ -363,7 +364,7 @@ function PhonePePaymentContent() {
               <div className="bg-gray-50 rounded-lg p-4 space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Order ID:</span>
-                  <span className="font-mono text-xs">{order.id.substring(0, 8)}...</span>
+                  <span className="font-mono text-xs">{formatOrderNumber(order.id)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Customer:</span>

@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 
 import { logger } from '../../lib/logger';
+import { formatOrderNumber } from '../../lib/order-utils';
 
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
@@ -144,7 +145,7 @@ export function OrderActions({ order, onStatusUpdate, variant = 'dropdown' }: Or
       }
 
       try {
-        const pickupCode = order.id.slice(0, 8).toUpperCase();
+        const pickupCode = formatOrderNumber(order.id);
         const response = await fetch('/api/email/pickup', {
           method: 'POST',
           headers: {
@@ -276,7 +277,7 @@ export function OrderActions({ order, onStatusUpdate, variant = 'dropdown' }: Or
       onStatusUpdate();
       toast({
         title: 'Order Updated',
-        description: `Order ${order.id.substring(0, 8)}... is now ${newStatus}.`
+        description: `Order ${formatOrderNumber(order.id)} is now ${newStatus}.`
       });
     } catch (error) {
       logger.error('Error updating order', { error, orderId: order.id, newStatus });
@@ -641,7 +642,7 @@ export function OrderActions({ order, onStatusUpdate, variant = 'dropdown' }: Or
             <DialogHeader>
               <DialogTitle>Payment Confirmation</DialogTitle>
               <DialogDescription>
-                Has the payment for order {order.id.substring(0, 8)}... been confirmed?
+                Has the payment for order {formatOrderNumber(order.id)} been confirmed?
                 <br />
                 <strong>Amount: ₹{order.total.toFixed(2)}</strong>
                 <br />
@@ -676,7 +677,7 @@ export function OrderActions({ order, onStatusUpdate, variant = 'dropdown' }: Or
             <DialogHeader>
               <DialogTitle>Order Confirmation</DialogTitle>
               <DialogDescription>
-                Do you want to accept or reject order {order.id.substring(0, 8)}...?
+                Do you want to accept or reject order {formatOrderNumber(order.id)}?
                 <br />
                 <strong>Customer: {order.customer_name}</strong>
                 <br />
@@ -714,7 +715,7 @@ export function OrderActions({ order, onStatusUpdate, variant = 'dropdown' }: Or
             <DialogHeader>
               <DialogTitle>Cancel Order</DialogTitle>
               <DialogDescription>
-                Are you sure you want to cancel order {order.id.substring(0, 8)}...?
+                Are you sure you want to cancel order {formatOrderNumber(order.id)}?
                 Please provide a reason for cancellation.
               </DialogDescription>
             </DialogHeader>

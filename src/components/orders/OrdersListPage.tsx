@@ -4,6 +4,8 @@ import React, { useEffect, useState } from 'react';
 
 import { Package, Search, Calendar, MapPin, CreditCard, Eye } from 'lucide-react';
 
+import { formatOrderNumber } from '../../lib/order-utils';
+
 import { useOrder } from '../../context/OrderProvider';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -153,7 +155,7 @@ export default function OrdersListPage() {
                     <div className="space-y-3">
                       <div className="flex items-center gap-3">
                         <h3 className="font-semibold text-lg">
-                          Order #{order.id.slice(0, 8).toUpperCase()}
+                          Order #{formatOrderNumber(order.id)}
                         </h3>
                         <Badge className={getStatusColor(order.status)}>
                           {order.status}

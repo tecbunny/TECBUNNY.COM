@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Separator } from '../../components/ui/separator';
 import { Button } from '../../components/ui/button';
 import { Logo } from '../../components/ui/logo';
+import { formatOrderNumber } from '../../lib/order-utils';
 
 export interface CompanySettings {
     name: string;
@@ -124,7 +125,7 @@ export function InvoiceTemplate({ order, settings, autoPrint }: InvoiceTemplateP
                             </div>
                             <div className="text-left md:text-right">
                                 <h2 className="text-xl font-semibold uppercase tracking-widest text-primary sm:text-2xl">Invoice</h2>
-                                <p className="text-sm text-gray-500 sm:text-base">#{order.id}</p>
+                                <p className="text-sm text-gray-500 sm:text-base">#{formatOrderNumber(order.id)}</p>
                             </div>
                         </div>
                     </CardHeader>

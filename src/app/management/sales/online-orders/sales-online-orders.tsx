@@ -13,6 +13,7 @@ import { createClient } from '../../../../lib/supabase/client';
 import { useAuth } from '../../../../lib/hooks';
 import { isManagerClient } from '../../../../lib/permissions-client';
 import { OrderActions } from '../../../../components/sales/OrderActions';
+import { formatOrderNumber } from '../../../../lib/order-utils';
 
 export default function OnlineOrdersPage() {
   const [orders, setOrders] = React.useState<Order[]>([]);
@@ -126,7 +127,7 @@ export default function OnlineOrdersPage() {
                           ))
                         ) : orders.map(order => (
                                 <TableRow key={order.id}>
-                                    <TableCell className="font-medium">{order.id.substring(0,8)}...</TableCell>
+                                    <TableCell className="font-medium">{formatOrderNumber(order.id)}</TableCell>
                                     <TableCell>
                                       <div>
                                         <p className="font-medium">{order.customer_name}</p>

@@ -15,6 +15,7 @@ import { deserializeOrder } from '../../../../lib/orders/normalizers';
 import { useToast } from '../../../../hooks/use-toast';
 import { createClient } from '../../../../lib/supabase/client';
 import { OrderActions } from '../../../../components/sales/OrderActions';
+import { formatOrderNumber } from '../../../../lib/order-utils';
 
 const STATUS_VARIANT: Record<OrderStatus, 'default' | 'destructive' | 'outline' | 'secondary'> = {
   'Pending': 'outline',
@@ -203,7 +204,7 @@ export default function AdminOrders() {
               ) : (
                 filteredOrders.map(order => (
                   <TableRow key={order.id}>
-                    <TableCell className="font-medium">{order.id.substring(0, 8)}…</TableCell>
+                    <TableCell className="font-medium">{formatOrderNumber(order.id)}</TableCell>
                     <TableCell>
                       <div className="space-y-1">
                         <p className="font-medium">{order.customer_name || 'Unknown customer'}</p>

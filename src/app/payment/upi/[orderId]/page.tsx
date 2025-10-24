@@ -14,6 +14,7 @@ import { Badge } from '../../../../components/ui/badge';
 import { Separator } from '../../../../components/ui/separator';
 import { useToast } from '../../../../hooks/use-toast';
 import { logger } from '../../../../lib/logger';
+import { formatOrderNumber } from '../../../../lib/order-utils';
 
 
 interface Order {
@@ -259,7 +260,7 @@ export default function UPIPaymentPage() {
           Back
         </Button>
         <h1 className="text-3xl font-bold">UPI Payment</h1>
-        <p className="text-gray-600">Order #{order.id.slice(0, 8)}</p>
+        <p className="text-gray-600">Order #{formatOrderNumber(order.id)}</p>
       </div>
 
       <div className="space-y-6">
@@ -348,7 +349,7 @@ export default function UPIPaymentPage() {
                 </div>
               </div>
               <p className="text-sm text-gray-600">
-                Transfer ₹{order.total.toFixed(2)} to the above UPI ID with reference: Order {order.id.slice(0, 8)}
+                Transfer ₹{order.total.toFixed(2)} to the above UPI ID with reference: Order {formatOrderNumber(order.id)}
               </p>
             </div>
 

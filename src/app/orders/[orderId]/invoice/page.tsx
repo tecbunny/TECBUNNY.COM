@@ -81,7 +81,9 @@ async function loadCompanySettings(): Promise<CompanySettings> {
 }
 
 export async function generateMetadata({ params }: InvoicePageProps): Promise<Metadata> {
-  const shortId = params.orderId?.slice(0, 8)?.toUpperCase() ?? 'Invoice';
+  // Import the utility function dynamically since this is a server component
+  const { formatOrderNumber } = await import('@/lib/order-utils');
+  const shortId = params.orderId ? formatOrderNumber(params.orderId) : 'Invoice';
   return {
     title: `Invoice ${shortId} | TecBunny Solutions`,
     description: `Download a professionally formatted invoice for order ${shortId}.`,
