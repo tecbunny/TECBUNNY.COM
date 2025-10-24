@@ -24,26 +24,28 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0; // Force no caching
 
 export default async function CustomisedSetupsPage({
-  searchParams,
+  searchParams: _searchParams,
 }: {
   searchParams: { refresh?: string };
 }) {
   let blueprint = null;
   try {
     blueprint = await getCustomSetupBlueprintSummary(DEFAULT_CUSTOM_SETUP_TEMPLATE_SLUG);
-    console.log('Public page blueprint fetch result:', {
-      success: !!blueprint,
-      systemCount: blueprint?.systems?.length || 0,
-      slug: DEFAULT_CUSTOM_SETUP_TEMPLATE_SLUG,
-      timestamp: new Date().toISOString(),
-      refreshParam: searchParams.refresh || 'none',
-      samplePricing: blueprint?.systems?.[0]?.components?.[0]?.options?.[0] ? {
-        label: blueprint.systems[0].components[0].options[0].label,
-        unitPrice: blueprint.systems[0].components[0].options[0].unitPrice,
-        metadata: blueprint.systems[0].components[0].options[0].metadata
-      } : null
-    });
+    // Debug log for blueprint fetch - can be removed in production
+    // console.log('Public page blueprint fetch result:', {
+    //   success: !!blueprint,
+    //   systemCount: blueprint?.systems?.length || 0,
+    //   slug: DEFAULT_CUSTOM_SETUP_TEMPLATE_SLUG,
+    //   timestamp: new Date().toISOString(),
+    //   refreshParam: searchParams.refresh || 'none',
+    //   samplePricing: blueprint?.systems?.[0]?.components?.[0]?.options?.[0] ? {
+    //     label: blueprint.systems[0].components[0].options[0].label,
+    //     unitPrice: blueprint.systems[0].components[0].options[0].unitPrice,
+    //     metadata: blueprint.systems[0].components[0].options[0].metadata
+    //   } : null
+    // });
   } catch (error) {
+    // Log error for debugging - consider using proper logging service in production
     console.error('Failed to fetch blueprint for public page:', error);
   }
 

@@ -355,7 +355,7 @@ export default function AdminCustomSetupManager() {
   const [pricingDraft, setPricingDraft] = useState<PricingDraftState>({});
   const [salePricingDraft, setSalePricingDraft] = useState<PricingDraftState>({});
   const [pendingOptionUpdates, setPendingOptionUpdates] = useState<PendingOptionState>({});
-  const [selectionDraft, setSelectionDraft] = useState<SelectionDraft>({
+  const [_selectionDraft, setSelectionDraft] = useState<SelectionDraft>({
     componentDefaultQuantities: {},
     systemBaseFees: {},
   });

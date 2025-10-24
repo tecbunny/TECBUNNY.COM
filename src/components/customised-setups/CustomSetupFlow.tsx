@@ -706,14 +706,14 @@ export function CustomSetupFlow({ blueprint }: CustomSetupFlowProps) {
   const installationOption = pricingCatalog.installationOption;
   const selectableHddOptions = hddOptions.length ? hddOptions : FALLBACK_HDD_OPTIONS;
 
-  // Debug: Log pricing source
-  console.log('CustomSetupFlow pricing source:', {
-    hasBlueprintData: !!blueprint,
-    blueprintSystems: blueprint?.systems?.length || 0,
-    usingFallback: !blueprint,
-    timestamp: new Date().toISOString(),
-    sampleDvrPricing: analogPricing.dvr[0] || null
-  });
+  // Debug: Log pricing source - disabled for production
+  // console.log('CustomSetupFlow pricing source:', {
+  //   hasBlueprintData: !!blueprint,
+  //   blueprintSystems: blueprint?.systems?.length || 0,
+  //   usingFallback: !blueprint,
+  //   timestamp: new Date().toISOString(),
+  //   sampleDvrPricing: analogPricing.dvr[0] || null
+  // });
 
   const [system, setSystem] = useState<SetupSystem>('analog');
   const [cameraCount, setCameraCount] = useState<number>(4);
