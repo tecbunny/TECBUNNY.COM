@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { logger } from '../../../../lib/logger';
 import { AdminAuthError, requireAdminContext } from '../../../../lib/auth/admin-guard';
 import { isSupabaseServiceConfigured } from '../../../../lib/supabase/server';
+import { formatOrderNumber } from '../../../../lib/order-utils';
 
 // Disable caching for this route
 export const dynamic = 'force-dynamic';
@@ -98,7 +99,7 @@ export async function GET(_request: NextRequest) {
       .map(order => ({
         id: order.id,
         type: 'order',
-        description: `Order #${order.id} - ₹${coerceCurrency(order).toLocaleString('en-IN')}`,
+        description: `Order #${formatOrderNumber(order.id)} - ₹${coerceCurrency(order).toLocaleString('en-IN')}`,
         date: order.created_at,
         status: order.status
       }));
