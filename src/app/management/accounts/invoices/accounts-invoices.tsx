@@ -5,7 +5,7 @@ import * as React from 'react';
 
 import { MoreHorizontal, Printer } from 'lucide-react';
 
-import { formatOrderNumber } from '../../../../lib/order-utils';
+import { formatInvoiceDate, formatOrderNumber } from '../../../../lib/order-utils';
 
 import {
   Card,
@@ -118,7 +118,7 @@ export default function InvoicesPage() {
                 <TableRow key={order.id}>
                   <TableCell className="font-medium">{formatOrderNumber(order.id)}</TableCell>
                   <TableCell>{order.customer_name}</TableCell>
-                  <TableCell>{new Date(order.created_at).toLocaleDateString()}</TableCell>
+                  <TableCell>{formatInvoiceDate(order.created_at)}</TableCell>
                   <TableCell>
                     <Badge variant={getBadgeVariant(order.status)}>
                         {order.status}

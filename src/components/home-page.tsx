@@ -37,64 +37,7 @@ function HomeContent() {
   return <DefaultHomePage sectionFilter={section} />;
 }
 
-const FALLBACK_PRODUCTS: Product[] = [
-  {
-    id: 'fallback-1',
-    title: 'Premium Laptop Pro 15',
-    name: 'Premium Laptop Pro 15',
-    description: 'Powerful performance with Intel i7 processor, 16GB RAM, 1TB SSD, and 4K display for professionals on the go.',
-    price: 124999,
-    mrp: 139999,
-    category: 'Electronics',
-    image: '/placeholder-product.jpg',
-    popularity: 95,
-    rating: 4.8,
-    reviewCount: 128,
-    created_at: new Date().toISOString()
-  },
-  {
-    id: 'fallback-2',
-    title: 'Smartphone Ultra X',
-    name: 'Smartphone Ultra X',
-    description: '6.7" AMOLED display, triple camera system, 5G connectivity, and all-day battery life with 65W fast charging.',
-    price: 79999,
-    mrp: 89999,
-    category: 'Electronics',
-    image: '/placeholder-product.jpg',
-    popularity: 92,
-    rating: 4.7,
-    reviewCount: 214,
-    created_at: new Date().toISOString()
-  },
-  {
-    id: 'fallback-3',
-    title: 'Smart Home Starter Kit',
-    name: 'Smart Home Starter Kit',
-    description: 'Transform your home with smart lights, voice-controlled hub, and intelligent sensors that work together seamlessly.',
-    price: 24999,
-    mrp: 27999,
-    category: 'Home',
-    image: '/placeholder-product.jpg',
-    popularity: 88,
-    rating: 4.6,
-    reviewCount: 86,
-    created_at: new Date().toISOString()
-  },
-  {
-    id: 'fallback-4',
-    title: 'Gaming Headset GX9',
-    name: 'Gaming Headset GX9',
-    description: 'Immersive 7.1 surround sound, noise-cancelling mic, breathable ear cushions, and RGB lighting for serious gamers.',
-    price: 9999,
-    mrp: 12999,
-    category: 'Gaming',
-    image: '/placeholder-product.jpg',
-    popularity: 90,
-    rating: 4.5,
-    reviewCount: 64,
-    created_at: new Date().toISOString()
-  }
-];
+// Fallback products removed - show empty sections when no products exist
 
 function DefaultHomePage({ sectionFilter }: { sectionFilter?: string | null }) {
   const [featuredProducts, setFeaturedProducts] = React.useState<Product[]>([]);
@@ -119,25 +62,30 @@ function DefaultHomePage({ sectionFilter }: { sectionFilter?: string | null }) {
         // First, check if the products table exists and has the expected structure
         const { data: products, error: productsError } = await supabase
           .from('products')
-          .select('id, title, description, price, popularity, rating, review_count, created_at, status, images, vendor, product_type')
+          .select('id, title, name, description, price, popularity, rating, review_count, created_at, status, images, vendor, product_type')
           .eq('status', 'active')
           .order('created_at', { ascending: false });
 
         if (productsError) {
-          logger.warn('Unable to fetch products (using fallback):', { error: productsError.message });
+          logger.warn('Unable to fetch products:', { error: productsError.message });
           setError(productsError.message || 'Unable to fetch products');
-          setFeaturedProducts(FALLBACK_PRODUCTS.slice(0, 4));
-          setNewArrivals(FALLBACK_PRODUCTS.slice(0, 4));
-          setTrendingProducts(FALLBACK_PRODUCTS.slice(0, 4));
-          setDealProducts(FALLBACK_PRODUCTS.slice(0, 4));
+          // Show empty sections instead of fallback products
+          setFeaturedProducts([]);
+          setNewArrivals([]);
+          setTrendingProducts([]);
+          setDealProducts([]);
           setLoading(false);
           return;
         }
         
         const allProducts: Product[] = (products || [])
           .map(p => {
+            const resolvedTitle = [p.title, p.name]
+              .map((value) => (typeof value === 'string' ? value.trim() : ''))
+              .find((value) => value.length > 0) || 'Unnamed Product';
+
             // Ensure required fields are present
-            if (!p.id || !p.title) {
+            if (!p.id || !resolvedTitle) {
               logger.warn('Product missing required fields:', { product: p });
               return null;
             }
@@ -150,10 +98,34 @@ function DefaultHomePage({ sectionFilter }: { sectionFilter?: string | null }) {
               primaryImage = typeof firstImage === 'string' ? firstImage : firstImage?.url || primaryImage;
             }
             
+            const rawHsn =
+              (p as any).hsnCode ??
+              (p as any).hsn_code ??
+              (p as any).hsn ??
+              (p as any).hsn_sac ??
+              null;
+            const rawGst =
+              (p as any).gstRate ??
+              (p as any).gst_rate ??
+              (p as any).gst_percentage ??
+              null;
+
+            let resolvedGst: number | undefined;
+            if (typeof rawGst === 'number' && Number.isFinite(rawGst)) {
+              resolvedGst = rawGst;
+            } else if (typeof rawGst === 'string') {
+              const parsed = Number.parseFloat(rawGst);
+              resolvedGst = Number.isFinite(parsed) ? parsed : undefined;
+            }
+
+            const resolvedHsn = typeof rawHsn === 'string' && rawHsn.trim().length > 0
+              ? rawHsn.trim()
+              : undefined;
+
             return {
               ...p,
-              name: p.title, // Backwards compatibility - always set name to title
-              title: p.title, // Ensure title is set
+              name: resolvedTitle,
+              title: resolvedTitle,
               image: primaryImage,
               images: p.images, // Keep original images array for ProductCard
               category: p.product_type || 'General',
@@ -163,6 +135,8 @@ function DefaultHomePage({ sectionFilter }: { sectionFilter?: string | null }) {
               description: p.description || 'No description available',
               price: p.price || 0,
               created_at: p.created_at || new Date().toISOString(),
+              hsnCode: resolvedHsn,
+              gstRate: resolvedGst,
             } as Product;
           })
           .filter((p): p is Product => p !== null);
@@ -183,27 +157,38 @@ function DefaultHomePage({ sectionFilter }: { sectionFilter?: string | null }) {
           return ids.map(id => productMap.get(id)).filter((p): p is Product => p !== undefined);
         };
 
-        const loadSectionProducts = (key: string, defaultProducts: Product[]): Product[] => {
+        const loadSectionProducts = (key: string, defaultProducts: Product[], options?: { useFallback?: boolean }): Product[] => {
+          const shouldFallback = options?.useFallback ?? true;
           try {
             const storedIds = settingsMap.get(key);
             const selectedIds = storedIds && typeof storedIds === 'string' ? JSON.parse(storedIds) : [];
-            return Array.isArray(selectedIds) && selectedIds.length > 0 ? getProductsByIds(selectedIds) : defaultProducts;
+            if (Array.isArray(selectedIds) && selectedIds.length > 0) {
+              return getProductsByIds(selectedIds);
+            }
+            return shouldFallback ? defaultProducts : [];
           } catch (error) {
             logger.warn(`Invalid JSON in setting ${key}, using defaults:`, { error, key });
-            return defaultProducts;
+            return shouldFallback ? defaultProducts : [];
           }
         };
 
-        // Create default sections with safe fallbacks
-        const sourceProducts = allProducts.length > 0 ? allProducts : FALLBACK_PRODUCTS;
+        // Create default sections - show empty if no products
+        const sourceProducts = allProducts;
 
         if (allProducts.length === 0) {
-          logger.info('No products returned from Supabase, using fallback dataset');
-          setError('No live products available yet. Showing featured catalog.');
+          logger.info('No products returned from Supabase, showing empty sections');
+          setError('No products available yet. Add products to see them here.');
+          // Set all sections to empty arrays
+          setFeaturedProducts([]);
+          setNewArrivals([]);
+          setTrendingProducts([]);
+          setDealProducts([]);
+          setLoading(false);
+          return;
         }
 
         const defaultFeatured = sourceProducts.slice(0, 4);
-        setFeaturedProducts(loadSectionProducts('featuredProductIds', defaultFeatured));
+        setFeaturedProducts(loadSectionProducts('featuredProductIds', defaultFeatured, { useFallback: false }));
 
         const defaultNewArrivals = [...sourceProducts]
           .sort((a, b) => {
@@ -212,12 +197,12 @@ function DefaultHomePage({ sectionFilter }: { sectionFilter?: string | null }) {
             return dateB - dateA;
           })
           .slice(0, 4);
-        setNewArrivals(loadSectionProducts('newArrivalProductIds', defaultNewArrivals));
+        setNewArrivals(loadSectionProducts('newArrivalProductIds', defaultNewArrivals, { useFallback: false }));
 
         const defaultTrending = [...sourceProducts]
           .sort((a, b) => b.popularity - a.popularity)
           .slice(0, 4);
-        setTrendingProducts(loadSectionProducts('trendingProductIds', defaultTrending));
+        setTrendingProducts(loadSectionProducts('trendingProductIds', defaultTrending, { useFallback: false }));
 
         const defaultDeals = [...sourceProducts]
           .filter(p => p.popularity > 90)

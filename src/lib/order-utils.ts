@@ -2,6 +2,25 @@
  * Utility functions for order ID formatting and display
  */
 
+const invoiceDateFormatter = new Intl.DateTimeFormat('en-GB', {
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+});
+
+export function formatInvoiceDate(value: string | Date | null | undefined): string {
+  if (!value) {
+    return 'N/A';
+  }
+
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return typeof value === 'string' ? value : 'N/A';
+  }
+
+  return invoiceDateFormatter.format(date);
+}
+
 /**
  * Converts a UUID order ID to a short, human-readable order number
  * Format: TB + 4 random alphanumeric characters (e.g., TB7K9M)

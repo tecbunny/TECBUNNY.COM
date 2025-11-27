@@ -72,11 +72,21 @@ export default function CheckoutPage() {
 
   // Auto-select first available payment method
   useEffect(() => {
-    if (!paymentLoading && !selectedPaymentMethod) {
-      const enabledMethods = getEnabledPaymentMethods();
-      if (enabledMethods.length > 0) {
-        setSelectedPaymentMethod(enabledMethods[0].id);
+    if (paymentLoading) {
+      return;
+    }
+
+    const enabledMethods = getEnabledPaymentMethods();
+    if (enabledMethods.length === 0) {
+      if (selectedPaymentMethod) {
+        setSelectedPaymentMethod('');
       }
+      return;
+    }
+
+    const selectedStillAvailable = enabledMethods.some(method => method.id === selectedPaymentMethod);
+    if (!selectedStillAvailable) {
+      setSelectedPaymentMethod(enabledMethods[0].id);
     }
   }, [paymentLoading, selectedPaymentMethod, getEnabledPaymentMethods]);
 
@@ -169,7 +179,7 @@ export default function CheckoutPage() {
         quantity: item.quantity,
         price: item.price,
         gstRate: item.gstRate || 18,
-        hsnCode: item.hsnCode || '9999',
+  hsnCode: item.hsnCode,
         name: item.name,
         serialNumbers: item.serialNumbers || []
       }));
@@ -241,6 +251,14 @@ export default function CheckoutPage() {
         } else if (selectedPaymentMethod === 'phonepe') {
           // Redirect to PhonePe payment page
           window.location.href = `/payment/phonepe/${order.id}`;
+        } else if (selectedPaymentMethod === 'paytm') {
+          const params = new URLSearchParams({
+            orderId: order.id,
+            amount: total.toFixed(2),
+          });
+          window.location.href = `/payment/paytm?${params.toString()}`;
+        } else if (selectedPaymentMethod === 'payu') {
+          window.location.href = `/payment/payu/${order.id}`;
         } else {
           // Redirect to other online payment gateway
           window.location.href = `/payment/${selectedPaymentMethod}/${order.id}`;
@@ -535,6 +553,7 @@ export default function CheckoutPage() {
                           case 'razorpay':
                           case 'stripe':
                           case 'phonepe':
+                          case 'payu':
                           case 'cashfree':
                             return <CreditCard className="h-5 w-5 text-blue-600" />;
                           default:

@@ -2,7 +2,7 @@
 
 import React, { createContext, useState, useCallback, useContext } from 'react';
 
-import type { Order, OrderItem, OrderStatus } from '../lib/types';
+import type { CartItem, Order, OrderItem, OrderStatus } from '../lib/types';
 import { createClient } from '../lib/supabase/client';
 import { useToast } from '../hooks/use-toast';
 import { useCart } from '../lib/hooks';
@@ -33,6 +33,86 @@ export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const { user } = useAuth();
   const supabase = createClient();
 
+  const hydrateCartItemsWithProductData = useCallback(async (items: CartItem[]): Promise<CartItem[]> => {
+    const itemsNeedingLookup = items.filter(item => {
+      const missingHsn = !item.hsnCode || item.hsnCode === '9999';
+      const missingGst = typeof item.gstRate !== 'number' || !Number.isFinite(item.gstRate);
+      return missingHsn || missingGst;
+    });
+
+    if (itemsNeedingLookup.length === 0) {
+      return items;
+    }
+
+    const ids = Array.from(
+      new Set(
+        itemsNeedingLookup
+          .map(item => (item as any).productId || item.id)
+          .filter((value): value is string => typeof value === 'string' && value.length > 0)
+      )
+    );
+    if (ids.length === 0) {
+      return items;
+    }
+
+    const { data, error } = await supabase
+      .from('products')
+      .select('id, hsn_code, hsnCode, hsn, hsn_sac, gst_rate, gstRate, gst_percentage')
+      .in('id', ids);
+
+    if (error || !data) {
+      if (error) {
+        logger.warn('OrderProvider failed to hydrate cart items from products table', {
+          error: error.message,
+          ids,
+        });
+      }
+      return items;
+    }
+
+    const productLookup = new Map<string, any>();
+    data.forEach(record => {
+      if (record?.id) {
+        productLookup.set(record.id, record);
+      }
+    });
+
+    return items.map(item => {
+  const key = (item as any).productId || item.id;
+      const productRecord = key ? productLookup.get(key) : undefined;
+      if (!productRecord) {
+        return item;
+      }
+
+      const resolvedHsn =
+        productRecord.hsnCode ??
+        productRecord.hsn_code ??
+        productRecord.hsn ??
+        productRecord.hsn_sac ??
+        null;
+      const resolvedGst =
+        productRecord.gstRate ??
+        productRecord.gst_rate ??
+        productRecord.gst_percentage ??
+        null;
+
+      const normalizedHsn = resolvedHsn != null ? String(resolvedHsn).trim() : undefined;
+      let normalizedGst: number | undefined;
+      if (typeof resolvedGst === 'number' && Number.isFinite(resolvedGst)) {
+        normalizedGst = resolvedGst;
+      } else if (typeof resolvedGst === 'string') {
+        const parsed = Number.parseFloat(resolvedGst);
+        normalizedGst = Number.isFinite(parsed) ? parsed : undefined;
+      }
+
+      return {
+        ...item,
+        hsnCode: (!item.hsnCode || item.hsnCode === '9999') && normalizedHsn ? normalizedHsn : item.hsnCode,
+        gstRate: typeof item.gstRate === 'number' && Number.isFinite(item.gstRate) ? item.gstRate : normalizedGst ?? item.gstRate,
+      };
+    });
+  }, [supabase]);
+
   const createOrder = useCallback(async (orderData: Partial<Order>): Promise<Order | null> => {
     setIsProcessingOrder(true);
     try {
@@ -59,15 +139,17 @@ export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         return null;
       }
 
-  // Calculate totals
-      const subtotal = cartItems.reduce((total, item) => {
+      const hydratedCartItems = await hydrateCartItemsWithProductData(cartItems);
+
+      // Calculate totals
+      const subtotal = hydratedCartItems.reduce((total, item) => {
         const price = item.price;
         const gstRate = item.gstRate || 18; // Default 18% GST
         const basePrice = price / (1 + (gstRate / 100));
         return total + basePrice * item.quantity;
       }, 0);
 
-      const gstAmount = cartItems.reduce((total, item) => {
+      const gstAmount = hydratedCartItems.reduce((total, item) => {
         const price = item.price;
         const gstRate = item.gstRate || 18;
         const basePrice = price / (1 + (gstRate / 100));
@@ -78,12 +160,12 @@ export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const total = subtotal + gstAmount;
 
       // Convert cart items to order items
-      const orderItems: OrderItem[] = cartItems.map(item => ({
+      const orderItems: OrderItem[] = hydratedCartItems.map(item => ({
         productId: item.id,
         quantity: item.quantity,
         price: item.price,
         gstRate: item.gstRate || 18,
-        hsnCode: item.hsnCode || '9999',
+        hsnCode: item.hsnCode || undefined,
         name: item.name,
         serialNumbers: []
       }));
@@ -96,7 +178,7 @@ export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         gst_amount: Math.round(gstAmount * 100) / 100,
         total: Math.round(total * 100) / 100,
         type: orderData.type || 'Delivery',
-        items: orderItems,
+  items: orderItems,
         processed_by: orderData.processed_by || null,
         customer_email: customerEmail || null,
         customer_phone: customerPhone || null,

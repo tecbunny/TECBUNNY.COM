@@ -67,7 +67,15 @@ export function HeroSection() {
           logger.warn("Unable to fetch featured product (using fallback):", { error: error.message });
           setFeaturedProduct(null);
         } else {
-          setFeaturedProduct(data);
+          const resolvedTitle = [data?.title, data?.name]
+            .map((value) => (typeof value === 'string' ? value.trim() : ''))
+            .find((value) => value.length > 0) || 'Product';
+
+          setFeaturedProduct({
+            ...data,
+            title: resolvedTitle,
+            name: resolvedTitle,
+          });
         }
       } catch (err) {
         logger.warn("Featured product fetch failed, using fallback content", { error: err });
@@ -105,39 +113,39 @@ export function HeroSection() {
             </div>
           </div>
           
-          {featuredProduct && (
-            <Link href={`/products/${featuredProduct.id}`} className="group block">
-              <div className="relative aspect-square w-full max-w-md mx-auto rounded-lg overflow-hidden transition-all duration-300 group-hover:shadow-2xl group-hover:scale-105">
-                 {(() => {
-                   const img = featuredProduct.image || (Array.isArray((featuredProduct as any).images) && (featuredProduct as any).images.length > 0
-                     ? (typeof (featuredProduct as any).images[0] === 'string' ? (featuredProduct as any).images[0] : (featuredProduct as any).images[0]?.url || '')
-                     : '');
-                   return img;
-                 })() ? (
-                   <Image
-                      src={(featuredProduct.image || (Array.isArray((featuredProduct as any).images) && (featuredProduct as any).images.length > 0
-                        ? (typeof (featuredProduct as any).images[0] === 'string' ? (featuredProduct as any).images[0] : (featuredProduct as any).images[0]?.url || '')
-                        : '')) as string}
-                      alt={featuredProduct.name}
+          {featuredProduct && (() => {
+            const resolvedName = featuredProduct.title || featuredProduct.name || 'Product';
+            const primaryImage = featuredProduct.image || (Array.isArray((featuredProduct as any).images) && (featuredProduct as any).images.length > 0
+              ? (typeof (featuredProduct as any).images[0] === 'string' ? (featuredProduct as any).images[0] : (featuredProduct as any).images[0]?.url || '')
+              : '');
+
+            return (
+              <Link href={`/products/${featuredProduct.id}`} className="group block">
+                <div className="relative aspect-square w-full max-w-md mx-auto rounded-lg overflow-hidden transition-all duration-300 group-hover:shadow-2xl group-hover:scale-105">
+                  {primaryImage ? (
+                    <Image
+                      src={primaryImage as string}
+                      alt={resolvedName}
                       fill
                       sizes="(max-width: 768px) 80vw, 40vw"
                       className="object-cover"
                       data-ai-hint="smartwatch product"
                       priority
-                   />
-                 ) : (
-                   <div className="w-full h-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-6xl font-bold">
-                     {featuredProduct.name.charAt(0).toUpperCase()}
-                   </div>
-                 )}
-                <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors" />
-                <div className="absolute bottom-4 left-4 text-white">
-                    <p className="font-semibold text-lg">{featuredProduct.name}</p>
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-6xl font-bold">
+                      {resolvedName.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors" />
+                  <div className="absolute bottom-4 left-4 text-white">
+                    <p className="font-semibold text-lg">{resolvedName}</p>
                     <p className="text-2xl font-bold">₹{featuredProduct.price.toFixed(2)}</p>
+                  </div>
                 </div>
-              </div>
-            </Link>
-          )}
+              </Link>
+            );
+          })()}
 
         </div>
       </div>

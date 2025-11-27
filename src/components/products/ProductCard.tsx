@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation';
 import { Eye, Tag, Truck } from 'lucide-react';
 
 import { logger } from '../../lib/logger';
+import { getProductDisplayImage } from '../../lib/image-utils';
 
 import type { Product } from '../../lib/types';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '../../components/ui/card';
@@ -25,6 +26,7 @@ export function ProductCard({ product, viewMode = 'grid' }: ProductCardProps) {
   const router = useRouter();
   // State to track image load errors
   const [hasImageError, setHasImageError] = React.useState(false);
+  const displayName = product.title || product.name || 'Product';
   const handleCardClick = React.useCallback((event: React.MouseEvent) => {
     const target = event.target as HTMLElement | null;
     if (target && (target.closest('button') || target.closest('a'))) {
@@ -37,7 +39,7 @@ export function ProductCard({ product, viewMode = 'grid' }: ProductCardProps) {
     event.stopPropagation();
     router.push(`/products/${product.id}`);
   }, [router, product.id]);
-  // Normalize primary image: prefer product.image, else first of images, else first of additional_images
+  // Get the display image using the utility function
   const displayImage = React.useMemo(() => {
     logger.debug('product_card_image_sources', {
       productId: product?.id,
@@ -46,21 +48,18 @@ export function ProductCard({ product, viewMode = 'grid' }: ProductCardProps) {
       additionalLength: Array.isArray((product as any)?.additional_images) ? (product as any).additional_images.length : 0
     });
 
-    if (product?.image) return product.image;
-    const firstFromImages = Array.isArray((product as any)?.images) && (product as any).images.length > 0
-      ? (typeof (product as any).images[0] === 'string' ? (product as any).images[0] : (product as any).images[0]?.url || '')
-      : '';
-    const firstFromAdditional = Array.isArray((product as any)?.additional_images) && (product as any).additional_images.length > 0
-      ? (typeof (product as any).additional_images[0] === 'string' ? (product as any).additional_images[0] : (product as any).additional_images[0]?.url || '')
-      : '';
-    
-    const finalImage = firstFromImages || firstFromAdditional || '';
-    logger.debug('product_card_final_image', {
-      productId: product?.id,
-      resolved: finalImage || null
+    const image = getProductDisplayImage(product, {
+      fallbackText: displayName,
+      fallbackSize: '400x400'
     });
 
-    return finalImage;
+    logger.debug('product_card_final_image', {
+      productId: product?.id,
+      resolved: image,
+      fallbackUsed: image?.includes('placehold.co') || false
+    });
+
+    return image;
   }, [product]);
   // Calculate pricing with automatic discounts
   const pricing = React.useMemo(() => {
@@ -130,6 +129,14 @@ export function ProductCard({ product, viewMode = 'grid' }: ProductCardProps) {
           quantity: `Only ${Math.min(quantity, 5)} left`,
           stockText: `Last ${Math.min(quantity, 5)} pieces!`
         };
+      case 'backorder':
+        return {
+          text: 'Available on Backorder',
+          color: 'text-blue-600',
+          bgColor: 'bg-blue-100',
+          quantity: 'Ships when restocked',
+          stockText: 'Backorder'
+        };
       default:
         return {
           text: 'In Stock',
@@ -165,7 +172,7 @@ export function ProductCard({ product, viewMode = 'grid' }: ProductCardProps) {
                 !hasImageError && displayImage ? (
                   <img
                     src={displayImage}
-                    alt={product.name}
+                    alt={displayName}
                     className="w-full h-full object-contain p-4"
                     loading="lazy"
                     onError={() => setHasImageError(true)}
@@ -174,7 +181,7 @@ export function ProductCard({ product, viewMode = 'grid' }: ProductCardProps) {
                   <div className="flex items-center justify-center w-full h-full">
                     <div className="text-center">
                       <div className="w-16 h-16 mx-auto mb-2 rounded-full bg-gray-200 flex items-center justify-center">
-                        <span className="text-2xl font-bold text-gray-400">{product.name?.charAt(0).toUpperCase() || 'P'}</span>
+                        <span className="text-2xl font-bold text-gray-400">{displayName.charAt(0).toUpperCase()}</span>
                       </div>
                       <p className="text-xs text-gray-400">No Image</p>
                     </div>
@@ -219,7 +226,7 @@ export function ProductCard({ product, viewMode = 'grid' }: ProductCardProps) {
               
               {/* Product Name */}
               <CardTitle className="text-2xl mb-3 leading-tight font-bold text-foreground">
-                <span className="hover:text-primary transition-colors">{product.name}</span>
+                <span className="hover:text-primary transition-colors">{displayName}</span>
               </CardTitle>
               
               {/* Description */}
@@ -340,7 +347,7 @@ export function ProductCard({ product, viewMode = 'grid' }: ProductCardProps) {
             {displayImage ? (
               <img
                 src={displayImage}
-                alt={product.name}
+                alt={displayName}
                 className="w-full h-full object-contain p-4 transition-transform duration-300 group-hover:scale-105"
                 loading="lazy"
                 onError={(e) => {
@@ -352,7 +359,7 @@ export function ProductCard({ product, viewMode = 'grid' }: ProductCardProps) {
                       <div class="w-full h-full flex items-center justify-center">
                         <div class="text-center">
                           <div class="w-20 h-20 mx-auto mb-3 rounded-full bg-gray-200 flex items-center justify-center">
-                            <span class="text-3xl font-bold text-gray-400">${product.name?.charAt(0).toUpperCase() || 'P'}</span>
+                            <span class="text-3xl font-bold text-gray-400">${displayName.charAt(0).toUpperCase()}</span>
                           </div>
                           <p class="text-sm text-gray-400">No Image</p>
                         </div>
@@ -365,7 +372,7 @@ export function ProductCard({ product, viewMode = 'grid' }: ProductCardProps) {
               <div className="w-full h-full flex items-center justify-center">
                 <div className="text-center">
                   <div className="w-20 h-20 mx-auto mb-3 rounded-full bg-gray-200 flex items-center justify-center">
-                    <span className="text-3xl font-bold text-gray-400">{product.name?.charAt(0).toUpperCase() || 'P'}</span>
+                    <span className="text-3xl font-bold text-gray-400">{displayName.charAt(0).toUpperCase()}</span>
                   </div>
                   <p className="text-sm text-gray-400">No Image</p>
                 </div>
@@ -409,7 +416,7 @@ export function ProductCard({ product, viewMode = 'grid' }: ProductCardProps) {
           
           {/* Product Name */}
           <CardTitle className="text-lg font-bold leading-tight line-clamp-2 mb-3 text-foreground min-h-[3.5rem] flex items-start">
-            <span className="hover:text-primary transition-colors">{product.name}</span>
+            <span className="hover:text-primary transition-colors">{displayName}</span>
           </CardTitle>
           
           {/* Rating */}

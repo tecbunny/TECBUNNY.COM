@@ -43,6 +43,38 @@ export const CartContext = createContext<CartContextType | undefined>(undefined)
 
 const GUEST_SESSION_DURATION = 60 * 60 * 1000; // 1 hour in milliseconds
 
+const resolveHsnCode = (value: unknown): string | undefined => {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }
+  return undefined;
+};
+
+const resolveGstRate = (value: unknown): number | undefined => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
+};
+
+const normalizeCartItem = (item: any): CartItem => {
+  const normalizedHsn = resolveHsnCode(
+    item?.hsnCode ?? item?.hsn_code ?? item?.hsn ?? item?.hsn_sac ?? item?.hsnsac ?? item?.hsnSac
+  );
+  const normalizedGst = resolveGstRate(item?.gstRate ?? item?.gst_rate ?? item?.gst ?? item?.gstpercentage);
+
+  return {
+    ...item,
+    hsnCode: normalizedHsn ?? item?.hsnCode,
+    gstRate: normalizedGst ?? item?.gstRate,
+  };
+};
+
 export const CartProvider: React.FC<{ 
   children: React.ReactNode;
   customerCategory?: CustomerCategory;
@@ -146,7 +178,10 @@ export const CartProvider: React.FC<{
       
       if (storedCart) {
         const parsedCart = JSON.parse(storedCart);
-        setCartItems(parsedCart);
+        const normalizedCart = Array.isArray(parsedCart)
+          ? parsedCart.map(normalizeCartItem)
+          : [];
+        setCartItems(normalizedCart);
       }
       
       if (storedCoupon) {
@@ -250,21 +285,21 @@ export const CartProvider: React.FC<{
 
       // Calculate GST on final amount
       const gstAmount = cartItems.reduce((total, item) => {
-        const gstRate = item.gstRate || 18;
+        const gstRate = typeof item.gstRate === 'number' ? item.gstRate : 18;
         const itemTotal = item.price * item.quantity;
         const basePrice = itemTotal / (1 + (gstRate / 100));
         return total + (itemTotal - basePrice);
       }, 0);
 
       setPricing({
-        subtotal: pricingData.subtotal,
+        subtotal: pricingData.subtotal - gstAmount,
         autoOffer: pricingData.bestOffer,
         autoOfferDiscount: pricingData.offerDiscount,
         appliedCoupon,
         couponDiscount: pricingData.couponDiscount,
         totalDiscount: pricingData.totalDiscount,
         gstAmount,
-        finalTotal: pricingData.finalTotal + gstAmount,
+        finalTotal: pricingData.finalTotal,
         availableCoupons: pricingData.availableCoupons,
         canCombineDiscounts: pricingData.canCombine,
       });
@@ -371,10 +406,12 @@ export const CartProvider: React.FC<{
       const existingItem = prevItems.find((cartItem) => cartItem.id === item.id);
       if (existingItem) {
         return prevItems.map((cartItem) =>
-          cartItem.id === item.id ? { ...cartItem, quantity: cartItem.quantity + quantity } : cartItem
+          cartItem.id === item.id
+            ? normalizeCartItem({ ...cartItem, quantity: cartItem.quantity + quantity })
+            : cartItem
         );
       }
-      return [...prevItems, { ...item, quantity }];
+      return [...prevItems, normalizeCartItem({ ...item, quantity })];
     });
     
     toast({
@@ -408,7 +445,7 @@ export const CartProvider: React.FC<{
       removeFromCart(itemId);
     } else {
       setCartItems((prevItems) =>
-        prevItems.map((item) => (item.id === itemId ? { ...item, quantity } : item))
+        prevItems.map((item) => (item.id === itemId ? normalizeCartItem({ ...item, quantity }) : item))
       );
     }
   }, [removeFromCart, user, isGuestSessionExpired]);
@@ -448,7 +485,8 @@ export const CartProvider: React.FC<{
 
     try {
       // Validate coupon against cart
-      const validation = await offerDiscountService.isCouponApplicable(coupon, cartItems, pricing.subtotal);
+  const cartTotalAmount = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const validation = await offerDiscountService.isCouponApplicable(coupon, cartItems, cartTotalAmount);
       
       if (!validation) {
         toast({
@@ -480,7 +518,7 @@ export const CartProvider: React.FC<{
       });
       return false;
     }
-  }, [cartItems, pricing.subtotal, toast, refreshPricing, getStorageKey, user, isGuestSessionExpired]);
+  }, [cartItems, toast, refreshPricing, getStorageKey, user, isGuestSessionExpired]);
 
   const removeCoupon = useCallback(() => {
     // Check session expiry for guest users
@@ -506,7 +544,7 @@ export const CartProvider: React.FC<{
 
   const cartSubtotal = cartItems.reduce((total, item) => {
     const price = item.price;
-    const gstRate = item.gstRate || 0;
+    const gstRate = typeof item.gstRate === 'number' ? item.gstRate : 18;
     const basePrice = price / (1 + (gstRate / 100));
     return total + basePrice * item.quantity;
   }, 0);

@@ -46,7 +46,94 @@ async function loadOrder(orderId: string): Promise<Order | null> {
       return null;
     }
 
-    return deserializeOrder(data);
+    const order = deserializeOrder(data);
+
+    const itemsNeedingLookup = order.items.filter(item => {
+      const missingHsn = !item.hsnCode || item.hsnCode === '9999';
+      const missingGst = typeof item.gstRate !== 'number' || !Number.isFinite(item.gstRate);
+      return missingHsn || missingGst;
+    });
+
+    if (itemsNeedingLookup.length === 0) {
+      return order;
+    }
+
+    const ids = Array.from(
+      new Set(
+        itemsNeedingLookup
+          .map(item => item.productId || (item as any).product_id || null)
+          .filter((value): value is string => typeof value === 'string' && value.length > 0)
+      )
+    );
+
+    if (ids.length === 0) {
+      return order;
+    }
+
+    const { data: products, error: productError } = await supabase
+      .from('products')
+      .select('id, hsn_code, hsnCode, hsn, hsn_sac, gst_rate, gstRate, gst_percentage')
+      .in('id', ids);
+
+    if (productError || !products) {
+      if (productError) {
+        logger.warn('Invoice page failed to hydrate HSN/GST for items', {
+          orderId,
+          error: productError.message,
+          ids,
+        });
+      }
+      return order;
+    }
+
+    const productLookup = new Map<string, any>();
+    products.forEach(record => {
+      if (record?.id) {
+        productLookup.set(record.id, record);
+      }
+    });
+
+    const enrichedItems = order.items.map(item => {
+      const key = item.productId || (item as any).product_id;
+      const productRecord = key ? productLookup.get(key) : undefined;
+      if (!productRecord) {
+        return item;
+      }
+
+      const resolvedHsn =
+        productRecord.hsnCode ??
+        productRecord.hsn_code ??
+        productRecord.hsn ??
+        productRecord.hsn_sac ??
+        null;
+      const resolvedGst =
+        productRecord.gstRate ??
+        productRecord.gst_rate ??
+        productRecord.gst_percentage ??
+        null;
+
+      const normalizedHsn = resolvedHsn != null ? String(resolvedHsn).trim() : undefined;
+      let normalizedGst: number | undefined;
+      if (typeof resolvedGst === 'number' && Number.isFinite(resolvedGst)) {
+        normalizedGst = resolvedGst;
+      } else if (typeof resolvedGst === 'string') {
+        const parsed = Number.parseFloat(resolvedGst);
+        normalizedGst = Number.isFinite(parsed) ? parsed : undefined;
+      }
+
+      return {
+        ...item,
+        hsnCode: (!item.hsnCode || item.hsnCode === '9999') && normalizedHsn ? normalizedHsn : item.hsnCode,
+        gstRate: typeof item.gstRate === 'number' && Number.isFinite(item.gstRate)
+          ? item.gstRate
+          : normalizedGst ?? item.gstRate,
+      };
+    });
+
+    return {
+      ...order,
+      items: enrichedItems,
+    };
   } catch (error) {
     logger.error('Invoice page encountered an unexpected error while fetching order', {
       orderId,

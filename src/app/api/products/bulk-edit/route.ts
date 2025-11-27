@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { createClient } from '../../../../lib/supabase/server';
+import { createServiceClient } from '../../../../lib/supabase/server';
 import { logger } from '../../../../lib/logger';
 
 // Helper function to properly escape CSV values
@@ -45,6 +45,28 @@ function parseCSVLine(line: string): string[] {
   
   result.push(current.trim());
   return result;
+}
+
+async function fetchProductColumns(supabase: ReturnType<typeof createServiceClient>) {
+  try {
+    const { data, error } = await supabase
+      .from('information_schema.columns' as any)
+      .select('column_name')
+      .eq('table_schema', 'public')
+      .eq('table_name', 'products');
+
+    if (error) {
+      logger.warn('products.bulk_edit.column_metadata_failed', { error: error.message });
+      return null;
+    }
+
+    const columns = new Set<string>((data || []).map((row: any) => String(row.column_name)));
+    logger.debug('products.bulk_edit.column_metadata', { columns: Array.from(columns) });
+    return columns;
+  } catch (error) {
+    logger.warn('products.bulk_edit.column_metadata_unavailable', { error: (error as Error).message });
+    return null;
+  }
 }
 
 // Export products to CSV for bulk editing
@@ -147,13 +169,21 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const supabase = await createClient();
+    const supabase = createServiceClient();
+    const columns = await fetchProductColumns(supabase);
+
+    let query = supabase.from('products').select('*');
+
+    if (!columns || columns.has('handle')) {
+      query = query.order('handle', { ascending: true });
+    }
+
+    if (columns?.has('entry_type')) {
+      query = query.order('entry_type', { ascending: false });
+    }
 
     // Get all products with their data for bulk editing
-    const { data: allProducts, error } = await supabase
-      .from('products')
-      .select('*')
-      .order('handle, entry_type DESC'); // Products first, then variants
+    const { data: allProducts, error } = await query;
 
     if (error) {
       console.error('Error fetching products for export:', error);
@@ -274,7 +304,7 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    const supabase = await createClient();
+  const supabase = createServiceClient();
     
     let updated = 0;
     let created = 0;

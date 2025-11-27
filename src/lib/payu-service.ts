@@ -1,0 +1,149 @@
+import crypto from 'crypto';
+
+export type PayuEnvironment = 'test' | 'production';
+
+type PayuUdfKey =
+  | 'udf1'
+  | 'udf2'
+  | 'udf3'
+  | 'udf4'
+  | 'udf5'
+  | 'udf6'
+  | 'udf7'
+  | 'udf8'
+  | 'udf9'
+  | 'udf10';
+
+export interface PayuConfig {
+  merchantKey: string;
+  merchantSalt: string;
+  environment: PayuEnvironment;
+}
+
+export interface PayuRequestPayload extends Partial<Record<PayuUdfKey, string>> {
+  txnId: string;
+  amount: string;
+  productInfo: string;
+  firstName: string;
+  email: string;
+  phone?: string;
+}
+
+const GATEWAY_URL: Record<PayuEnvironment, string> = {
+  test: 'https://test.payu.in/_payment',
+  production: 'https://secure.payu.in/_payment',
+};
+
+function normaliseValue(value: string | number | null | undefined): string {
+  if (value == null) {
+    return '';
+  }
+  return String(value);
+}
+
+function collectUdfValues(source: Record<string, string | undefined>): string[] {
+  return Array.from({ length: 10 }, (_, index) => {
+    const key = `udf${index + 1}`;
+    return normaliseValue(source[key]);
+  });
+}
+
+export function getPayuPaymentUrl(environment: PayuEnvironment): string {
+  return GATEWAY_URL[environment] ?? GATEWAY_URL.test;
+}
+
+export function normalisePayuEnvironment(value: string | null | undefined): PayuEnvironment {
+  if (!value) {
+    return 'test';
+  }
+
+  const normalised = value.trim().toLowerCase();
+  const condensed = normalised.replace(/[\s_-]+/g, '').replace(/[()]/g, '');
+
+  if (
+    condensed === 'production' ||
+    condensed === 'prod' ||
+    condensed === 'live' ||
+    condensed === 'livemode' ||
+    condensed === 'productionlive' ||
+    condensed === 'golive'
+  ) {
+    return 'production';
+  }
+
+  if (
+    condensed === 'sandbox' ||
+    condensed === 'demo' ||
+    condensed === 'uat' ||
+    condensed === 'staging'
+  ) {
+    return 'test';
+  }
+
+  if (condensed.includes('live') || condensed.includes('prod')) {
+    return 'production';
+  }
+
+  if (
+    condensed.includes('sandbox') ||
+    condensed.includes('demo') ||
+    condensed.includes('test') ||
+    condensed.includes('stage') ||
+    condensed.includes('uat')
+  ) {
+    return 'test';
+  }
+
+  return normalised === 'production' || normalised === 'prod' || normalised === 'live'
+    ? 'production'
+    : 'test';
+}
+
+export function generatePayuHash(config: PayuConfig, payload: PayuRequestPayload): string {
+  const udfValues = collectUdfValues(payload as unknown as Record<string, string | undefined>);
+  const hashSequence = [
+    config.merchantKey,
+    payload.txnId,
+    payload.amount,
+    payload.productInfo,
+    payload.firstName,
+    payload.email,
+    ...udfValues,
+    config.merchantSalt,
+  ].join('|');
+
+  return crypto.createHash('sha512').update(hashSequence).digest('hex');
+}
+
+export function verifyPayuHash(config: PayuConfig, response: Record<string, string | undefined>): boolean {
+  if (!response.hash) {
+    return false;
+  }
+
+  const udfValuesForward = collectUdfValues(response);
+  const udfValuesReversed = [...udfValuesForward].reverse();
+
+  const placeholderSegments = ['', '', '', '', '', ''];
+
+  const additionalCharges = normaliseValue(response.additionalCharges || (response as Record<string, string | undefined>)['additional_charges']);
+
+  const baseSequence = [
+    config.merchantSalt,
+    normaliseValue(response.status),
+    ...placeholderSegments,
+    ...udfValuesReversed,
+    normaliseValue(response.email),
+    normaliseValue(response.firstname),
+    normaliseValue(response.productinfo),
+    normaliseValue(response.amount),
+    normaliseValue(response.txnid),
+    config.merchantKey,
+  ];
+
+  const hashSequence = additionalCharges
+    ? [additionalCharges, ...baseSequence].join('|')
+    : baseSequence.join('|');
+
+  const expectedHash = crypto.createHash('sha512').update(hashSequence).digest('hex');
+  return expectedHash === response.hash.toLowerCase();
+}

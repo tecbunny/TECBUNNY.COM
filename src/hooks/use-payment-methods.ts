@@ -16,6 +16,7 @@ export interface PaymentMethod {
     appId?: string;
     publishableKey?: string;
     merchantKey?: string;
+    merchantSalt?: string;
     websiteName?: string;
     industryType?: string;
     channelId?: string;
@@ -35,6 +36,7 @@ export interface PaymentSettings {
   stripe: PaymentMethod;
   phonepe: PaymentMethod;
   paytm: PaymentMethod;
+  payu: PaymentMethod;
   cashfree: PaymentMethod;
   cod: PaymentMethod;
   upi: PaymentMethod;
@@ -45,7 +47,7 @@ const defaultPaymentSettings: PaymentSettings = {
     id: 'razorpay',
     name: 'Razorpay',
     type: 'online',
-    enabled: true,
+    enabled: false,
     config: {}
   },
   stripe: {
@@ -65,6 +67,13 @@ const defaultPaymentSettings: PaymentSettings = {
   paytm: {
     id: 'paytm',
     name: 'Paytm',
+    type: 'online',
+    enabled: false,
+    config: {}
+  },
+  payu: {
+    id: 'payu',
+    name: 'PayU',
     type: 'online',
     enabled: false,
     config: {}
@@ -161,11 +170,11 @@ export function usePaymentMethods() {
   };
 
   const getEnabledPaymentMethods = () => {
-    return Object.values(paymentMethods).filter(method => method.enabled);
+    return Object.values(paymentMethods).filter(method => method.enabled && method.id !== 'razorpay');
   };
 
   const getOnlinePaymentMethods = () => {
-    return Object.values(paymentMethods).filter(method => method.enabled && method.type === 'online');
+    return Object.values(paymentMethods).filter(method => method.enabled && method.type === 'online' && method.id !== 'razorpay');
   };
 
   const getOfflinePaymentMethods = () => {

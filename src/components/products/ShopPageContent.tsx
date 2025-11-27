@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 
 import { logger } from '../../lib/logger';
+import { getProductDisplayImage } from '../../lib/image-utils';
 
 import { ProductCard } from '../../components/products/ProductCard';
 import { ProductSort } from '../../components/products/ProductSort';
@@ -39,7 +40,7 @@ export function ShopPageContent() {
   const pathname = usePathname();
   
   const searchQuery = searchParams.get('q') || '';
-  const sortOption = searchParams.get('sort') || 'popularity';
+  const sortOption = searchParams.get('sort') || 'newest';
   const categoryFilter = searchParams.get('category') || '';
   const brandFilter = searchParams.get('brand') || '';
   const refresh = searchParams.get('refresh') || '';
@@ -82,11 +83,12 @@ export function ShopPageContent() {
       try {
         logger.info('ShopPage: Fetching products...');
         
-        // Fetch products sorted by display_order (higher first), then created_at
+        // Fetch products with prioritized products first, then by creation date
         const { data, error } = await supabase
           .from('products')
           .select('*')
-          .order('display_order', { ascending: false, nullsFirst: false })
+          .order('prioritized', { ascending: false, nullsFirst: false })
+          .order('prioritized_at', { ascending: false, nullsFirst: false })
           .order('created_at', { ascending: false });
         
         logger.info('ShopPage: Products fetched', { 
@@ -114,19 +116,49 @@ export function ShopPageContent() {
         // Normalize products to ensure required fields exist and are properly typed
         const normalized = (data || []).map((p: any) => {
           const priceNum = typeof p.price === 'number' ? p.price : Number(p.price) || 0;
-          // Normalize image: prefer top-level image, else first item from images[], else first from additional_images
-          const firstImage = Array.isArray(p.images) && p.images.length > 0
-            ? (typeof p.images[0] === 'string' ? p.images[0] : (p.images[0]?.url || ''))
-            : '';
-          const firstAdditionalImage = Array.isArray(p.additional_images) && p.additional_images.length > 0
-            ? (typeof p.additional_images[0] === 'string' ? p.additional_images[0] : (p.additional_images[0]?.url || ''))
-            : '';
+          const resolvedTitle = [p.title, p.name]
+            .map((value) => (typeof value === 'string' ? value.trim() : ''))
+            .find((value) => value.length > 0) || 'Unnamed Product';
+
+          // Get valid display image using utility function
+          const finalImage = getProductDisplayImage(
+            { ...p, title: resolvedTitle, name: resolvedTitle },
+            {
+              fallbackText: resolvedTitle,
+              fallbackSize: '400x400',
+            }
+          );
+
+          const rawHsn =
+            p.hsnCode ??
+            (p as any).hsn_code ??
+            (p as any).hsn ??
+            (p as any).hsn_sac ??
+            null;
+          const rawGst =
+            p.gstRate ??
+            (p as any).gst_rate ??
+            (p as any).gst_percentage ??
+            null;
+
+          let resolvedGst: number | undefined;
+          if (typeof rawGst === 'number' && Number.isFinite(rawGst)) {
+            resolvedGst = rawGst;
+          } else if (typeof rawGst === 'string') {
+            const parsed = Number.parseFloat(rawGst);
+            resolvedGst = Number.isFinite(parsed) ? parsed : undefined;
+          }
+
+          const resolvedHsn = typeof rawHsn === 'string' && rawHsn.trim().length > 0
+            ? rawHsn.trim()
+            : undefined;
+
           return {
             ...p,
             id: p.id,
-            // Ensure name/title always present
-            name: p.name || p.title || 'Unnamed Product',
-            title: p.title || p.name || 'Product',
+            // Ensure name/title always present and in sync
+            name: resolvedTitle,
+            title: resolvedTitle,
             // Map category/brand from alternative fields when missing
             category: p.category || p.product_type || 'General',
             brand: p.brand || p.vendor || undefined,
@@ -136,7 +168,9 @@ export function ShopPageContent() {
             rating: p.rating || 0,
             reviewCount: p.review_count ?? p.reviewCount ?? 0,
             created_at: p.created_at || new Date().toISOString(),
-            image: p.image || firstImage || firstAdditionalImage || 'https://placehold.co/600x400.png?text=No+Image',
+            image: finalImage || undefined,
+            hsnCode: resolvedHsn,
+            gstRate: resolvedGst,
           } as Product;
         });
 

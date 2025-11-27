@@ -81,6 +81,42 @@ export function deserializeOrder(rawOrder: any): Order {
       ? (itemsPayload.cart_items as OrderItem[])
       : [];
 
+  const normalizedItems: OrderItem[] = parsedItems.map((item) => {
+    const source = item as unknown as Record<string, unknown>;
+    const rawHsn =
+      source['hsnCode'] ??
+      source['hsn_code'] ??
+      source['hsn'] ??
+      source['hsn_sac'] ??
+      item.hsnCode ??
+      null;
+    const rawGst =
+      source['gstRate'] ??
+      source['gst_rate'] ??
+      source['gst_percentage'] ??
+      source['gst'] ??
+      item.gstRate ??
+      undefined;
+
+    const normalizedHsn = rawHsn != null ? String(rawHsn).trim() : undefined;
+
+    let normalizedGstRate: number | undefined;
+    if (typeof rawGst === 'number') {
+      normalizedGstRate = Number.isFinite(rawGst) ? rawGst : undefined;
+    } else if (typeof rawGst === 'string') {
+      const parsed = Number.parseFloat(rawGst);
+      normalizedGstRate = Number.isFinite(parsed) ? parsed : undefined;
+    } else {
+      normalizedGstRate = undefined;
+    }
+
+    return {
+      ...item,
+      hsnCode: normalizedHsn || item.hsnCode,
+      gstRate: normalizedGstRate ?? item.gstRate,
+    };
+  });
+
   const normalizedStatus = normalizeOrderStatus(rawOrder?.status);
   const normalizedType = (rawOrder?.type ?? rawOrder?.order_type ?? 'Delivery') as OrderType;
 
@@ -101,7 +137,7 @@ export function deserializeOrder(rawOrder: any): Order {
     discount_amount: discountAmount,
     shipping_amount: shippingAmount,
     total,
-    items: parsedItems,
+  items: normalizedItems,
     customer_email: itemsPayload.customer_email ?? rawOrder?.customer_email ?? undefined,
     customer_phone: itemsPayload.customer_phone ?? rawOrder?.customer_phone ?? undefined,
     delivery_address: itemsPayload.delivery_address ?? rawOrder?.delivery_address ?? undefined,

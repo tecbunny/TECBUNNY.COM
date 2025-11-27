@@ -48,6 +48,13 @@ export default function PaymentApiPage() {
       channelId: '',
       environment: 'staging'
     },
+    payu: {
+      enabled: false,
+      merchantKey: '',
+      merchantSalt: '',
+      merchantId: '',
+      environment: 'test'
+    },
     cashfree: {
       enabled: false,
       appId: '',
@@ -72,6 +79,7 @@ export default function PaymentApiPage() {
     stripe: false,
     phonepe: false,
     paytm: false,
+    payu: false,
     cashfree: false,
     cod: false,
     upi: false
@@ -105,6 +113,13 @@ export default function PaymentApiPage() {
           industryType: paymentMethods.paytm?.config?.industryType || '',
           channelId: paymentMethods.paytm?.config?.channelId || '',
           environment: paymentMethods.paytm?.config?.environment || 'staging'
+        },
+        payu: {
+          enabled: paymentMethods.payu?.enabled || false,
+          merchantKey: paymentMethods.payu?.config?.merchantKey || '',
+          merchantSalt: paymentMethods.payu?.config?.merchantSalt || '',
+          merchantId: paymentMethods.payu?.config?.merchantId || '',
+          environment: paymentMethods.payu?.config?.environment || 'test'
         },
         cashfree: {
           enabled: paymentMethods.cashfree?.enabled || false,
@@ -265,6 +280,42 @@ export default function PaymentApiPage() {
       });
     } finally {
       setSavingStates(prev => ({ ...prev, paytm: false }));
+    }
+  };
+
+  const handleSavePayu = async () => {
+    setSavingStates(prev => ({ ...prev, payu: true }));
+    try {
+      const result = await updatePaymentMethod('payu', {
+        enabled: formData.payu.enabled,
+        config: {
+          merchantKey: formData.payu.merchantKey,
+          merchantSalt: formData.payu.merchantSalt,
+          merchantId: formData.payu.merchantId,
+          environment: formData.payu.environment
+        }
+      });
+
+      if (result.success) {
+        toast({
+          title: 'Success',
+          description: 'PayU settings saved successfully'
+        });
+      } else {
+        toast({
+          title: 'Error',
+          description: result.error || 'Failed to save PayU settings',
+          variant: 'destructive'
+        });
+      }
+    } catch {
+      toast({
+        title: 'Error',
+        description: 'An unexpected error occurred',
+        variant: 'destructive'
+      });
+    } finally {
+      setSavingStates(prev => ({ ...prev, payu: false }));
     }
   };
 
@@ -565,6 +616,97 @@ export default function PaymentApiPage() {
             <Button onClick={handleSavePhonePe} disabled={savingStates.phonepe}>
               {savingStates.phonepe ? 'Saving...' : 'Save PhonePe Settings'}
             </Button>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>PayU</CardTitle>
+          <CardDescription>
+            Configure PayU (India) merchant credentials.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between rounded-lg border p-4">
+            <div className="space-y-0.5">
+              <Label>Enable PayU</Label>
+              <p className="text-xs text-muted-foreground">Allow customers to pay using PayU.</p>
+            </div>
+            <Switch
+              checked={formData.payu.enabled}
+              onCheckedChange={(checked) =>
+                setFormData(prev => ({
+                  ...prev,
+                  payu: { ...prev.payu, enabled: checked }
+                }))
+              }
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="payu-merchant-key">Merchant Key</Label>
+            <Input
+              id="payu-merchant-key"
+              placeholder="e.g., gtKFFx"
+              value={formData.payu.merchantKey}
+              onChange={(e) =>
+                setFormData(prev => ({
+                  ...prev,
+                  payu: { ...prev.payu, merchantKey: e.target.value }
+                }))
+              }
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="payu-merchant-salt">Merchant Salt</Label>
+            <Input
+              id="payu-merchant-salt"
+              type="password"
+              placeholder="Enter your salt"
+              value={formData.payu.merchantSalt}
+              onChange={(e) =>
+                setFormData(prev => ({
+                  ...prev,
+                  payu: { ...prev.payu, merchantSalt: e.target.value }
+                }))
+              }
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="payu-merchant-id">Merchant ID (optional)</Label>
+            <Input
+              id="payu-merchant-id"
+              placeholder="Enter Merchant ID if provided"
+              value={formData.payu.merchantId}
+              onChange={(e) =>
+                setFormData(prev => ({
+                  ...prev,
+                  payu: { ...prev.payu, merchantId: e.target.value }
+                }))
+              }
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="payu-environment">Environment</Label>
+            <select
+              id="payu-environment"
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              value={formData.payu.environment}
+              onChange={(e) =>
+                setFormData(prev => ({
+                  ...prev,
+                  payu: { ...prev.payu, environment: e.target.value }
+                }))
+              }
+            >
+              <option value="test">Test (Sandbox)</option>
+              <option value="production">Production (Live)</option>
+            </select>
+            <p className="text-xs text-muted-foreground">
+              Use the Test environment until PayU activates your live credentials.
+            </p>
+          </div>
+          <Button onClick={handleSavePayu} disabled={savingStates.payu}>
+            {savingStates.payu ? 'Saving...' : 'Save PayU Settings'}
+          </Button>
         </CardContent>
       </Card>
        <Card>

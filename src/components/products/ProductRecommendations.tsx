@@ -58,8 +58,20 @@ export function ProductRecommendations({ currentProductId }: ProductRecommendati
         }
 
         // Shuffle and take 4
-        const randomRecommendations = (similarProducts || []).sort(() => 0.5 - Math.random()).slice(0, 4);
-        
+        const randomRecommendations = (similarProducts || [])
+          .sort(() => 0.5 - Math.random())
+          .slice(0, 4)
+          .map((product) => {
+            const resolvedTitle = [product.title, product.name]
+              .map((value) => (typeof value === 'string' ? value.trim() : ''))
+              .find((value) => value.length > 0) || 'Product';
+            return {
+              ...product,
+              title: resolvedTitle,
+              name: resolvedTitle,
+            } as Product;
+          });
+
         setRecommendations(randomRecommendations);
 
       } catch (e) {

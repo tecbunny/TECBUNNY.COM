@@ -28,8 +28,18 @@ async function getSessionAndRole(request: NextRequest) {
 
 function isAllowedPublicKey(key: string) {
   // Limit public unauthenticated access to whitelisted read-only keys
-  const allowList = ['site_branding','payment_phonepe_public','payment_razorpay_public','feature_flags_public']
-  return allowList.includes(key)
+  const allowList = [
+    'site_branding',
+    'logoUrl',
+    'faviconUrl',
+    'siteName',
+    'siteDescription',
+    'tagline',
+    'payment_phonepe_public',
+    'payment_razorpay_public',
+    'feature_flags_public',
+  ];
+  return allowList.includes(key);
 }
 
 export async function GET(request: NextRequest) {

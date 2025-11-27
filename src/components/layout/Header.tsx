@@ -31,10 +31,8 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTr
   const navLinks = [
     { name: 'Home', href: '/' },
     { name: 'Products', href: '/products' },
-    { name: 'Services', href: '/services' },
     { name: 'Customised Setups', href: '/customised-setups' },
     { name: 'Offers', href: '/offers' },
-    { name: 'Cart', href: '/cart' },
     { name: 'About Us', href: '/about' },
     { name: 'Contact', href: '/contact' },
   ];
@@ -47,12 +45,75 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTr
     { name: 'Refund & Cancellation', href: '/info/policies/refund-cancellation' },
   ];
 
+function extractSiteName(record: { value?: unknown; siteName?: string } | null): string | null {
+  if (!record) return null;
+
+  if (typeof record.siteName === 'string' && record.siteName.trim()) {
+    return record.siteName.trim();
+  }
+
+  const raw = record.value;
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    if (trimmed) {
+      return trimmed;
+    }
+  }
+
+  if (raw && typeof raw === 'object') {
+    const maybe = (raw as Record<string, unknown>).siteName;
+    if (typeof maybe === 'string' && maybe.trim()) {
+      return maybe.trim();
+    }
+  }
+
+  return null;
+}
+
 export function Header() {
   const { cartCount } = useCart();
   const { wishlistCount } = useWishlist();
   const { user, logout } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
+  const [siteName, setSiteName] = React.useState('TecBunny');
   const pathname = usePathname();
+
+  React.useEffect(() => {
+    let isMounted = true;
+
+    async function loadSiteName() {
+      const fetchKey = async (key: string) => {
+        try {
+          const response = await fetch(`/api/settings?key=${encodeURIComponent(key)}`, { cache: 'no-store' });
+          if (!response.ok) {
+            if (response.status !== 404) {
+              logger.warn('Failed to fetch site name setting', { key, status: response.status, context: 'Header.loadSiteName' });
+            }
+            return null;
+          }
+
+          const payload = (await response.json()) as { value?: unknown; siteName?: string };
+          return extractSiteName(payload);
+        } catch (error) {
+          logger.error('Error fetching site name', { error, key, context: 'Header.loadSiteName' });
+          return null;
+        }
+      };
+
+      const primary = await fetchKey('siteName');
+      const fallback = primary || (await fetchKey('site_branding'));
+
+      if (isMounted && fallback) {
+        setSiteName(fallback);
+      }
+    }
+
+    loadSiteName();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   React.useEffect(() => {
     setMobileMenuOpen(false);
@@ -109,8 +170,13 @@ export function Header() {
                 }
               }}
             >
-              <DynamicLogo className="h-8 w-8" />
-              <span className="hidden sm:inline text-xl font-bold bg-gradient-to-r from-blue-700 to-blue-600 bg-clip-text text-transparent">TecBunny</span>
+              <DynamicLogo className="h-8 w-8 shrink-0" alt={`${siteName} logo`} />
+              <span
+                className="hidden sm:inline text-xl font-bold bg-gradient-to-r from-blue-700 to-blue-600 bg-clip-text text-transparent whitespace-nowrap shrink-0"
+                title={siteName}
+              >
+                {siteName}
+              </span>
             </Link>
              <nav className="hidden md:flex items-center gap-4">
                {navLinks.map(link => (
@@ -270,9 +336,9 @@ export function Header() {
                           <SheetDescription>Main navigation and account options for mobile users.</SheetDescription>
                       </SheetHeader>
                        <div className="flex justify-between items-center mb-6">
-                           <Link
-                              href="/"
-                              className="flex items-center gap-2 text-primary"
+                  <Link
+                    href="/"
+                    className="flex items-center gap-2 text-primary"
                               onClick={(e) => {
                                 e.preventDefault();
                                 setMobileMenuOpen(false);
@@ -283,8 +349,8 @@ export function Header() {
                                 }, 100);
                               }}
                           >
-                              <DynamicLogo className="h-8 w-8" />
-                              <span className="text-xl font-bold">TecBunny</span>
+                <DynamicLogo className="h-8 w-8 shrink-0" alt={`${siteName} logo`} />
+                <span className="text-xl font-bold whitespace-nowrap shrink-0" title={siteName}>{siteName}</span>
                           </Link>
                           <Button variant="ghost" size="icon" onClick={() => setMobileMenuOpen(false)}>
                               <X className="h-6 w-6" />

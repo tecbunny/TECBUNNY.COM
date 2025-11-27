@@ -524,20 +524,26 @@ export default function ContactPage() {
           <CardDescription>Visit us at our physical location</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="bg-muted rounded-lg h-64 flex items-center justify-center">
-            <div className="text-center">
-              <MapPin className="h-12 w-12 text-muted-foreground mx-auto mb-2" />
-              <p className="text-muted-foreground">Interactive map would be embedded here</p>
-              <Button variant="outline" className="mt-4" asChild>
-                <a 
-                  href="https://maps.google.com/?q=Parcem,+Pernem,+Goa+403512" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                >
-                  Open in Google Maps
-                </a>
-              </Button>
-            </div>
+          <div className="relative w-full overflow-hidden rounded-lg" style={{ paddingTop: '56.25%' }}>
+            <iframe
+              title="Tecbunny Solutions Location"
+              src="https://www.google.com/maps?q=15.6730616,73.7855133&z=17&output=embed"
+              className="absolute left-0 top-0 h-full w-full border-0"
+              loading="lazy"
+              allowFullScreen
+              referrerPolicy="no-referrer-when-downgrade"
+            />
+          </div>
+          <div className="mt-4 flex justify-center">
+            <Button variant="outline" asChild>
+              <a
+                href="https://maps.app.goo.gl/1Af8Aeya8R1X1Z7b7"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Open in Google Maps
+              </a>
+            </Button>
           </div>
         </CardContent>
       </Card>

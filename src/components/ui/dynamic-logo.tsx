@@ -2,8 +2,6 @@
 
 import * as React from 'react';
 
-import { createClient } from '../../lib/supabase/client';
-
 import { logger } from '../../lib/logger';
 
 import { Logo as StaticLogo } from './logo';
@@ -13,46 +11,112 @@ interface DynamicLogoProps {
   width?: number;
   height?: number;
   fallbackToStatic?: boolean;
+  alt?: string;
 }
 
-export function DynamicLogo({ 
-  className, 
-  width = 40, 
-  height = 40, 
-  fallbackToStatic = true 
+type SettingsPayload = {
+  value?: unknown;
+  logoUrl?: string;
+};
+
+function extractLogoUrl(record: SettingsPayload | null): string | null {
+  if (!record) return null;
+
+  if (typeof record.logoUrl === 'string' && record.logoUrl.trim()) {
+    return record.logoUrl.trim();
+  }
+
+  const raw = record.value;
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    if (!trimmed) return null;
+
+    try {
+      const parsed = JSON.parse(trimmed) as { logoUrl?: unknown };
+      if (parsed && typeof parsed.logoUrl === 'string' && parsed.logoUrl.trim()) {
+        return parsed.logoUrl.trim();
+      }
+    } catch {
+      return trimmed;
+    }
+  }
+
+  if (raw && typeof raw === 'object') {
+    const maybe = (raw as Record<string, unknown>).logoUrl;
+    if (typeof maybe === 'string' && maybe.trim()) {
+      return maybe.trim();
+    }
+  }
+
+  return null;
+}
+
+async function fetchLogoSetting(key: string): Promise<string | null> {
+  try {
+    const response = await fetch(`/api/settings?key=${encodeURIComponent(key)}`, { cache: 'no-store' });
+    if (!response.ok) {
+      if (response.status !== 404) {
+        logger.warn('Failed to fetch logo setting', { key, status: response.status, context: 'DynamicLogo.fetchLogoSetting' });
+      }
+      return null;
+    }
+
+    const payload = (await response.json()) as SettingsPayload;
+    return extractLogoUrl(payload);
+  } catch (error) {
+    logger.error('Logo setting request failed', { error, key, context: 'DynamicLogo.fetchLogoSetting' });
+    return null;
+  }
+}
+
+export function DynamicLogo({
+  className,
+  width = 40,
+  height = 40,
+  fallbackToStatic = true,
+  alt = 'Site logo',
 }: DynamicLogoProps) {
   const [logoUrl, setLogoUrl] = React.useState<string>('');
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState(false);
-  const supabase = createClient();
 
   React.useEffect(() => {
-    async function fetchLogo() {
-      try {
-        const { data, error } = await supabase
-          .from('settings')
-          .select('value')
-          .eq('key', 'logoUrl')
-          .single();
+    let isMounted = true;
 
-        if (error) {
-          logger.info('No custom logo found, using fallback', { context: 'DynamicLogo.fetchLogo' });
-          setError(true);
-        } else if (data?.value) {
-          setLogoUrl(data.value);
-        } else {
-          setError(true);
+    async function resolveLogo() {
+      try {
+        let resolved = await fetchLogoSetting('logoUrl');
+        if (!resolved) {
+          resolved = await fetchLogoSetting('site_branding');
+        }
+
+        if (isMounted) {
+          if (resolved) {
+            setLogoUrl(resolved);
+            setError(false);
+          } else {
+            logger.info('Falling back to static logo', { context: 'DynamicLogo.resolveLogo' });
+            setError(true);
+          }
         }
       } catch (err) {
-        logger.error('Error fetching logo', { error: err, context: 'DynamicLogo.fetchLogo' });
-        setError(true);
+        if (isMounted) {
+          setError(true);
+        }
+        logger.error('Error resolving logo', { error: err, context: 'DynamicLogo.resolveLogo' });
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     }
 
-    fetchLogo();
-  }, [supabase]);
+    resolveLogo();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Show loading state
   if (loading) {
@@ -69,11 +133,12 @@ export function DynamicLogo({
     return (
       <img
         src={logoUrl}
-        alt="TecBunny Logo"
-        className={`object-contain ${className}`}
+        alt={alt}
+        className={`object-contain ${className || ''}`}
         width={width}
         height={height}
         onError={() => setError(true)}
+        style={{ maxWidth: width, maxHeight: height }}
       />
     );
   }
@@ -85,6 +150,7 @@ export function DynamicLogo({
         className={className || ''}
         width={width}
         height={height}
+        alt={alt}
       />
     );
   }

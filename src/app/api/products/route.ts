@@ -1,14 +1,74 @@
+import crypto from 'crypto';
+
 import { NextRequest, NextResponse } from 'next/server';
 
 import { createClient, createServiceClient, isSupabaseServiceConfigured } from '../../../lib/supabase/server';
 import { getSessionWithRole } from '../../../lib/auth/server-role';
 import { logger } from '../../../lib/logger';
 
+const HANDLE_MAX_LENGTH = 60;
+
 const COLUMN_ALIASES: Record<string, string[]> = {
+  handle: ['handle', 'slug', 'permalink'],
+  title: ['title', 'name'],
+  description: ['description', 'body_html', 'details'],
+  vendor: ['vendor', 'brand'],
+  product_type: ['product_type', 'category', 'collection'],
+  category: ['category', 'product_type', 'collection'],
+  images: ['images', 'image', 'gallery'],
+  seo_title: ['seo_title', 'meta_title'],
+  seo_description: ['seo_description', 'meta_description'],
   hsnCode: ['hsn_code', 'hsncode'],
   mrp: ['mrp', 'maximum_retail_price', 'list_price'],
   price: ['price', 'selling_price', 'unit_price'],
 };
+
+function slugifyInput(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, HANDLE_MAX_LENGTH);
+}
+
+function normalizeProductRecord(product: any) {
+  if (!product || typeof product !== 'object') {
+    return product;
+  }
+
+  const rawHsn =
+    product.hsnCode ??
+    product.hsn_code ??
+    product.hsn ??
+    product.hsn_sac ??
+    null;
+  if (rawHsn != null) {
+    const normalized = typeof rawHsn === 'string' ? rawHsn.trim() : rawHsn;
+    if (normalized && typeof normalized === 'string') {
+      product.hsnCode = normalized;
+    }
+  }
+
+  const rawGst =
+    product.gstRate ??
+    product.gst_rate ??
+    product.gst_percentage ??
+    null;
+  if (rawGst != null) {
+    if (typeof rawGst === 'number' && Number.isFinite(rawGst)) {
+      product.gstRate = rawGst;
+    } else if (typeof rawGst === 'string') {
+      const parsed = Number.parseFloat(rawGst);
+      if (Number.isFinite(parsed)) {
+        product.gstRate = parsed;
+      }
+    }
+  }
+
+  return product;
+}
 
 function resolveColumnName(columns: Set<string> | null, key: string): string | undefined {
   const candidates = COLUMN_ALIASES[key];
@@ -131,7 +191,7 @@ export async function GET(request: NextRequest) {
 
       return NextResponse.json({
         success: true,
-        data: product
+        data: normalizeProductRecord(product)
       });
   } else {
       // Get all products with pagination
@@ -139,24 +199,33 @@ export async function GET(request: NextRequest) {
       const limit = parseInt(searchParams.get('limit') || '20');
       const offset = (page - 1) * limit;
 
-      // Get sort parameter (default to display_order)
-      const sortBy = searchParams.get('sort') || 'display_order';
-      const sortOrder = searchParams.get('order') || 'asc'; // Changed to 'asc' so display_order 1 appears first
+      // Get sort parameter (default to created_at for newest first)
+      const sortBy = searchParams.get('sort') || 'created_at';
+      const sortOrder = searchParams.get('order') || 'desc'; // Changed to 'desc' so newest products appear first
 
       let query = supabase
         .from('products')
         .select('*', { count: 'exact' })
         .range(offset, offset + limit - 1);
 
-      // Apply sorting - use display_order first, then created_at as fallback
-      if (sortBy === 'display_order') {
-        query = query.order('display_order', { ascending: sortOrder === 'asc', nullsFirst: false })
-                     .order('created_at', { ascending: false });
-      } else if (sortBy === 'title' || sortBy === 'name') {
+      // Apply sorting with prioritized products first
+      // Always sort by prioritized status first (prioritized products at top)
+      query = query.order('prioritized', { ascending: false, nullsFirst: false });
+      
+      // Then sort prioritized products by prioritized_at (most recently prioritized first)
+      query = query.order('prioritized_at', { ascending: false, nullsFirst: false });
+      
+      // Finally apply the requested sort for non-prioritized products and as tertiary sort
+      if (sortBy === 'title' || sortBy === 'name') {
         query = query.order(sortBy, { ascending: sortOrder === 'asc' });
       } else if (sortBy === 'price') {
         query = query.order('price', { ascending: sortOrder === 'asc' });
+      } else if (sortBy === 'display_order') {
+        // Keep display_order as option but fallback to created_at
+        query = query.order('display_order', { ascending: sortOrder === 'asc', nullsFirst: false })
+                     .order('created_at', { ascending: false });
       } else {
+        // Default to created_at (newest first when desc)
         query = query.order('created_at', { ascending: sortOrder === 'asc' });
       }
 
@@ -235,7 +304,7 @@ export async function GET(request: NextRequest) {
 
       return NextResponse.json({
         success: true,
-        data: products,
+        data: Array.isArray(products) ? products.map(normalizeProductRecord) : products,
         pagination: {
           page,
           limit,
@@ -255,12 +324,26 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+    const debugMode = request.nextUrl.searchParams.get('debug') === '1';
+    const summariseError = (err: unknown) => {
+      if (!err || typeof err !== 'object') {
+        return undefined;
+      }
+      const record = err as Record<string, unknown>;
+      return {
+        message: record.message,
+        code: record.code,
+        details: record.details,
+        hint: record.hint,
+      };
+    };
     const { 
       handle, 
       title, 
       description, 
       vendor, 
       product_type, 
+      category,
       tags, 
       status, 
       images, 
@@ -271,6 +354,10 @@ export async function POST(request: NextRequest) {
       mrp,
       price,
       hsnCode,
+      stock_quantity,
+      min_stock_level,
+      max_stock_level,
+      stock_status,
     } = body;
 
     // Normalize images to an array of URL strings (supports legacy object shape {url})
@@ -291,68 +378,226 @@ export async function POST(request: NextRequest) {
       : authClient;
     const user = session.user;
 
-    // Create product; now that handle is available, prefer upsert on handle, with safe fallback
+    // Create product; now that handle is available, prefer upsert on handle (or closest alias), with safe fallback
     let product: any = null;
-    const basePayload: any = {
-      handle,
-      title,
+    const normalizedTitle = typeof title === 'string' && title.trim() ? title.trim() : undefined;
+    const normalizedHandle = typeof handle === 'string' && handle.trim() ? handle.trim() : undefined;
+    const normalizedProductType = typeof product_type === 'string' && product_type.trim() ? product_type.trim() : undefined;
+    const normalizedCategory = typeof category === 'string' && category.trim() ? category.trim() : undefined;
+    const resolvedCategory = normalizedCategory ?? normalizedProductType ?? 'General';
+    const slugFromTitle = normalizedTitle ? slugifyInput(normalizedTitle) : '';
+    const slugFromHandle = normalizedHandle ? slugifyInput(normalizedHandle) : '';
+    const baseHandleSegment = slugFromHandle || slugFromTitle || `product-${crypto.randomUUID().slice(0, 8)}`;
+    const derivedHandle = (baseHandleSegment.startsWith('id-') ? baseHandleSegment : `id-${baseHandleSegment}`).slice(0, HANDLE_MAX_LENGTH);
+
+    const basePayload: Record<string, any> = {
+      handle: derivedHandle,
+      title: normalizedTitle,
       description,
       vendor,
-      product_type,
-  tags,
-  status: status || 'active',
-  images: normalizedImages,
+      product_type: normalizedProductType,
+      category: resolvedCategory,
+      tags,
+      status: status || 'active',
+      images: normalizedImages,
       seo_title,
       seo_description,
       created_by: user.id,
-      updated_by: user.id
+      updated_by: user.id,
     };
+
     if (mrp !== undefined) {
       basePayload.mrp = mrp;
     }
     if (price !== undefined) {
       basePayload.price = price;
     }
-    const cols = await ensureProductColumns(supabase);
-    const postWarnings: string[] = [];
-    if (!cols) {
-      postWarnings.push('product schema metadata unavailable; attempted insert without column validation');
-    } else {
-      if (!cols.has('tags')) { delete basePayload.tags; postWarnings.push('tags column missing; tags ignored'); }
-      if (!cols.has('created_by')) { delete basePayload.created_by; postWarnings.push('created_by column missing; ignored'); }
-      if (!cols.has('updated_by')) { delete basePayload.updated_by; postWarnings.push('updated_by column missing; ignored'); }
-      if ('mrp' in basePayload && !cols.has('mrp')) { delete basePayload.mrp; postWarnings.push('mrp column missing; mrp ignored'); }
-      if ('price' in basePayload && !cols.has('price')) { delete basePayload.price; postWarnings.push('price column missing; price ignored'); }
+    if (stock_quantity !== undefined) {
+      const qty = Number(stock_quantity);
+      basePayload.stock_quantity = Number.isFinite(qty) && qty > 0 ? qty : 0;
+    }
+    if (min_stock_level !== undefined) {
+      const minStock = Number(min_stock_level);
+      basePayload.min_stock_level = Number.isFinite(minStock) && minStock > 0 ? minStock : 0;
+    }
+    if (max_stock_level !== undefined) {
+      const maxStock = Number(max_stock_level);
+      basePayload.max_stock_level = Number.isFinite(maxStock) && maxStock > 0 ? maxStock : 0;
+    }
+    if (typeof stock_status === 'string') {
+      basePayload.stock_status = stock_status;
     }
     if (hsnCode !== undefined) {
-      if (!cols || cols.has('hsn_code')) {
-        basePayload.hsn_code = hsnCode;
-      } else {
-        postWarnings.push('hsn_code column missing; hsnCode ignored');
+      basePayload.hsnCode = hsnCode;
+    }
+
+    Object.keys(basePayload).forEach((key) => {
+      if (basePayload[key] === undefined) {
+        delete basePayload[key];
+      }
+    });
+
+    const cols = await ensureProductColumns(supabase);
+    const postWarnings: string[] = [];
+    const columnSet = cols ?? null;
+    if (!cols) {
+      postWarnings.push('product schema metadata unavailable; attempted insert without column validation');
+    }
+
+    const applyAlias = (inputKey: string, warningKey?: string) => {
+      if (!Object.prototype.hasOwnProperty.call(basePayload, inputKey)) {
+        return;
+      }
+      const value = basePayload[inputKey];
+      const targetColumn = resolveColumnName(columnSet, inputKey);
+      if (!targetColumn) {
+        delete basePayload[inputKey];
+        if (cols) {
+          postWarnings.push(`${warningKey ?? inputKey} column missing; ${inputKey} ignored`);
+        }
+        return;
+      }
+      if (targetColumn !== inputKey) {
+        basePayload[targetColumn] = value;
+        delete basePayload[inputKey];
+      }
+    };
+
+    ['handle', 'title', 'description', 'vendor', 'product_type', 'category', 'images', 'seo_title', 'seo_description', 'mrp', 'price'].forEach((key) => applyAlias(key));
+    applyAlias('hsnCode', 'hsn_code');
+
+    if (cols) {
+      if (Object.prototype.hasOwnProperty.call(basePayload, 'tags') && !cols.has('tags')) {
+        delete basePayload.tags;
+        postWarnings.push('tags column missing; tags ignored');
+      }
+      if (Object.prototype.hasOwnProperty.call(basePayload, 'created_by') && !cols.has('created_by')) {
+        delete basePayload.created_by;
+        postWarnings.push('created_by column missing; ignored');
+      }
+      if (Object.prototype.hasOwnProperty.call(basePayload, 'updated_by') && !cols.has('updated_by')) {
+        delete basePayload.updated_by;
+        postWarnings.push('updated_by column missing; ignored');
+      }
+      if (Object.prototype.hasOwnProperty.call(basePayload, 'stock_quantity') && !cols.has('stock_quantity')) {
+        delete basePayload.stock_quantity;
+        postWarnings.push('stock_quantity column missing; stock quantity ignored');
+      }
+      if (Object.prototype.hasOwnProperty.call(basePayload, 'min_stock_level') && !cols.has('min_stock_level')) {
+        delete basePayload.min_stock_level;
+        postWarnings.push('min_stock_level column missing; min stock ignored');
+      }
+      if (Object.prototype.hasOwnProperty.call(basePayload, 'max_stock_level') && !cols.has('max_stock_level')) {
+        delete basePayload.max_stock_level;
+        postWarnings.push('max_stock_level column missing; max stock ignored');
+      }
+      if (Object.prototype.hasOwnProperty.call(basePayload, 'stock_status') && !cols.has('stock_status')) {
+        delete basePayload.stock_status;
+        postWarnings.push('stock_status column missing; stock status ignored');
+      }
+      if (Object.prototype.hasOwnProperty.call(basePayload, 'category') && !cols.has('category')) {
+        delete basePayload.category;
+        postWarnings.push('category column missing; category ignored');
+      }
+      if (Object.prototype.hasOwnProperty.call(basePayload, 'product_type') && !cols.has('product_type')) {
+        delete basePayload.product_type;
+        postWarnings.push('product_type column missing; product type ignored');
       }
     }
-    // Try upsert on handle
-  const up = await supabase
-      .from('products')
-      .upsert(basePayload, { onConflict: 'handle' })
-      .select()
-      .single();
-  if (!up.error && up.data) {
-      product = up.data;
-    } else {
-      // Fallback: insert without handle
+
+    const handleColumn = resolveColumnName(columnSet, 'handle');
+    const normalizedHandleKey = handleColumn && Object.prototype.hasOwnProperty.call(basePayload, handleColumn)
+      ? handleColumn
+      : undefined;
+
+    const ensureUniqueHandle = async (candidate: string): Promise<string> => {
+      if (!handleColumn || !candidate) {
+        return candidate;
+      }
+      const trimmed = candidate.slice(0, HANDLE_MAX_LENGTH);
+      let attempt = 0;
+      let nextCandidate = trimmed;
+      while (attempt < 20) {
+        const { data, error } = await supabase
+          .from('products')
+          .select('id')
+          .eq(handleColumn, nextCandidate)
+          .limit(1);
+        if (error) {
+          logger.warn('products.handle_uniqueness_check_failed', { error: error.message, handleColumn, candidate: nextCandidate });
+          return nextCandidate;
+        }
+        if (!data || data.length === 0) {
+          return nextCandidate;
+        }
+        attempt += 1;
+        const suffix = attempt < 10 ? `0${attempt}` : String(attempt);
+        nextCandidate = `${trimmed}-${suffix}`.slice(0, HANDLE_MAX_LENGTH);
+      }
+      return `${trimmed}-${crypto.randomUUID().slice(0, 6)}`.slice(0, HANDLE_MAX_LENGTH);
+    };
+
+    let hasHandleValue = false;
+    if (normalizedHandleKey) {
+      const desiredHandle = String(basePayload[normalizedHandleKey] ?? '').trim();
+      if (desiredHandle) {
+        basePayload[normalizedHandleKey] = await ensureUniqueHandle(desiredHandle);
+        hasHandleValue = true;
+      } else {
+        delete basePayload[normalizedHandleKey];
+      }
+    }
+
+    let upsertResult: { data: any; error: any } = { data: null, error: null };
+    let upsertError: any = null;
+    if (hasHandleValue && handleColumn) {
+      upsertResult = await supabase
+        .from('products')
+        .upsert(basePayload, { onConflict: handleColumn })
+        .select()
+        .single();
+      if (!upsertResult.error && upsertResult.data) {
+        product = upsertResult.data;
+      } else if (upsertResult.error) {
+        upsertError = upsertResult.error;
+      }
+    }
+
+    if (!product) {
       const fallbackPayload = { ...basePayload };
-      delete (fallbackPayload as any).handle;
-  const ins = await supabase
+      const insertResult = await supabase
         .from('products')
         .insert(fallbackPayload)
         .select()
         .single();
-      if (ins.error) {
-        logger.error('products.create_failed', { error: up.error || ins.error });
-        return NextResponse.json({ error: 'Failed to create product' }, { status: 500 });
+      if (insertResult.error) {
+        logger.error('products.create_failed', { upsertError, insertError: insertResult.error });
+        const insertSummary = summariseError(insertResult.error);
+        const errorBody = debugMode
+          ? {
+              error: 'Failed to create product',
+              supabase: {
+                ...insertSummary,
+                upsertError: summariseError(upsertError),
+              },
+              payloadKeys: Object.keys(basePayload),
+            }
+          : { error: 'Failed to create product' };
+        return NextResponse.json(errorBody, { status: 500 });
       }
-      product = ins.data;
+      product = insertResult.data;
+    }
+
+    if (!product) {
+      logger.error('products.create_no_product_returned', { upsertError, basePayloadKeys: Object.keys(basePayload) });
+      const errorBody = debugMode
+        ? {
+            error: 'Failed to create product',
+            supabase: { upsertError: summariseError(upsertError), fallback: 'No product returned' },
+            payloadKeys: Object.keys(basePayload),
+          }
+        : { error: 'Failed to create product' };
+      return NextResponse.json(errorBody, { status: 500 });
     }
 
     // Create options if provided
@@ -489,6 +734,32 @@ export async function PUT(request: NextRequest) {
     } else if (!updateCols.has('tags')) {
       delete (updateData as any).tags;
       putWarnings.push('tags column missing; tags ignored');
+    }
+
+    const numericStockFields: Array<{ key: 'stock_quantity' | 'min_stock_level' | 'max_stock_level'; warning: string }> = [
+      { key: 'stock_quantity', warning: 'stock_quantity column missing; stock quantity ignored' },
+      { key: 'min_stock_level', warning: 'min_stock_level column missing; min stock ignored' },
+      { key: 'max_stock_level', warning: 'max_stock_level column missing; max stock ignored' },
+    ];
+
+    numericStockFields.forEach(({ key, warning }) => {
+      if (Object.prototype.hasOwnProperty.call(updateData, key)) {
+        const numericValue = Number((updateData as any)[key]);
+        (updateData as any)[key] = Number.isFinite(numericValue) ? Math.max(0, numericValue) : 0;
+        if (updateCols && !updateCols.has(key)) {
+          delete (updateData as any)[key];
+          putWarnings.push(warning);
+        }
+      }
+    });
+
+    if (Object.prototype.hasOwnProperty.call(updateData, 'stock_status')) {
+      if (typeof (updateData as any).stock_status !== 'string') {
+        delete (updateData as any).stock_status;
+      } else if (updateCols && !updateCols.has('stock_status')) {
+        delete (updateData as any).stock_status;
+        putWarnings.push('stock_status column missing; stock status ignored');
+      }
     }
 
     const updateColumns = updateCols ? new Set<string>(updateCols) : null;

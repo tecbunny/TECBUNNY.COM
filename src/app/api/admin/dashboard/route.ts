@@ -37,14 +37,23 @@ export async function GET(_request: NextRequest) {
 
     logger.info('admin_dashboard.fetch_start', { userId: user.id, role });
 
-    // Fetch user count
-    const { count: userCount, error: usersError } = await serviceSupabase
-      .from('profiles')
-      .select('*', { count: 'exact', head: true });
+    // Fetch auth users count via Admin API to reflect all users
+    let totalUserCount = 0;
+    let nextPage: number | null | undefined = 1;
 
-    if (usersError) {
-      logger.error('admin_dashboard.users_count_error', { error: usersError.message, code: usersError.code });
-      throw usersError;
+    while (nextPage) {
+      const { data: userPage, error: usersError } = await serviceSupabase.auth.admin.listUsers({
+        page: nextPage,
+        perPage: 1000,
+      });
+
+      if (usersError) {
+        logger.error('admin_dashboard.users_count_error', { error: usersError.message, code: usersError.code, page: nextPage });
+        throw usersError;
+      }
+
+      totalUserCount += userPage?.users?.length ?? 0;
+      nextPage = userPage?.nextPage ?? null;
     }
 
     // Fetch product count
@@ -105,7 +114,7 @@ export async function GET(_request: NextRequest) {
       }));
 
     const stats = {
-      totalUsers: userCount ?? 0,
+  totalUsers: totalUserCount,
       totalProducts: productCount ?? 0,
       totalOrders: orders?.length ?? 0,
       monthlyRevenue,

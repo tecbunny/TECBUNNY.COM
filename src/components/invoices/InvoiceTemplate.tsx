@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Separator } from '../../components/ui/separator';
 import { Button } from '../../components/ui/button';
 import { Logo } from '../../components/ui/logo';
-import { formatOrderNumber } from '../../lib/order-utils';
+import { formatInvoiceDate, formatOrderNumber } from '../../lib/order-utils';
 
 export interface CompanySettings {
     name: string;
@@ -138,7 +138,7 @@ export function InvoiceTemplate({ order, settings, autoPrint }: InvoiceTemplateP
                             </div>
                             <div className="text-left sm:text-right">
                                 <h3 className="mb-2 font-semibold text-primary">Invoice Date</h3>
-                                <p>{order.created_at}</p>
+                                <p>{formatInvoiceDate(order.created_at)}</p>
                             </div>
                         </div>
                         <div className="overflow-x-auto">

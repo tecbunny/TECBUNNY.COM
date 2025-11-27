@@ -46,6 +46,7 @@ export async function GET() {
       stripe: { id: 'stripe', name: 'Stripe', type: 'online', enabled: false, config: {} },
       phonepe: { id: 'phonepe', name: 'PhonePe', type: 'online', enabled: false, config: {} },
       paytm: { id: 'paytm', name: 'Paytm', type: 'online', enabled: false, config: {} },
+      payu: { id: 'payu', name: 'PayU', type: 'online', enabled: false, config: {} },
       cashfree: { id: 'cashfree', name: 'Cashfree', type: 'online', enabled: false, config: {} },
       cod: { id: 'cod', name: 'Cash on Delivery', type: 'offline', enabled: true, config: {} },
       upi: { id: 'upi', name: 'UPI/QR Code', type: 'offline', enabled: true, config: {} }

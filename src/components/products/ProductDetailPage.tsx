@@ -30,6 +30,7 @@ export function ProductDetailPage({ productId }: ProductDetailPageProps) {
   const [loading, setLoading] = useState(true);
   const [selectedImage, setSelectedImage] = useState(0);
   const supabase = createClient();
+  const displayName = product?.title || product?.name || 'Product';
 
   const skuValue = useMemo(() => {
     if (!product) return '';
@@ -101,7 +102,7 @@ export function ProductDetailPage({ productId }: ProductDetailPageProps) {
       return '';
     }
 
-    const fallbackText = `Experience the best in ${product.category} technology with the ${product.name}. This premium product combines cutting-edge features with exceptional build quality to deliver outstanding performance and reliability. Perfect for both professionals and enthusiasts who demand the very best.`;
+  const fallbackText = `Experience the best in ${product.category} technology with the ${displayName}. This premium product combines cutting-edge features with exceptional build quality to deliver outstanding performance and reliability. Perfect for both professionals and enthusiasts who demand the very best.`;
 
     const rawDescription = (product.description && product.description.trim().length > 0)
       ? product.description
@@ -110,6 +111,29 @@ export function ProductDetailPage({ productId }: ProductDetailPageProps) {
     return DOMPurify.sanitize(rawDescription, {
       USE_PROFILES: { html: true }
     });
+  }, [product]);
+
+  const pricing = useMemo(() => {
+    if (!product) {
+      return null;
+    }
+
+    const salePrice = typeof product.price === 'number' ? product.price : 0;
+    const rawMrp = typeof (product as any).mrp === 'number' ? (product as any).mrp : null;
+    const mrp = rawMrp && rawMrp > 0 ? rawMrp : Math.round(salePrice * 1.2 * 100) / 100;
+    const hasDiscount = mrp > salePrice;
+    const savingsAmount = hasDiscount ? mrp - salePrice : 0;
+    const percentageOff = hasDiscount && mrp !== 0
+      ? Math.round(((mrp - salePrice) / mrp) * 100)
+      : 0;
+
+    return {
+      salePrice,
+      mrp,
+      hasDiscount,
+      savingsAmount,
+      percentageOff,
+    };
   }, [product]);
 
   useEffect(() => {
@@ -144,7 +168,41 @@ export function ProductDetailPage({ productId }: ProductDetailPageProps) {
           }
         }
         
-        setProduct(data);
+        const resolvedTitle = [data.title, data.name]
+          .map((value) => (typeof value === 'string' ? value.trim() : ''))
+          .find((value) => value.length > 0) || 'Product';
+
+        const rawHsn =
+          (data as any).hsnCode ??
+          (data as any).hsn_code ??
+          (data as any).hsn ??
+          (data as any).hsn_sac ??
+          null;
+        const rawGst =
+          (data as any).gstRate ??
+          (data as any).gst_rate ??
+          (data as any).gst_percentage ??
+          null;
+
+        let resolvedGst: number | undefined;
+        if (typeof rawGst === 'number' && Number.isFinite(rawGst)) {
+          resolvedGst = rawGst;
+        } else if (typeof rawGst === 'string') {
+          const parsed = Number.parseFloat(rawGst);
+          resolvedGst = Number.isFinite(parsed) ? parsed : undefined;
+        }
+
+        const resolvedHsn = typeof rawHsn === 'string' && rawHsn.trim().length > 0
+          ? rawHsn.trim()
+          : undefined;
+
+        setProduct({
+          ...data,
+          title: resolvedTitle,
+          name: resolvedTitle,
+          hsnCode: resolvedHsn,
+          gstRate: resolvedGst ?? (data as any).gstRate,
+        });
       }
       setLoading(false);
     };
@@ -203,8 +261,8 @@ export function ProductDetailPage({ productId }: ProductDetailPageProps) {
         </Button>
         <span>/</span>
         <span className="text-blue-600">{product.category}</span>
-        <span>/</span>
-        <span className="text-foreground">{product.name}</span>
+  <span>/</span>
+  <span className="text-foreground">{displayName}</span>
       </nav>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
@@ -213,12 +271,12 @@ export function ProductDetailPage({ productId }: ProductDetailPageProps) {
           <div className="aspect-square overflow-hidden rounded-xl bg-gradient-to-br from-gray-50 to-gray-100 shadow-harsh flex items-center justify-center">
             <img
               src={productImages[selectedImage]}
-              alt={product.name}
+              alt={displayName}
               className="w-full h-full object-contain p-8 transition-transform duration-300 hover:scale-105"
               loading="lazy"
               onError={(e) => {
                 const target = e.target as HTMLImageElement;
-                target.src = `https://placehold.co/600x600/e5e7eb/6b7280.png?text=${encodeURIComponent(product.name)}`;
+                target.src = `https://placehold.co/600x600/e5e7eb/6b7280.png?text=${encodeURIComponent(displayName)}`;
               }}
             />
           </div>
@@ -237,7 +295,7 @@ export function ProductDetailPage({ productId }: ProductDetailPageProps) {
               >
                   <img
                     src={image}
-                    alt={`${product.name} view ${index + 1}`}
+                    alt={`${displayName} view ${index + 1}`}
                     className="w-full h-full object-contain p-2"
                     loading="lazy"
                     onError={(e) => {
@@ -266,7 +324,7 @@ export function ProductDetailPage({ productId }: ProductDetailPageProps) {
               )}
             </div>
             <h1 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-2">
-              {product.name}
+              {displayName}
             </h1>
             
             {/* Brand and Model Info */}
@@ -308,15 +366,29 @@ export function ProductDetailPage({ productId }: ProductDetailPageProps) {
           </div>
 
           {/* Price */}
-          <div className="flex items-baseline gap-4">
-            <span className="text-4xl font-bold text-blue-600">
-              ₹{product.price.toFixed(2)}
-            </span>
-            <span className="text-lg text-muted-foreground line-through">
-              ₹{(product.price * 1.2).toFixed(2)}
-            </span>
-            <Badge variant="destructive">20% OFF</Badge>
-          </div>
+          {pricing && (
+            <div className="flex items-baseline gap-4">
+              <span className="text-4xl font-bold text-blue-600">
+                ₹{pricing.salePrice.toFixed(2)}
+              </span>
+              {pricing.hasDiscount && (
+                <>
+                  <span className="text-lg text-muted-foreground line-through">
+                    ₹{pricing.mrp.toFixed(2)}
+                  </span>
+                  {pricing.percentageOff > 0 && (
+                    <Badge variant="destructive">{pricing.percentageOff}% OFF</Badge>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
+          {pricing?.hasDiscount && pricing.savingsAmount > 0 && (
+            <div className="text-sm text-muted-foreground">
+              You save ₹{pricing.savingsAmount.toFixed(2)} on this product.
+            </div>
+          )}
 
           {/* Description */}
           <div className="space-y-4">

@@ -84,7 +84,17 @@ export default function HomepageSettingsPage() {
   React.useEffect(() => {
     const fetchData = async () => {
         const { data: products } = await supabase.from('products').select('*');
-        setAllProducts(products || []);
+        const normalizedProducts = (products || []).map(product => {
+          const resolvedTitle = [product.title, product.name]
+            .map((value) => (typeof value === 'string' ? value.trim() : ''))
+            .find((value) => value.length > 0) || 'Product';
+          return {
+            ...product,
+            title: resolvedTitle,
+            name: resolvedTitle,
+          } as Product;
+        });
+        setAllProducts(normalizedProducts);
         
         const { data: settings } = await supabase.from('settings').select('*');
         

@@ -2,93 +2,153 @@
 
 import * as React from 'react';
 
-import { createClient } from '../../lib/supabase/client';
-
 import { logger } from '../../lib/logger';
 
-export function DynamicFavicon() {
-  const supabase = createClient();
+type SettingsPayload = {
+  value?: unknown;
+  [key: string]: unknown;
+};
 
+function extractSettingString(record: SettingsPayload | null, key: string): string | null {
+  if (!record) return null;
+
+  const direct = record[key];
+  if (typeof direct === 'string' && direct.trim()) {
+    return direct.trim();
+  }
+
+  const raw = record.value;
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    if (!trimmed) return null;
+
+    try {
+      const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+      const nested = parsed[key];
+      if (typeof nested === 'string' && nested.trim()) {
+        return nested.trim();
+      }
+    } catch {
+      return trimmed;
+    }
+  }
+
+  if (raw && typeof raw === 'object') {
+    const nested = (raw as Record<string, unknown>)[key];
+    if (typeof nested === 'string' && nested.trim()) {
+      return nested.trim();
+    }
+  }
+
+  return null;
+}
+
+export function DynamicFavicon() {
   React.useEffect(() => {
+    let isMounted = true;
+
+    const ensureFavicon = (href: string, type: string) => {
+      if (!document.head) return;
+      const id = 'dynamic-favicon';
+      let link = document.head.querySelector(`link#${id}`) as HTMLLinkElement | null;
+      if (!link) {
+        link = document.createElement('link');
+        link.id = id;
+        link.rel = 'icon';
+        document.head.appendChild(link);
+      }
+      link.type = type;
+      link.href = href;
+      logger.info('Favicon set', { href, context: 'DynamicFavicon.ensureFavicon' });
+    };
+
     async function updateFavicon() {
       try {
-        // Get favicon URL from settings
-        const { data, error } = await supabase
-          .from('settings')
-          .select('value')
-          .eq('key', 'faviconUrl')
-          .single();
-
-        // Manage a single dynamic favicon element to avoid removeChild() issues
-        const ensureFavicon = (href: string, type: string) => {
-          if (!document.head) return;
-          const id = 'dynamic-favicon';
-          let link = document.head.querySelector(`link#${id}`) as HTMLLinkElement | null;
-          if (!link) {
-            link = document.createElement('link');
-            link.id = id;
-            link.rel = 'icon';
-            document.head.appendChild(link);
+        const fetchKey = async (key: string) => {
+          const response = await fetch(`/api/settings?key=${encodeURIComponent(key)}`, { cache: 'no-store' });
+          if (!response.ok) {
+            if (response.status !== 404) {
+              logger.warn('Failed to fetch favicon setting', { key, status: response.status, context: 'DynamicFavicon.updateFavicon' });
+            }
+            return null;
           }
-          link.type = type;
-          link.href = href;
-          logger.info('Favicon set', { href, context: 'DynamicFavicon.updateFavicon' });
+
+          const payload = (await response.json()) as SettingsPayload;
+          return extractSettingString(payload, 'faviconUrl');
         };
 
-        if (!error && data?.value) {
-          ensureFavicon(data.value, 'image/x-icon');
+        const primary = await fetchKey('faviconUrl');
+        const fallback = primary || (await fetchKey('site_branding'));
+
+        if (!isMounted) {
+          return;
+        }
+
+        if (fallback) {
+          const type = fallback.endsWith('.ico') ? 'image/x-icon' : 'image/png';
+          ensureFavicon(fallback, type);
         } else {
           ensureFavicon('/brand.png', 'image/png');
         }
       } catch (error) {
         logger.error('Error updating favicon', { error, context: 'DynamicFavicon.updateFavicon' });
+        if (isMounted) {
+          ensureFavicon('/brand.png', 'image/png');
+        }
       }
     }
 
-    // Only run on client side after component mount
     if (typeof window !== 'undefined') {
       updateFavicon();
     }
 
-    // Note: Real-time updates disabled to prevent WebSocket authentication issues
-    // If you need real-time favicon updates, ensure proper Supabase Realtime configuration
-    
-  }, [supabase]);
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
-  return null; // This component doesn't render anything
+  return null;
 }
 
 export function DynamicTitle() {
-  const supabase = createClient();
-
   React.useEffect(() => {
+    let isMounted = true;
+
     async function updateTitle() {
       try {
-        // Get site name from settings
-        const { data, error } = await supabase
-          .from('settings')
-          .select('value')
-          .eq('key', 'siteName')
-          .single();
+        const fetchKey = async (key: string) => {
+          const response = await fetch(`/api/settings?key=${encodeURIComponent(key)}`, { cache: 'no-store' });
+          if (!response.ok) {
+            if (response.status !== 404) {
+              logger.warn('Failed to fetch site name for title', { key, status: response.status, context: 'DynamicTitle.updateTitle' });
+            }
+            return null;
+          }
 
-        if (!error && data?.value && typeof window !== 'undefined') {
-          document.title = data.value;
-          logger.info('Title updated', { title: data.value, context: 'DynamicTitle.updateTitle' });
+          const payload = (await response.json()) as SettingsPayload;
+          return extractSettingString(payload, 'siteName');
+        };
+
+        const primary = await fetchKey('siteName');
+        const fallback = primary || (await fetchKey('site_branding'));
+
+        if (fallback && isMounted && typeof window !== 'undefined') {
+          document.title = fallback;
+          logger.info('Title updated', { title: fallback, context: 'DynamicTitle.updateTitle' });
         }
       } catch (error) {
         logger.error('Error updating title', { error, context: 'DynamicTitle.updateTitle' });
       }
     }
 
-    // Only run on client side after component mount
     if (typeof window !== 'undefined') {
       updateTitle();
     }
 
-    // Note: Real-time updates disabled to prevent WebSocket authentication issues
-    // If you need real-time title updates, ensure proper Supabase Realtime configuration
-    
-  }, [supabase]);
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
-  return null; // This component doesn't render anything
+  return null;
 }

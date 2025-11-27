@@ -24,14 +24,14 @@ export function ProductSort() {
   return (
     <Select
       onValueChange={handleSortChange}
-      defaultValue={searchParams.get('sort') || 'popularity'}
+      defaultValue={searchParams.get('sort') || 'newest'}
     >
       <SelectTrigger className="w-[180px]">
         <SelectValue placeholder="Sort by" />
       </SelectTrigger>
       <SelectContent>
-        <SelectItem value="popularity">Popularity</SelectItem>
         <SelectItem value="newest">Newest First</SelectItem>
+        <SelectItem value="popularity">Popularity</SelectItem>
         <SelectItem value="price_asc">Price: Low to High</SelectItem>
         <SelectItem value="price_desc">Price: High to Low</SelectItem>
         <SelectItem value="name_asc">Name: A to Z</SelectItem>

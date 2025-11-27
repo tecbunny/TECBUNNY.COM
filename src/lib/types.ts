@@ -34,9 +34,14 @@ export interface Product {
   reviewCount: number;
   created_at: string;
   updated_at?: string;
+  // Prioritization fields
+  prioritized?: boolean;
+  prioritized_at?: string;
   // New pricing and stock fields
   stock_quantity?: number;
-  stock_status?: 'in_stock' | 'low_stock' | 'out_of_stock';
+  min_stock_level?: number;
+  max_stock_level?: number;
+  stock_status?: 'in_stock' | 'low_stock' | 'out_of_stock' | 'backorder';
   offer_price?: number;
   discount_percentage?: number;
   // Enhanced product fields
