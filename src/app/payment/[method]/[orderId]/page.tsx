@@ -252,16 +252,17 @@ export default function PaymentMethodPage() {
         ? 'Payment Due on Delivery'
         : 'Payment Confirmed';
 
-      const { error } = await supabase
-        .from('orders')
-        .update({ 
-          status: nextStatus,
-          payment_status: nextPaymentStatus,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', orderId);
+      const payload = { orderId, status: nextStatus, additionalData: { payment_status: nextPaymentStatus } };
+      const response = await fetch('/api/orders/update-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const result = await response.json().catch(() => null);
 
-      if (error) throw error;
+      if (!response.ok || !result?.success) {
+        throw new Error(result?.error || 'Failed to update order status');
+      }
 
       if (method === 'cod') {
         setPaymentState('cod_pending');

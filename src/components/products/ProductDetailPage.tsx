@@ -95,7 +95,7 @@ export function ProductDetailPage({ productId }: ProductDetailPageProps) {
 
     // Sanitize all URLs to avoid SVGs
     return finalized.map(ensurePng);
-  }, [product]);
+  }, [product, displayName]);
 
   const descriptionHtml = useMemo(() => {
     if (!product) {
@@ -114,9 +114,7 @@ export function ProductDetailPage({ productId }: ProductDetailPageProps) {
   }, [product]);
 
   const pricing = useMemo(() => {
-    if (!product) {
-      return null;
-    }
+    if (!product) return null;
 
     const salePrice = typeof product.price === 'number' ? product.price : 0;
     const rawMrp = typeof (product as any).mrp === 'number' ? (product as any).mrp : null;

@@ -228,6 +228,18 @@ function evaluateFormula(expression: string | null | undefined, context: Record<
   try {
     const keys = Object.keys(context);
     const values = keys.map((key) => context[key]);
+    // Security: prevent access to global objects (process, globalThis, window, document, constructor)
+    const blacklist = ['constructor', 'process', 'globalThis', 'window', 'document', '__proto__'];
+    const tokens = (expression.match(/[A-Za-z_$][\w$]*/g) || []).map(t => t.trim());
+    for (const token of tokens) {
+      if (blacklist.includes(token)) {
+        return 0;
+      }
+      // If token is an identifier and not in keys, disallow it
+      if (/^[A-Za-z_$][\w$]*$/.test(token) && !keys.includes(token) && !/^\d+$/.test(token)) {
+        return 0;
+      }
+    }
     // eslint-disable-next-line no-new-func
     const fn = new Function(...keys, `return ${expression};`);
     const result = fn(...values);

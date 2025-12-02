@@ -39,6 +39,9 @@ export async function createClient() {
   );
 }
 
+// Backwards-compat: some files import `createServerClient` from this module.
+export { createClient as createServerClient };
+
 // Service role client for admin operations (bypasses RLS)
 export function createServiceClient() {
   return createSupabaseClient(

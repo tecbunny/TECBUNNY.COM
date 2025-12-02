@@ -60,7 +60,7 @@ export function ProductCard({ product, viewMode = 'grid' }: ProductCardProps) {
     });
 
     return image;
-  }, [product]);
+  }, [product, displayName]);
   // Calculate pricing with automatic discounts
   const pricing = React.useMemo(() => {
     // Use product price as sale price
@@ -344,29 +344,13 @@ export function ProductCard({ product, viewMode = 'grid' }: ProductCardProps) {
       <CardHeader className="p-0 relative flex-shrink-0">
         <div className="block">
           <div className="h-[280px] w-full relative overflow-hidden bg-gradient-to-br from-gray-50 to-gray-100">
-            {displayImage ? (
+            {!hasImageError && displayImage ? (
               <img
                 src={displayImage}
                 alt={displayName}
                 className="w-full h-full object-contain p-4 transition-transform duration-300 group-hover:scale-105"
                 loading="lazy"
-                onError={(e) => {
-                  const target = e.target as HTMLImageElement;
-                  target.style.display = 'none';
-                  const parent = target.parentElement;
-                  if (parent) {
-                    parent.innerHTML = `
-                      <div class="w-full h-full flex items-center justify-center">
-                        <div class="text-center">
-                          <div class="w-20 h-20 mx-auto mb-3 rounded-full bg-gray-200 flex items-center justify-center">
-                            <span class="text-3xl font-bold text-gray-400">${displayName.charAt(0).toUpperCase()}</span>
-                          </div>
-                          <p class="text-sm text-gray-400">No Image</p>
-                        </div>
-                      </div>
-                    `;
-                  }
-                }}
+                onError={() => setHasImageError(true)}
               />
             ) : (
               <div className="w-full h-full flex items-center justify-center">

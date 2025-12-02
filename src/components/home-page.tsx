@@ -152,18 +152,20 @@ function DefaultHomePage({ sectionFilter }: { sectionFilter?: string | null }) {
         
         const settingsMap = new Map(settings?.map(s => [s.key, s.value]) || []);
 
-        const getProductsByIds = (ids: string[]): Product[] => {
+        const MAX_COUNT = 15;
+
+        const getProductsByIds = (ids: string[], limit = MAX_COUNT): Product[] => {
           const productMap = new Map(allProducts.map(p => [p.id, p]));
-          return ids.map(id => productMap.get(id)).filter((p): p is Product => p !== undefined);
+          return ids.map(id => productMap.get(id)).filter((p): p is Product => p !== undefined).slice(0, limit);
         };
 
-        const loadSectionProducts = (key: string, defaultProducts: Product[], options?: { useFallback?: boolean }): Product[] => {
+        const loadSectionProducts = (key: string, defaultProducts: Product[], options?: { useFallback?: boolean, limit?: number }): Product[] => {
           const shouldFallback = options?.useFallback ?? true;
           try {
             const storedIds = settingsMap.get(key);
             const selectedIds = storedIds && typeof storedIds === 'string' ? JSON.parse(storedIds) : [];
             if (Array.isArray(selectedIds) && selectedIds.length > 0) {
-              return getProductsByIds(selectedIds);
+              return getProductsByIds(selectedIds, options?.limit ?? MAX_COUNT);
             }
             return shouldFallback ? defaultProducts : [];
           } catch (error) {
@@ -187,26 +189,47 @@ function DefaultHomePage({ sectionFilter }: { sectionFilter?: string | null }) {
           return;
         }
 
-        const defaultFeatured = sourceProducts.slice(0, 4);
-        setFeaturedProducts(loadSectionProducts('featuredProductIds', defaultFeatured, { useFallback: false }));
+        // Analytics-backed defaults (top 15)
+
+        // Featured: prioritize admin 'prioritized' flag, then popularity
+        const defaultFeatured = [...sourceProducts]
+          .sort((a, b) => {
+            const aP = a.prioritized ? 1 : 0;
+            const bP = b.prioritized ? 1 : 0;
+            if (aP !== bP) return bP - aP; // prioritized first
+            if ((a.popularity || 0) !== (b.popularity || 0)) return (b.popularity || 0) - (a.popularity || 0);
+            if ((a.rating || 0) !== (b.rating || 0)) return (b.rating || 0) - (a.rating || 0);
+            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+          })
+          .slice(0, MAX_COUNT);
+        // Use fallback defaults when admin override is not present
+        setFeaturedProducts(loadSectionProducts('featuredProductIds', defaultFeatured, { useFallback: true }));
 
         const defaultNewArrivals = [...sourceProducts]
-          .sort((a, b) => {
-            const dateA = new Date(a.created_at).getTime();
-            const dateB = new Date(b.created_at).getTime();
-            return dateB - dateA;
-          })
-          .slice(0, 4);
-        setNewArrivals(loadSectionProducts('newArrivalProductIds', defaultNewArrivals, { useFallback: false }));
+          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+          .slice(0, MAX_COUNT);
+        setNewArrivals(loadSectionProducts('newArrivalProductIds', defaultNewArrivals, { useFallback: true }));
 
         const defaultTrending = [...sourceProducts]
-          .sort((a, b) => b.popularity - a.popularity)
-          .slice(0, 4);
-        setTrendingProducts(loadSectionProducts('trendingProductIds', defaultTrending, { useFallback: false }));
+          .sort((a, b) => {
+            // combine popularity, rating, and reviewCount
+            const aScore = (a.popularity || 0) * 0.6 + (a.rating || 0) * 0.3 + ((a.reviewCount || 0) * 0.1);
+            const bScore = (b.popularity || 0) * 0.6 + (b.rating || 0) * 0.3 + ((b.reviewCount || 0) * 0.1);
+            return bScore - aScore;
+          })
+          .slice(0, MAX_COUNT);
+        setTrendingProducts(loadSectionProducts('trendingProductIds', defaultTrending, { useFallback: true }));
 
         const defaultDeals = [...sourceProducts]
-          .filter(p => p.popularity > 90)
-          .slice(0, 4);
+          .filter(p => (typeof p.offer_price === 'number' && p.offer_price < p.price) || (p.discount_percentage && p.discount_percentage > 0))
+          .sort((a, b) => {
+            const aDiscount = (a.price || 0) - (a.offer_price || a.price || 0);
+            const bDiscount = (b.price || 0) - (b.offer_price || b.price || 0);
+            // prefer higher discounts and then popularity
+            if (bDiscount !== aDiscount) return bDiscount - aDiscount;
+            return (b.popularity || 0) - (a.popularity || 0);
+          })
+          .slice(0, MAX_COUNT);
         setDealProducts(loadSectionProducts('dealProductIds', defaultDeals));
         
       } catch (error) {

@@ -18,6 +18,7 @@ import { Checkbox } from '../../../../components/ui/checkbox';
 import { useToast } from '../../../../hooks/use-toast';
 import { ScrollArea } from '../../../../components/ui/scroll-area';
 import { createClient } from '../../../../lib/supabase/client';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '../../../../components/ui/dialog';
 
 interface ProductSelectorProps {
   title: string;
@@ -25,13 +26,28 @@ interface ProductSelectorProps {
   allProducts: Product[];
   selectedIds: Set<string>;
   onToggle: (productId: string) => void;
+  onAutoFill?: () => void;
+  onAutoFillPreview?: () => void;
+  maxSelection?: number;
 }
 
-const ProductSelector: React.FC<ProductSelectorProps> = ({ title, description, allProducts, selectedIds, onToggle }) => (
+const ProductSelector: React.FC<ProductSelectorProps> = ({ title, description, allProducts, selectedIds, onToggle, onAutoFill, onAutoFillPreview, maxSelection = 15 }) => (
   <Card>
     <CardHeader>
-      <CardTitle>{title}</CardTitle>
-      <CardDescription>{description}</CardDescription>
+      <div className="flex items-center justify-between">
+        <div>
+            <CardTitle>{title} <span className="text-sm font-normal text-muted-foreground">({selectedIds.size}/{maxSelection} selected)</span></CardTitle>
+          <CardDescription>{description}</CardDescription>
+        </div>
+        <div className="flex items-center gap-2">
+          {onAutoFill && (
+            <Button size="sm" variant="outline" onClick={onAutoFill}>Auto-fill</Button>
+          )}
+          {onAutoFillPreview && (
+            <Button size="sm" variant="ghost" onClick={onAutoFillPreview}>Preview</Button>
+          )}
+        </div>
+      </div>
     </CardHeader>
     <CardContent>
       <ScrollArea className="h-96 pr-4">
@@ -60,7 +76,8 @@ const ProductSelector: React.FC<ProductSelectorProps> = ({ title, description, a
               <Checkbox
                 checked={selectedIds.has(product.id)}
                 onCheckedChange={() => onToggle(product.id)}
-                aria-label={`Select ${product.name}`}
+                aria-label={`Select ${product.name}`}                
+                disabled={!selectedIds.has(product.id) && selectedIds.size >= (maxSelection ?? 15)}
               />
             </div>
           ))}
@@ -80,6 +97,10 @@ export default function HomepageSettingsPage() {
   const [newArrivalProductIds, setNewArrivalProductIds] = React.useState<Set<string>>(new Set());
   const [trendingProductIds, setTrendingProductIds] = React.useState<Set<string>>(new Set());
   const [dealProductIds, setDealProductIds] = React.useState<Set<string>>(new Set());
+  const [previewOpen, setPreviewOpen] = React.useState(false);
+  const [previewData, setPreviewData] = React.useState<{ featured: Product[]; newArrivals: Product[]; trending: Product[]; deals: Product[] } | null>(null);
+
+  const MAX_SELECTION = 15;
 
   React.useEffect(() => {
     const fetchData = async () => {
@@ -119,14 +140,28 @@ export default function HomepageSettingsPage() {
       if (newSet.has(productId)) {
         newSet.delete(productId);
       } else {
+        if (newSet.size >= MAX_SELECTION) {
+          toast({ variant: 'destructive', title: `Cannot select more than ${MAX_SELECTION} items.` });
+          return prev;
+        }
         newSet.add(productId);
       }
       return newSet;
     });
   };
 
+  const autoFillSelector = (setter: React.Dispatch<React.SetStateAction<Set<string>>>, products: Product[]) => {
+    const newSet = new Set<string>(products.slice(0, MAX_SELECTION).map(p => p.id));
+    setter(newSet);
+  };
+
   const handleSaveChanges = async () => {
     try {
+      // Validate counts
+      if (featuredProductIds.size > MAX_SELECTION || newArrivalProductIds.size > MAX_SELECTION || trendingProductIds.size > MAX_SELECTION || dealProductIds.size > MAX_SELECTION) {
+        toast({ variant: 'destructive', title: `Please select at most ${MAX_SELECTION} products per section.` });
+        return;
+      }
       // Use authenticated API to perform upserts one-by-one to avoid RLS multi-row issues
       const payloads = [
         { key: 'featuredProductIds', value: JSON.stringify(Array.from(featuredProductIds)) },
@@ -158,6 +193,86 @@ export default function HomepageSettingsPage() {
     }
   };
 
+  const previewAutoFill = async (options?: { limit?: number; days?: number }) => {
+    try {
+      setPreviewOpen(true);
+      const res = await fetch('/api/admin/homepage/auto-fill', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ limit: options?.limit ?? MAX_SELECTION, days: options?.days ?? 30 })
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || 'Failed to fetch auto-fill');
+      setPreviewData({
+        featured: json.featured || [],
+        newArrivals: json.newArrivals || [],
+        trending: json.trending || [],
+        deals: json.deals || []
+      });
+    } catch (e:any) {
+      toast({ variant: 'destructive', title: 'Auto-fill Preview failed', description: e?.message || 'Unknown error' });
+      setPreviewData(null);
+      setPreviewOpen(false);
+    }
+  };
+
+  const applyPreviewForSection = (section: 'featured' | 'newArrivals' | 'trending' | 'deals') => {
+    if (!previewData) return;
+    const products = previewData[section] || [];
+    const ids = new Set(products.slice(0, MAX_SELECTION).map(p => p.id));
+    switch (section) {
+      case 'featured': setFeaturedProductIds(ids); break;
+      case 'newArrivals': setNewArrivalProductIds(ids); break;
+      case 'trending': setTrendingProductIds(ids); break;
+      case 'deals': setDealProductIds(ids); break;
+    }
+    toast({ title: `${section} auto-fill applied`, description: `Applied ${Math.min(ids.size, MAX_SELECTION)} items.` });
+  };
+
+  const applyPreviewForAll = () => {
+    if (!previewData) return;
+    setFeaturedProductIds(new Set(previewData.featured.slice(0, MAX_SELECTION).map(p => p.id)));
+    setNewArrivalProductIds(new Set(previewData.newArrivals.slice(0, MAX_SELECTION).map(p => p.id)));
+    setTrendingProductIds(new Set(previewData.trending.slice(0, MAX_SELECTION).map(p => p.id)));
+    setDealProductIds(new Set(previewData.deals.slice(0, MAX_SELECTION).map(p => p.id)));
+    toast({ title: 'Auto-fill applied to all sections', description: `Applied up to ${MAX_SELECTION} items per section.` });
+  };
+
+  const computeFeaturedDefaults = (products: Product[]) => {
+    return [...products].sort((a, b) => {
+      const aP = a.prioritized ? 1 : 0;
+      const bP = b.prioritized ? 1 : 0;
+      if (aP !== bP) return bP - aP;
+      if ((a.popularity || 0) !== (b.popularity || 0)) return (b.popularity || 0) - (a.popularity || 0);
+      if ((a.rating || 0) !== (b.rating || 0)) return (b.rating || 0) - (a.rating || 0);
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    }).slice(0, MAX_SELECTION);
+  };
+
+  const computeNewArrivalsDefaults = (products: Product[]) => {
+    return [...products].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, MAX_SELECTION);
+  };
+
+  const computeTrendingDefaults = (products: Product[]) => {
+    return [...products].sort((a, b) => {
+      const aScore = (a.popularity || 0) * 0.6 + (a.rating || 0) * 0.3 + ((a.reviewCount || 0) * 0.1);
+      const bScore = (b.popularity || 0) * 0.6 + (b.rating || 0) * 0.3 + ((b.reviewCount || 0) * 0.1);
+      return bScore - aScore;
+    }).slice(0, MAX_SELECTION);
+  };
+
+  const computeDealsDefaults = (products: Product[]) => {
+    return [...products]
+      .filter(p => (typeof p.offer_price === 'number' && p.offer_price < p.price) || (p.discount_percentage && p.discount_percentage > 0))
+      .sort((a, b) => {
+        const aDiscount = (a.price || 0) - (a.offer_price || a.price || 0);
+        const bDiscount = (b.price || 0) - (b.offer_price || b.price || 0);
+        if (bDiscount !== aDiscount) return bDiscount - aDiscount;
+        return (b.popularity || 0) - (a.popularity || 0);
+      })
+      .slice(0, MAX_SELECTION);
+  };
+
 
   return (
     <div className="space-y-8">
@@ -168,7 +283,16 @@ export default function HomepageSettingsPage() {
               Control the content and layout of your store's homepage.
             </p>
         </div>
-        <Button onClick={handleSaveChanges} size="lg">Save All Changes</Button>
+        <div className="flex gap-3">
+          <Button onClick={() => {
+            autoFillSelector(setFeaturedProductIds, computeFeaturedDefaults(allProducts));
+            autoFillSelector(setNewArrivalProductIds, computeNewArrivalsDefaults(allProducts));
+            autoFillSelector(setTrendingProductIds, computeTrendingDefaults(allProducts));
+            autoFillSelector(setDealProductIds, computeDealsDefaults(allProducts));
+            toast({ title: 'Auto-filled all sections with analytics defaults' });
+          }} size="lg" variant="outline">Auto-fill All</Button>
+          <Button onClick={handleSaveChanges} size="lg">Save All Changes</Button>
+        </div>
       </div>
      
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -178,6 +302,9 @@ export default function HomepageSettingsPage() {
           allProducts={allProducts}
           selectedIds={featuredProductIds}
           onToggle={createToggleHandler(setFeaturedProductIds)}
+          onAutoFill={() => autoFillSelector(setFeaturedProductIds, computeFeaturedDefaults(allProducts))}
+          onAutoFillPreview={() => previewAutoFill()}
+          maxSelection={MAX_SELECTION}
         />
          <ProductSelector
           title="New Arrivals"
@@ -185,6 +312,9 @@ export default function HomepageSettingsPage() {
           allProducts={allProducts}
           selectedIds={newArrivalProductIds}
           onToggle={createToggleHandler(setNewArrivalProductIds)}
+          onAutoFill={() => autoFillSelector(setNewArrivalProductIds, computeNewArrivalsDefaults(allProducts))}
+          onAutoFillPreview={() => previewAutoFill()}
+          maxSelection={MAX_SELECTION}
         />
          <ProductSelector
           title="Trending Products"
@@ -192,6 +322,9 @@ export default function HomepageSettingsPage() {
           allProducts={allProducts}
           selectedIds={trendingProductIds}
           onToggle={createToggleHandler(setTrendingProductIds)}
+          onAutoFill={() => autoFillSelector(setTrendingProductIds, computeTrendingDefaults(allProducts))}
+          onAutoFillPreview={() => previewAutoFill()}
+          maxSelection={MAX_SELECTION}
         />
          <ProductSelector
           title="Deal Products"
@@ -199,8 +332,76 @@ export default function HomepageSettingsPage() {
           allProducts={allProducts}
           selectedIds={dealProductIds}
           onToggle={createToggleHandler(setDealProductIds)}
+          onAutoFill={() => autoFillSelector(setDealProductIds, computeDealsDefaults(allProducts))}
+          onAutoFillPreview={() => previewAutoFill()}
+          maxSelection={MAX_SELECTION}
         />
       </div>
+
+      {/* Preview Modal */}
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Auto-fill Preview</DialogTitle>
+          </DialogHeader>
+          <div className="p-4">
+            {!previewData ? (
+              <div>Loading...</div>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <h3 className="font-semibold">Featured ({previewData.featured.length})</h3>
+                  <ul className="space-y-2 mt-2">
+                    {previewData.featured.map(p => (
+                      <li key={p.id} className="text-sm">{p.title || p.name}</li>
+                    ))}
+                  </ul>
+                  <div className="mt-2">
+                    <Button size="sm" onClick={() => applyPreviewForSection('featured')}>Apply Featured</Button>
+                  </div>
+                </div>
+                <div>
+                  <h3 className="font-semibold">New Arrivals ({previewData.newArrivals.length})</h3>
+                  <ul className="space-y-2 mt-2">
+                    {previewData.newArrivals.map(p => (
+                      <li key={p.id} className="text-sm">{p.title || p.name}</li>
+                    ))}
+                  </ul>
+                  <div className="mt-2">
+                    <Button size="sm" onClick={() => applyPreviewForSection('newArrivals')}>Apply New Arrivals</Button>
+                  </div>
+                </div>
+                <div>
+                  <h3 className="font-semibold">Trending ({previewData.trending.length})</h3>
+                  <ul className="space-y-2 mt-2">
+                    {previewData.trending.map(p => (
+                      <li key={p.id} className="text-sm">{p.title || p.name}</li>
+                    ))}
+                  </ul>
+                  <div className="mt-2">
+                    <Button size="sm" onClick={() => applyPreviewForSection('trending')}>Apply Trending</Button>
+                  </div>
+                </div>
+                <div>
+                  <h3 className="font-semibold">Deals ({previewData.deals.length})</h3>
+                  <ul className="space-y-2 mt-2">
+                    {previewData.deals.map(p => (
+                      <li key={p.id} className="text-sm">{p.title || p.name}</li>
+                    ))}
+                  </ul>
+                  <div className="mt-2">
+                    <Button size="sm" onClick={() => applyPreviewForSection('deals')}>Apply Deals</Button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setPreviewOpen(false)}>Close</Button>
+            <Button onClick={() => { applyPreviewForAll(); setPreviewOpen(false); }}>Apply All</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

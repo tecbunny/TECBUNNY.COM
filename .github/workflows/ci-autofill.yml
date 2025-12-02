@@ -1,0 +1,64 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+
+---
+name: CI and Auto-Fill Scheduler
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch: {}
+  workflow_call:
+    secrets:
+      SITE_URL:
+        required: true
+        description: Base URL of the deployed site
+      AUTO_FILL_SECRET:
+        required: true
+        description: Shared secret header for auto-fill trigger
+  schedule:
+    # Every day at 02:00 UTC
+    - cron: '0 2 * * *'
+
+env:
+  NODE_ENV: production
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+      - name: Install dependencies
+        run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint:check
+      - name: Run Tests
+        run: npm run test
+      - name: Build
+        run: npm run build
+
+  auto-fill-run:
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    permissions: # limit permissions for the scheduled job
+      contents: read
+      actions: read
+    concurrency:
+      group: ci-autofill
+      cancel-in-progress: true
+    steps:
+      - name: Trigger auto-fill run
+        uses: ./.github/actions/auto-fill-run
+        with:
+          api-url: ${{ secrets.SITE_URL }}
+          auto-fill-secret: ${{ secrets.AUTO_FILL_SECRET }}

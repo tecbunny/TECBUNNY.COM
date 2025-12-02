@@ -16,10 +16,10 @@ interface OrderContextType {
   currentOrder: Order | null;
   isProcessingOrder: boolean;
   createOrder: (orderData: Partial<Order>) => Promise<Order | null>;
-  updateOrderStatus: (orderId: string, status: OrderStatus) => Promise<boolean>;
+  updateOrderStatus: (orderId: string, status: OrderStatus, additionalData?: Record<string, unknown>) => Promise<boolean>;
   getOrders: (customerId?: string) => Promise<void>;
   getOrderById: (orderId: string) => Promise<Order | null>;
-  cancelOrder: (orderId: string) => Promise<boolean>;
+  cancelOrder: (orderId: string, reason?: string) => Promise<boolean>;
 }
 
 export const OrderContext = createContext<OrderContextType | undefined>(undefined);
@@ -252,23 +252,24 @@ export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     } finally {
       setIsProcessingOrder(false);
     }
-  }, [cartItems, clearCart, toast, user]);
+  }, [cartItems, clearCart, toast, user, hydrateCartItemsWithProductData]);
 
-  const updateOrderStatus = useCallback(async (orderId: string, status: OrderStatus): Promise<boolean> => {
+  const updateOrderStatus = useCallback(async (orderId: string, status: OrderStatus, additionalData?: Record<string, unknown>): Promise<boolean> => {
     try {
-      const { error } = await supabase
-        .from('orders')
-        .update({ 
-          status,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', orderId);
+      const payload = { orderId, status, additionalData: additionalData ?? {} };
+      const res = await fetch('/api/orders/update-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
 
-      if (error) {
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.success) {
+        logger.error('OrderProvider updateOrderStatus failed', { status, orderId, resStatus: res.status, data });
         toast({
-          title: "Update Failed",
-          description: "Failed to update order status.",
-          variant: "destructive"
+          title: 'Update Failed',
+          description: data?.error || 'Failed to update order status.',
+          variant: 'destructive',
         });
         return false;
       }
@@ -285,16 +286,21 @@ export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
 
       toast({
-        title: "Order Updated",
+        title: 'Order Updated',
         description: `Order status updated to ${normalizedStatus}.`,
       });
 
       return true;
     } catch (error) {
-      logger.error('Error updating order status', { error, orderId, status });
+      logger.error('OrderProvider failed to update order status', { error, orderId, status });
+      toast({
+        title: 'Update Failed',
+        description: 'An unexpected error occurred while updating the order status.',
+        variant: 'destructive'
+      });
       return false;
     }
-  }, [currentOrder, supabase, toast]);
+  }, [currentOrder, toast]);
 
   const getOrders = useCallback(async (customerId?: string): Promise<void> => {
     try {
@@ -347,21 +353,22 @@ export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, [supabase]);
 
-  const cancelOrder = useCallback(async (orderId: string): Promise<boolean> => {
+  const cancelOrder = useCallback(async (orderId: string, reason?: string): Promise<boolean> => {
     try {
-      const { error } = await supabase
-        .from('orders')
-        .update({ 
-          status: 'Cancelled' as OrderStatus,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', orderId);
+      const payload = { orderId, status: 'Cancelled', additionalData: { cancellation_reason: reason || 'Cancelled by user' } };
+      const res = await fetch('/api/orders/update-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
 
-      if (error) {
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.success) {
+        logger.error('OrderProvider cancelOrder failed', { orderId, resStatus: res.status, data });
         toast({
-          title: "Cancellation Failed",
-          description: "Failed to cancel order.",
-          variant: "destructive"
+          title: 'Cancellation Failed',
+          description: data?.error || 'Failed to cancel order.',
+          variant: 'destructive'
         });
         return false;
       }
@@ -376,8 +383,8 @@ export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
 
       toast({
-        title: "Order Cancelled",
-        description: "Order has been cancelled successfully.",
+        title: 'Order Cancelled',
+        description: 'Order has been cancelled successfully.',
       });
 
       return true;
@@ -386,9 +393,14 @@ export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         error: error instanceof Error ? error.message : String(error),
         orderId,
       });
+      toast({
+        title: 'Cancellation Failed',
+        description: 'An unexpected error occurred. Please try again.',
+        variant: 'destructive'
+      });
       return false;
     }
-  }, [currentOrder, supabase, toast]);
+  }, [currentOrder, toast]);
 
   const value = {
     orders,

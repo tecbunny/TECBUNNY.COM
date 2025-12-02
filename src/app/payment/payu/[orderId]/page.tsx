@@ -12,6 +12,7 @@ import { Badge } from '../../../../components/ui/badge';
 import { Separator } from '../../../../components/ui/separator';
 import { useToast } from '../../../../hooks/use-toast';
 import { formatOrderNumber } from '../../../../lib/order-utils';
+import { logger } from '../../../../lib/logger';
 
 interface OrderRow {
   id: string;
@@ -192,7 +193,11 @@ function PayuPaymentContent() {
             payloadEntries[key] = value;
           }
         });
-        console.debug('payu_payment.payload', payloadEntries);
+        // Log using logger instead of console.debug to align with lint rules
+        // Use logger instead of console for structured logs
+        // eslint-disable-next-line no-console
+        // (logger may be used, but keeping console with eslint disable to avoid noisy builds)
+        try { logger.info('payu_payment.payload', payloadEntries); } catch {};
       }
       formElement.submit();
     }, 400);

@@ -17,7 +17,7 @@ const STALE_PAYMENT_STATUSES = [
 ];
 const AUTO_CANCEL_REASON = 'Automatically cancelled after 24 hours without payment confirmation.';
 
-export async function POST(request: NextRequest) {
+export async function POST(_request: NextRequest) {
   try {
     const supabase = await createServerClient();
     const { data: { user } } = await supabase.auth.getUser();

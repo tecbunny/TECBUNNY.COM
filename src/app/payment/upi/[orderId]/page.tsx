@@ -185,16 +185,16 @@ export default function UPIPaymentPage() {
   const handlePaymentConfirmation = async () => {
     try {
       // In a real app, you would verify payment through UPI gateway
-      const { error } = await supabase
-        .from('orders')
-        .update({ 
-          status: 'Payment Confirmed',
-          payment_status: 'Payment Confirmed',
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', orderId);
-
-      if (error) throw error;
+      const payload = { orderId, status: 'Payment Confirmed', additionalData: { payment_status: 'Payment Confirmed' } };
+      const response = await fetch('/api/orders/update-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok || !result?.success) {
+        throw new Error(result?.error || 'Failed to update payment status');
+      }
 
   setPaymentStatus('paid');
   setOrder(prev => prev ? { ...prev, status: 'Payment Confirmed', payment_status: 'Payment Confirmed' } : prev);
