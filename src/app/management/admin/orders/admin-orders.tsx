@@ -49,6 +49,11 @@ export default function AdminOrders() {
 
   const fetchOrders = React.useCallback(async () => {
     setLoading(true);
+    try {
+      await fetch('/api/orders/auto-cancel', { method: 'POST', cache: 'no-store' });
+    } catch (error) {
+      console.error('Error triggering auto-cancel:', error);
+    }
     const { data, error } = await supabase
       .from('orders')
       .select('*')

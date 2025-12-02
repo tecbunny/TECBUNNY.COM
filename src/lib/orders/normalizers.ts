@@ -16,6 +16,16 @@ export const STATUS_MAP: Record<string, OrderStatus> = {
   rejected: 'Rejected',
 };
 
+const TYPE_MAP: Record<string, OrderType> = {
+  delivery: 'Delivery',
+  pickup: 'Pickup',
+  'pick-up': 'Pickup',
+  'walk-in': 'Walk-in',
+  walkin: 'Walk-in',
+  'walk in': 'Walk-in',
+  'walk_in': 'Walk-in',
+};
+
 type RawItemsPayload = {
   cart_items?: unknown;
   customer_email?: string;
@@ -72,6 +82,21 @@ export function normalizeOrderStatus(status: string | OrderStatus | null | undef
   return normalized ?? (status as OrderStatus);
 }
 
+function normalizeOrderType(type: unknown): OrderType {
+  if (typeof type === 'string' && type.trim()) {
+    const key = type.trim().toLowerCase();
+    const mapped = TYPE_MAP[key];
+    if (mapped) {
+      return mapped;
+    }
+    // Preserve existing canonical values even if case differs
+    if (key === 'delivery') return 'Delivery';
+    if (key === 'pickup') return 'Pickup';
+    if (key === 'walk-in' || key === 'walkin' || key === 'walk in' || key === 'walk_in') return 'Walk-in';
+  }
+  return 'Delivery';
+}
+
 export function deserializeOrder(rawOrder: any): Order {
   const itemsPayload = (parseOrderItemsBlob(rawOrder?.items) ?? {}) as RawItemsPayload;
 
@@ -118,7 +143,7 @@ export function deserializeOrder(rawOrder: any): Order {
   });
 
   const normalizedStatus = normalizeOrderStatus(rawOrder?.status);
-  const normalizedType = (rawOrder?.type ?? rawOrder?.order_type ?? 'Delivery') as OrderType;
+  const normalizedType = normalizeOrderType(rawOrder?.type ?? rawOrder?.order_type);
 
   const subtotal = numberFrom(rawOrder?.subtotal ?? rawOrder?.pre_tax_total ?? rawOrder?.total_amount ?? 0);
   const gstAmount = numberFrom(rawOrder?.gst_amount ?? rawOrder?.tax_amount ?? 0);

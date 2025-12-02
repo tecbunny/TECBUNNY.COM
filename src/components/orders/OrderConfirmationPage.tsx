@@ -256,6 +256,14 @@ export default function OrderConfirmationPage({ orderId }: OrderConfirmationPage
                     {paymentStatusLabel}
                   </span>
                 </div>
+                {order.payment_reference && (
+                  <div className="flex justify-between">
+                    <span>Payment Reference</span>
+                    <span className="font-medium text-gray-700">
+                      {order.payment_reference}
+                    </span>
+                  </div>
+                )}
               </div>
 
               <Separator />

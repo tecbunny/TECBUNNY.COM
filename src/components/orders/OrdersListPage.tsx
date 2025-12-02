@@ -179,6 +179,12 @@ export default function OrdersListPage() {
                           <CreditCard className="h-4 w-4" />
                           ₹{order.total.toFixed(2)}
                         </div>
+                        {order.payment_reference && (
+                          <div className="flex items-center gap-2">
+                            <CreditCard className="h-4 w-4" />
+                            Ref: {order.payment_reference}
+                          </div>
+                        )}
                       </div>
 
                       <div className="space-y-1">

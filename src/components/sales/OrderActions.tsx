@@ -38,8 +38,8 @@ import {
 } from '../../components/ui/dialog';
 import { Label } from '../../components/ui/label';
 import { Textarea } from '../../components/ui/textarea';
+import { Input } from '../../components/ui/input';
 import { useToast } from '../../hooks/use-toast';
-import { createClient } from '../../lib/supabase/client';
 import { useAuth } from '../../lib/hooks';
 import { isManagerClient, isSalesClient } from '../../lib/permissions-client';
 import type { Order, OrderStatus } from '../../lib/types';
@@ -51,7 +51,7 @@ const ADMIN_NOTIFICATION_EMAIL = (() => {
 
 interface OrderActionsProps {
   order: Order;
-  onStatusUpdate: () => void;
+  onStatusUpdate: () => Promise<void> | void;
   variant?: 'dropdown' | 'buttons' | 'compact';
 }
 
@@ -78,7 +78,6 @@ interface CancellationDialog {
 export function OrderActions({ order, onStatusUpdate, variant = 'dropdown' }: OrderActionsProps) {
   const { toast } = useToast();
   const { user } = useAuth();
-  const supabase = createClient();
   
   const [paymentDialog, setPaymentDialog] = React.useState<PaymentConfirmationDialog>({
     isOpen: false,
@@ -102,41 +101,18 @@ export function OrderActions({ order, onStatusUpdate, variant = 'dropdown' }: Or
   
   const [cancellationReason, setCancellationReason] = React.useState('');
   const [isProcessing, setIsProcessing] = React.useState(false);
+  const [paymentReference, setPaymentReference] = React.useState(order.payment_reference ?? '');
 
   const canManageOrders = isManagerClient(user);
   const canManagePickupOrders = isSalesClient(user); // Both sales and manager can manage pickup orders
 
   const hasPermission = order.type === 'Pickup' ? canManagePickupOrders : canManageOrders;
 
-  const resolvePaymentStatusUpdate = (newStatus: OrderStatus) => {
-    const method = order.payment_method?.toLowerCase() ?? '';
-    switch (newStatus) {
-      case 'Awaiting Payment':
-        return { payment_status: 'Payment Confirmation Pending' };
-      case 'Payment Confirmed':
-        return { payment_status: 'Payment Confirmed' };
-      case 'Confirmed':
-        if (method === 'cod' && order.payment_status !== 'Payment Confirmed') {
-          return {};
-        }
-        return order.payment_status === 'Payment Confirmed' ? {} : { payment_status: 'Payment Confirmed' };
-      case 'Processing':
-      case 'Ready to Ship':
-      case 'Shipped':
-      case 'Ready for Pickup':
-      case 'Completed':
-      case 'Delivered':
-        if (order.payment_status === 'Payment Confirmed' || method === 'cod') {
-          return {};
-        }
-        return { payment_status: 'Payment Confirmed' };
-      case 'Cancelled':
-      case 'Rejected':
-        return { payment_status: 'Payment Cancelled' };
-      default:
-        return {};
-    }
-  };
+  const isPickupLikeOrder = order.type === 'Pickup' || order.type === 'Walk-in';
+
+  React.useEffect(() => {
+    setPaymentReference(order.payment_reference ?? '');
+  }, [order.payment_reference, order.id]);
 
   const notifyStatusChange = async (status: OrderStatus) => {
     const notifyPickupCustomer = async () => {
@@ -249,32 +225,31 @@ export function OrderActions({ order, onStatusUpdate, variant = 'dropdown' }: Or
   const updateOrderStatus = async (newStatus: OrderStatus, additionalData?: any) => {
     setIsProcessing(true);
     try {
-      const paymentUpdates = resolvePaymentStatusUpdate(newStatus);
-      const updateData = {
-        status: newStatus,
-        processed_by: user?.id || 'unknown',
-        updated_at: new Date().toISOString(),
-        ...paymentUpdates,
-        ...additionalData
-      };
+      const response = await fetch('/api/orders/update-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderId: order.id,
+          status: newStatus,
+          additionalData
+        })
+      });
 
-      const { error } = await supabase
-        .from('orders')
-        .update(updateData)
-        .eq('id', order.id);
+      const result = await response.json().catch(() => null);
 
-      if (error) {
+      if (!response.ok || !result?.success) {
+        const message = result?.error ?? 'Failed to update order status.';
         toast({
           variant: 'destructive',
           title: 'Update failed',
-          description: error.message
+          description: message
         });
         return;
       }
 
       await notifyStatusChange(newStatus);
 
-      onStatusUpdate();
+      await onStatusUpdate();
       toast({
         title: 'Order Updated',
         description: `Order ${formatOrderNumber(order.id)} is now ${newStatus}.`
@@ -293,7 +268,10 @@ export function OrderActions({ order, onStatusUpdate, variant = 'dropdown' }: Or
 
   const handlePaymentConfirmation = (confirmed: boolean) => {
     if (confirmed) {
-      updateOrderStatus('Payment Confirmed');
+      const payload = paymentReference?.trim()
+        ? { payment_reference: paymentReference.trim() }
+        : undefined;
+      updateOrderStatus('Payment Confirmed', payload);
     } else {
       updateOrderStatus('Cancelled', { 
         cancellation_reason: 'Payment not confirmed' 
@@ -355,23 +333,31 @@ export function OrderActions({ order, onStatusUpdate, variant = 'dropdown' }: Or
     }
 
     // Status-specific actions
+    const readyAction = {
+      label: isPickupLikeOrder ? 'Ready for Pickup' : 'Ready to Ship',
+      icon: <Clock className="h-4 w-4" />,
+      action: () => updateOrderStatus(isPickupLikeOrder ? 'Ready for Pickup' : 'Ready to Ship')
+    };
+
     switch (order.status) {
       case 'Awaiting Payment':
         actions.push({
           label: 'Confirm Payment',
           icon: <CreditCard className="h-4 w-4" />,
-          action: () => setPaymentDialog(prev => ({ 
-            ...prev, 
-            isOpen: true,
-            onConfirm: () => handlePaymentConfirmation(true),
-            onReject: () => handlePaymentConfirmation(false),
-            onClose: () => setPaymentDialog(prev => ({ ...prev, isOpen: false }))
-          }))
+          action: () => {
+            setPaymentReference(order.payment_reference ?? '');
+            setPaymentDialog(prev => ({ 
+              ...prev, 
+              isOpen: true,
+              onConfirm: () => handlePaymentConfirmation(true),
+              onReject: () => handlePaymentConfirmation(false),
+              onClose: () => setPaymentDialog(prev => ({ ...prev, isOpen: false }))
+            }));
+          }
         });
         break;
 
       case 'Pending':
-      case 'Payment Confirmed':
         actions.push({
           label: 'Confirm Order',
           icon: <CheckCircle className="h-4 w-4" />,
@@ -385,7 +371,23 @@ export function OrderActions({ order, onStatusUpdate, variant = 'dropdown' }: Or
         });
         break;
 
+      case 'Payment Confirmed':
+        actions.push({
+          label: 'Confirm Order',
+          icon: <CheckCircle className="h-4 w-4" />,
+          action: () => setConfirmDialog(prev => ({
+            ...prev,
+            isOpen: true,
+            onAccept: () => handleOrderConfirmation(true),
+            onReject: () => handleOrderConfirmation(false),
+            onClose: () => setConfirmDialog(prev => ({ ...prev, isOpen: false }))
+          }))
+        });
+        actions.push(readyAction);
+        break;
+
       case 'Confirmed':
+        actions.push(readyAction);
         actions.push({
           label: 'Start Processing',
           icon: <Package className="h-4 w-4" />,
@@ -394,7 +396,7 @@ export function OrderActions({ order, onStatusUpdate, variant = 'dropdown' }: Or
         break;
 
       case 'Processing':
-        if (order.type === 'Pickup') {
+        if (isPickupLikeOrder) {
           actions.push({
             label: 'Ready for Pickup',
             icon: <Clock className="h-4 w-4" />,
@@ -635,9 +637,12 @@ export function OrderActions({ order, onStatusUpdate, variant = 'dropdown' }: Or
     return (
       <>
         {/* Payment Confirmation Dialog */}
-        <Dialog open={paymentDialog.isOpen} onOpenChange={(open) => 
-          !open && setPaymentDialog(prev => ({ ...prev, isOpen: false }))
-        }>
+        <Dialog open={paymentDialog.isOpen} onOpenChange={(open) => {
+          if (!open) {
+            setPaymentDialog(prev => ({ ...prev, isOpen: false }));
+            setPaymentReference(order.payment_reference ?? '');
+          }
+        }}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Payment Confirmation</DialogTitle>
@@ -649,6 +654,17 @@ export function OrderActions({ order, onStatusUpdate, variant = 'dropdown' }: Or
                 <strong>Payment Method: {order.payment_method || 'Not specified'}</strong>
               </DialogDescription>
             </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="payment-reference">Payment Reference (optional)</Label>
+                <Input
+                  id="payment-reference"
+                  placeholder="Transaction or UTR number"
+                  value={paymentReference}
+                  onChange={(event) => setPaymentReference(event.target.value)}
+                />
+              </div>
+            </div>
             <DialogFooter className="gap-2">
               <Button 
                 variant="outline" 
