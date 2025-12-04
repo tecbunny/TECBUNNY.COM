@@ -40,20 +40,19 @@ export default function InventoryManagementPage() {
     const fetchInventory = React.useCallback(async () => {
         setLoading(true);
         try {
-            // Use the inventory_summary view for better data structure
+            // Prefer the inventory_items view for consolidated stock data
             const { data: inventoryData, error: inventoryError } = await supabase
-                .from('inventory_summary')
+                .from('inventory_items')
                 .select('*')
                 .order('name');
 
             if (inventoryError) {
-                logger.error("Error fetching inventory data in sales-inventory", { inventoryError });
-                // Fallback to products table if view doesn't exist
+                logger.warn("inventory_items unavailable, falling back to products", { inventoryError });
                 const { data: productsData, error: productsError } = await supabase
                     .from('products')
                     .select('*')
                     .order('name');
-                
+
                 if (productsError) {
                     logger.error("Error fetching products in sales-inventory", { productsError });
                     toast({
@@ -61,24 +60,32 @@ export default function InventoryManagementPage() {
                         description: "Failed to fetch inventory data",
                         variant: "destructive",
                     });
-                    setLoading(false);
                     return;
                 }
 
-                // Map products to inventory format
-                const mappedData = productsData.map(product => ({
-                    ...product,
-                    stock_quantity: product.quantity || 0,
-                    stock_label: product.quantity === 0 ? 'Out of Stock' : 
-                                product.quantity <= 5 ? 'Low Stock' : 'In Stock',
-                    warehouse_location: 'Main Warehouse',
-                    minimum_stock: product.minimum_stock || 5,
-                    available_serials: 0
-                }));
-                
+                const mappedData = (productsData || []).map(product => {
+                    const normalizedName = product?.name || product?.title || product?.model_number || 'Unnamed Product';
+                    const stockQty = Number(product?.stock_quantity ?? product?.quantity ?? 0);
+                    return {
+                        ...product,
+                        name: normalizedName,
+                        stock_quantity: stockQty,
+                        stock_label: stockQty === 0 ? 'Out of Stock' : stockQty <= 5 ? 'Low Stock' : 'In Stock',
+                        warehouse_location: product?.warehouse_location || 'Main Warehouse',
+                        minimum_stock: Number(product?.minimum_stock ?? 5),
+                        available_serials: Array.isArray(product?.serial_numbers) ? product.serial_numbers.length : 0,
+                    };
+                });
+
                 setProductList(mappedData);
             } else {
-                setProductList(inventoryData);
+                const normalizedInventory = (inventoryData || []).map((item: any) => ({
+                    ...item,
+                    name: item?.name || item?.product_name || 'Unnamed Product',
+                    stock_quantity: Number(item?.stock_quantity ?? 0),
+                    category: item?.category || 'Uncategorized',
+                }));
+                setProductList(normalizedInventory as ProductWithStock[]);
             }
         } catch (error) {
             logger.error("Unexpected error in sales-inventory", { error });
@@ -87,8 +94,9 @@ export default function InventoryManagementPage() {
                 description: "An unexpected error occurred",
                 variant: "destructive",
             });
+        } finally {
+            setLoading(false);
         }
-        setLoading(false);
     }, [supabase, toast]);
 
     React.useEffect(() => {
@@ -222,17 +230,17 @@ export default function InventoryManagementPage() {
                                         <TableRow key={product.id}>
                                             <TableCell>
                                                 {product.image ? (
-                                                  <Image
-                                                      src={product.image}
-                                                      alt={product.name}
-                                                      width={48}
-                                                      height={48}
-                                                      className="rounded-md object-cover"
-                                                  />
+                                                    <Image
+                                                        src={product.image}
+                                                        alt={product.name}
+                                                        width={48}
+                                                        height={48}
+                                                        className="rounded-md object-cover"
+                                                    />
                                                 ) : (
-                                                  <div className="w-12 h-12 rounded-md bg-gray-200 flex items-center justify-center text-gray-600 font-semibold">
-                                                    {product.name.charAt(0).toUpperCase()}
-                                                  </div>
+                                                    <div className="w-12 h-12 rounded-md bg-gray-200 flex items-center justify-center text-gray-600 font-semibold">
+                                                        {(product.name?.charAt(0) ?? '?').toUpperCase()}
+                                                    </div>
                                                 )}
                                             </TableCell>
                                             <TableCell className="font-medium">{product.name}</TableCell>

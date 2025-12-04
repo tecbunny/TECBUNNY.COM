@@ -36,16 +36,48 @@ export default function PurchaseEntryPage() {
             const { data, error } = await supabase.from('products').select('*');
             if (error) {
                 console.error("Error fetching products", error);
-            } else {
-                setAllProducts(data || []);
+                toast({ variant: 'destructive', title: 'Unable to load products', description: error.message });
+                return;
             }
+
+            const normalizedProducts = (data ?? []).map((product: any) => {
+                const normalizedName = product?.name || product?.title || product?.model_number || 'Unnamed Product';
+                const normalizedPrice = Number(product?.price ?? product?.offer_price ?? product?.mrp ?? 0);
+                const normalizedCategory = product?.category || product?.product_type || 'Uncategorized';
+                const normalizedImage = product?.image || (Array.isArray(product?.images) ? product.images[0] : '') || '';
+                const requiresSerial = Boolean(
+                    product?.isSerialNumberCompulsory ??
+                    product?.serial_required ??
+                    product?.requires_serial_number ??
+                    false
+                );
+
+                return {
+                    ...product,
+                    name: normalizedName,
+                    title: product?.title || normalizedName,
+                    price: normalizedPrice,
+                    category: normalizedCategory,
+                    image: normalizedImage,
+                    isSerialNumberCompulsory: requiresSerial,
+                } as Product;
+            });
+
+            setAllProducts(normalizedProducts);
         };
         fetchProducts();
-    }, [supabase]);
+    }, [supabase, toast]);
 
     React.useEffect(() => {
-        if (searchTerm) {
-            setSearchResults(allProducts.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase())));
+        const trimmedTerm = searchTerm.trim().toLowerCase();
+        if (trimmedTerm) {
+            const matches = allProducts.filter((product) => {
+                const name = (product.name || '').toLowerCase();
+                const title = (product.title || '').toLowerCase();
+                const model = (product.model_number || '').toLowerCase();
+                return name.includes(trimmedTerm) || title.includes(trimmedTerm) || model.includes(trimmedTerm);
+            });
+            setSearchResults(matches);
         } else {
             setSearchResults([]);
         }
@@ -53,7 +85,8 @@ export default function PurchaseEntryPage() {
 
     const handleAddItem = (product: Product) => {
         if (!purchaseItems.some(item => item.id === product.id)) {
-            setPurchaseItems(prev => [...prev, { ...product, quantity: 1, purchase_price: (product.price || 0) * 0.7, serialNumbers: [] }]);
+            const basePrice = Number((product as any)?.purchase_price ?? product.price ?? product.offer_price ?? product.mrp ?? 0);
+            setPurchaseItems(prev => [...prev, { ...product, quantity: 1, purchase_price: basePrice, serialNumbers: [] }]);
         }
         setSearchTerm('');
         setSearchResults([]);
@@ -198,7 +231,11 @@ export default function PurchaseEntryPage() {
                                                         className="p-2 hover:bg-muted cursor-pointer"
                                                         onClick={() => handleAddItem(product)}
                                                     >
-                                                        {product.name}
+                                                        <div className="font-medium">{product.name}</div>
+                                                        <div className="text-xs text-muted-foreground flex items-center justify-between gap-2">
+                                                            <span>{product.model_number || product.category || 'Uncategorized'}</span>
+                                                            <span>₹{Number(product.price ?? product.offer_price ?? product.mrp ?? 0).toFixed(2)}</span>
+                                                        </div>
                                                     </div>
                                                 ))
                                             ) : (

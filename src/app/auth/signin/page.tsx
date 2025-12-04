@@ -338,7 +338,16 @@ function SignInForm() {
                   className="w-full"
                   disabled={isLoading || !email || !password || isLockedOut}
                 >
-                  {isLoading ? 'Signing in...' : isLockedOut ? `Locked (${lockoutTimeRemaining}s)` : 'Sign In'}
+                  {isLoading ? (
+                    <>
+                      <span className="animate-spin mr-2 h-4 w-4 border-2 border-current border-t-transparent rounded-full" />
+                      Signing in...
+                    </>
+                  ) : isLockedOut ? (
+                    `Locked (${lockoutTimeRemaining}s)`
+                  ) : (
+                    'Sign In'
+                  )}
                 </Button>
               </form>
 

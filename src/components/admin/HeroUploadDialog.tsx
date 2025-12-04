@@ -2,7 +2,6 @@
 
 import React, { useState } from 'react';
 
-import { createClient } from '../../lib/supabase/client';
 import { usePageContent } from '../../hooks/use-page-content';
 import { useToast } from '../../hooks/use-toast';
 
@@ -15,7 +14,7 @@ interface HeroUploadDialogProps {
 }
 
 export default function HeroUploadDialog({ isOpen, onClose }: HeroUploadDialogProps) {
-  const supabase = createClient();
+  // Use server upload route to keep storage provider behavior consistent
   const { content, updateContent } = usePageContent('homepage');
   const [uploading, setUploading] = useState(false);
   const { toast } = useToast();
@@ -25,22 +24,17 @@ export default function HeroUploadDialog({ isOpen, onClose }: HeroUploadDialogPr
   const handleFile = async (file: File) => {
     try {
       setUploading(true);
-      const ext = file.name.split('.').pop();
-      const filePath = `hero-banner-${Date.now()}.${ext}`;
-      
-      // Upload file to storage
-      const { error: uploadError } = await supabase.storage
-        .from('hero-banners')
-        .upload(filePath, file, { upsert: true });
-      
-      if (uploadError) throw uploadError;
-      
-      // Get public URL of the uploaded file
-      const { data: urlData } = supabase.storage
-        .from('hero-banners')
-        .getPublicUrl(filePath);
-      
-      const publicUrl = urlData.publicUrl;
+      // Upload via centralized server endpoint - it will use S3 or Supabase storage depending on configuration
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('type', 'hero');
+      const res = await fetch('/api/upload', { method: 'POST', body: fd });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json?.secure_url && !json?.url) {
+        const errMsg = json?.error || json?.message || `Upload failed (status ${res.status})`;
+        throw new Error(errMsg);
+      }
+      const publicUrl = json?.secure_url || json?.url;
       
       // Update page content with new hero image
       const currentContent = content?.content || {};

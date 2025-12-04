@@ -35,6 +35,7 @@ import {
 import type { Coupon, Product, Discount } from '../../lib/types';
 import { createClient } from '../../lib/supabase/client';
 import { logger } from '../../lib/logger';
+import { useToast } from '../../hooks/use-toast';
 
 // Coupon schema (requires code)
 const couponSchema = z.object({
@@ -71,6 +72,7 @@ export function CreateDiscountDialog({ children, onDiscountCreated, mode = 'disc
   const [open, setOpen] = React.useState(false);
   const [products, setProducts] = React.useState<Product[]>([]);
   const supabase = createClient();
+  const { toast } = useToast();
 
   const isCoupon = mode === 'coupon';
   // Use 'any' for form generic to bypass complex union inference; runtime safety handled by zod
@@ -115,50 +117,89 @@ export function CreateDiscountDialog({ children, onDiscountCreated, mode = 'disc
   }, [products]);
 
   const onSubmit = async (data: any) => {
-    if (isCoupon) {
-      const payload = {
-        code: (data as CouponValues).code.toUpperCase(),
-        type: (data as CouponValues).type,
-        value: (data as CouponValues).value,
-        start_date: new Date().toISOString(),
-        expiry_date: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString(),
-        min_purchase: (data as CouponValues).min_purchase,
-        usage_limit: 0,
-        usage_count: 0,
-        per_user_limit: 0,
-        status: 'active',
-        applicable_category: (data as CouponValues).applicableTo === 'category' ? (data as CouponValues).applicable_category : undefined,
-        applicable_product_id: (data as CouponValues).applicableTo === 'product' ? (data as CouponValues).applicable_product_id : undefined,
-      };
-      const { data: inserted, error } = await supabase.from('coupons').insert(payload).select().single();
-      if (!error && inserted) {
-        onDiscountCreated(inserted as Coupon);
+    try {
+      if (isCoupon) {
+        const couponValues = data as CouponValues;
+        const couponCode = couponValues.code.toUpperCase();
+        const payload: Record<string, any> = {
+          code: couponCode,
+          title: couponCode,
+          description: `Auto-generated coupon for ${couponCode}`,
+          type: couponValues.type,
+          value: couponValues.value,
+          min_purchase: couponValues.min_purchase ?? null,
+          usage_limit: 0,
+          usage_count: 0,
+          per_user_limit: 0,
+          start_date: new Date().toISOString(),
+          expiry_date: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString(),
+          status: 'active',
+        };
+
+        if (couponValues.applicableTo === 'category' && couponValues.applicable_category) {
+          payload.applicable_category = couponValues.applicable_category;
+        }
+        if (couponValues.applicableTo === 'product' && couponValues.applicable_product_id) {
+          payload.applicable_product_id = couponValues.applicable_product_id;
+        }
+
+        const response = await fetch('/api/coupons', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(result.error || 'Failed to create coupon');
+        }
+
+        const createdCoupon = (result?.coupon ?? result) as Coupon;
+        onDiscountCreated(createdCoupon);
         form.reset();
         setOpen(false);
+        toast({ title: 'Coupon created', description: result?.message ?? `${couponCode} has been saved.` });
       } else {
-        logger.error('Failed to create coupon in CreateDiscountDialog', { error, payload });
-      }
-    } else {
-      const payload = {
-        name: (data as AutoDiscountValues).name,
-        type: (data as AutoDiscountValues).type,
-        value: (data as AutoDiscountValues).value,
-        start_date: new Date().toISOString(),
-        expiry_date: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString(),
-        min_purchase: (data as AutoDiscountValues).min_purchase,
-        status: 'active',
-        applicable_category: (data as AutoDiscountValues).applicableTo === 'category' ? (data as AutoDiscountValues).applicable_category : undefined,
-        applicable_product_id: (data as AutoDiscountValues).applicableTo === 'product' ? (data as AutoDiscountValues).applicable_product_id : undefined,
-        priority: 0,
-      };
-      const { data: inserted, error } = await supabase.from('discounts').insert(payload).select().single();
-      if (!error && inserted) {
-        onDiscountCreated(inserted as Discount);
+        const discountValues = data as AutoDiscountValues;
+        const payload: Record<string, any> = {
+          name: discountValues.name,
+          type: discountValues.type,
+          value: discountValues.value,
+          start_date: new Date().toISOString(),
+          expiry_date: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString(),
+          min_purchase: discountValues.min_purchase,
+          status: 'active',
+          priority: 0,
+        };
+
+        if (discountValues.applicableTo === 'category' && discountValues.applicable_category) {
+          payload.applicable_category = discountValues.applicable_category;
+        }
+        if (discountValues.applicableTo === 'product' && discountValues.applicable_product_id) {
+          payload.applicable_product_id = discountValues.applicable_product_id;
+        }
+
+        const response = await fetch('/api/discounts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(payload),
+        });
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(result.error || 'Failed to create discount');
+        }
+
+        onDiscountCreated(result.discount as Discount);
         form.reset();
         setOpen(false);
-      } else {
-        logger.error('Failed to create discount in CreateDiscountDialog', { error, payload });
+        toast({ title: 'Discount created', description: `${discountValues.name} has been saved.` });
       }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unexpected error while saving';
+      logger.error('create-discount-dialog.submit_failed', { error: message });
+      toast({ title: 'Unable to save', description: message, variant: 'destructive' });
     }
   };
 

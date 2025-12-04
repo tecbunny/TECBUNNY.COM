@@ -1,5 +1,5 @@
-import DiscountManagementPage from './admin-discounts';
+import OffersManagement from '../../../../components/admin/OffersManagement';
 
 export default function Page() {
-  return <DiscountManagementPage />;
+  return <OffersManagement initialTab="discounts" />;
 }

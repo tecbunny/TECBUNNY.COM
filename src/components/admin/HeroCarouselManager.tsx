@@ -13,7 +13,6 @@ import {
 
 import { usePageContent } from '../../hooks/use-page-content';
 import { useToast } from '../../hooks/use-toast';
-import { createClient } from '../../lib/supabase/client';
 import type { HeroCarouselContent, HeroCarouselItem, HeroCarouselPageKey } from '../../lib/types';
 
 import { Badge } from '../ui/badge';
@@ -119,7 +118,6 @@ const EMPTY_FORM: SlideDraft = {
 export default function HeroCarouselManager() {
   const { content, loading, updateContent } = usePageContent('hero-carousels');
   const { toast } = useToast();
-  const supabase = React.useMemo(() => createClient(), []);
 
   const [activeTab, setActiveTab] = React.useState<HeroCarouselPageKey>('homepage');
   const [localContent, setLocalContent] = React.useState<HeroCarouselContent>(EMPTY_CONTENT);
@@ -206,15 +204,18 @@ export default function HeroCarouselManager() {
   const uploadBannerImage = async (file: File) => {
     const ext = file.name.split('.').pop() || 'jpg';
     const path = `hero-carousel/${activeTab}/${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
-    const { error } = await supabase.storage.from('hero-banners').upload(path, file, {
-      cacheControl: '3600',
-      upsert: true,
-    });
-    if (error) {
-      throw new Error(error.message || 'Failed to upload banner');
+    // Use centralized upload endpoint to ensure S3/Supabase logic is consistent
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('type', 'hero');
+    fd.append('path', path);
+    const res = await fetch('/api/upload', { method: 'POST', body: fd });
+    const json = await res.json().catch(() => null);
+    if (!res.ok || !(json?.secure_url || json?.url)) {
+      const message = json?.error || json?.message || `Upload failed (status ${res.status})`;
+      throw new Error(message);
     }
-    const { data } = supabase.storage.from('hero-banners').getPublicUrl(path);
-    return data.publicUrl;
+    return json?.secure_url || json?.url;
   };
 
   const handleDialogSubmit = async (event: React.FormEvent<HTMLFormElement>) => {

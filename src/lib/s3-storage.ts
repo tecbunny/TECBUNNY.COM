@@ -1,5 +1,6 @@
 // AWS S3 Storage Service
-import AWS from 'aws-sdk';
+import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand, ObjectCannedACL } from '@aws-sdk/client-s3';
+import { getSignedUrl as getPresignedUrl } from '@aws-sdk/s3-request-presigner';
 
 import { logger } from './logger';
 
@@ -12,19 +13,21 @@ export const isS3Configured = Boolean(
   AWS_ACCESS_KEY_ID && AWS_SECRET_ACCESS_KEY && S3_BUCKET_NAME
 );
 
+let s3Client: S3Client | null = null;
+
 // Configure AWS
 if (isS3Configured) {
-  AWS.config.update({
-    accessKeyId: AWS_ACCESS_KEY_ID,
-    secretAccessKey: AWS_SECRET_ACCESS_KEY,
-    region: AWS_REGION
+  s3Client = new S3Client({
+    region: AWS_REGION,
+    credentials: {
+      accessKeyId: AWS_ACCESS_KEY_ID!,
+      secretAccessKey: AWS_SECRET_ACCESS_KEY!
+    }
   });
 }
 
-const s3 = new AWS.S3();
-
 function ensureS3Configured(operation: string) {
-  if (!isS3Configured) {
+  if (!isS3Configured || !s3Client) {
     logger.warn('s3_storage_not_configured', { operation });
     throw new Error('S3 storage is not configured');
   }
@@ -90,11 +93,11 @@ export async function uploadToS3(
       Key: key,
       Body: fileBuffer,
       ContentType: contentType,
-      ACL: options?.publicAccess !== false ? 'public-read' : undefined,
+      ACL: options?.publicAccess !== false ? 'public-read' as ObjectCannedACL : undefined,
       CacheControl: 'max-age=31536000' // 1 year
     };
 
-    await s3.upload(uploadParams).promise();
+    await s3Client!.send(new PutObjectCommand(uploadParams));
 
     // Generate public URL
     const url = `https://${S3_BUCKET_NAME}.s3.${AWS_REGION}.amazonaws.com/${key}`;
@@ -117,8 +120,8 @@ export async function uploadToS3(
 /**
  * Upload hero banner image to S3
  */
-export async function uploadHeroBanner(file: File | Buffer): Promise<S3UploadResult> {
-  return uploadToS3(file, 'hero-banners', { publicAccess: true });
+export async function uploadHeroBanner(file: File | Buffer, folder: string = 'hero-banners'): Promise<S3UploadResult> {
+  return uploadToS3(file, folder, { publicAccess: true });
 }
 
 /**
@@ -140,7 +143,7 @@ export async function deleteFromS3(key: string): Promise<boolean> {
       Key: key
     };
 
-    await s3.deleteObject(deleteParams).promise();
+    await s3Client!.send(new DeleteObjectCommand(deleteParams));
     return true;
   } catch (error) {
     logger.error('S3 delete error:', { error });
@@ -155,13 +158,12 @@ export async function getS3SignedUrl(key: string, expiresIn: number = 3600): Pro
   try {
     ensureS3Configured('signed_url');
 
-    const signedUrlParams = {
+    const command = new GetObjectCommand({
       Bucket: S3_BUCKET_NAME!,
-      Key: key,
-      Expires: expiresIn
-    };
+      Key: key
+    });
 
-    return s3.getSignedUrl('getObject', signedUrlParams);
+    return await getPresignedUrl(s3Client!, command, { expiresIn });
   } catch (error) {
     logger.error('S3 signed URL error:', { error });
     throw error;

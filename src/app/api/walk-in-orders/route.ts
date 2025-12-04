@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
 import { logger } from '../../../lib/logger';
+import { requireApiRole, type RoleCheckOptions } from '../../../lib/server-role-guard';
+
+const WALK_IN_ACCESS: RoleCheckOptions = {
+  allowedRoles: ['sales', 'manager'],
+  minimumRole: 'admin'
+};
 
 const resolveOrderTotal = (order: Record<string, any>) => {
   const candidates = [order?.total, order?.total_amount, order?.amount, order?.grand_total];
@@ -53,6 +59,10 @@ const mapPaymentStatusToOrderStatus = (paymentStatus?: string) => {
 
 export async function GET(request: NextRequest) {
   try {
+    const access = await requireApiRole(WALK_IN_ACCESS);
+    if ('error' in access) {
+      return access.error;
+    }
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -184,6 +194,10 @@ export async function GET(request: NextRequest) {
 // Export a simple POST function for creating orders
 export async function POST(request: NextRequest) {
   try {
+    const access = await requireApiRole(WALK_IN_ACCESS);
+    if ('error' in access) {
+      return access.error;
+    }
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!

@@ -18,7 +18,7 @@ import { getProductDisplayImage } from '../../lib/image-utils';
 
 import { ProductCard } from '../../components/products/ProductCard';
 import { ProductSort } from '../../components/products/ProductSort';
-import type { Product } from '../../lib/types';
+import type { Product, AutoOffer } from '../../lib/types';
 import { Skeleton } from '../../components/ui/skeleton';
 import { createClient } from '../../lib/supabase/client';
 import { Button } from '../../components/ui/button';
@@ -33,6 +33,156 @@ import {
 } from '../../components/ui/select';
 import { Input } from '../../components/ui/input';
 import { Slider } from '../../components/ui/slider';
+
+const DEFAULT_CUSTOMER_CATEGORY = 'Normal';
+
+async function fetchActiveAutoOffers(): Promise<AutoOffer[]> {
+  try {
+    const response = await fetch('/api/auto-offers?active=true', { cache: 'no-store' });
+    if (!response.ok) {
+      const bodyText = await response.text().catch(() => '');
+      throw new Error(`Failed to fetch auto offers (${response.status}): ${bodyText}`);
+    }
+
+    const payload = await response.json();
+    if (Array.isArray(payload)) {
+      return payload as AutoOffer[];
+    }
+    if (Array.isArray(payload?.data)) {
+      return payload.data as AutoOffer[];
+    }
+    return [];
+  } catch (error) {
+    logger.warn('ShopPage: Active auto offers fetch failed', { error });
+    return [];
+  }
+}
+
+function isOfferCurrentlyValid(offer: AutoOffer, reference: Date): boolean {
+  const validFrom = offer.conditions?.valid_from ? new Date(offer.conditions.valid_from) : null;
+  if (validFrom && Number.isFinite(validFrom.getTime()) && validFrom > reference) {
+    return false;
+  }
+
+  const validTo = offer.conditions?.valid_to ? new Date(offer.conditions.valid_to) : null;
+  if (validTo && Number.isFinite(validTo.getTime()) && validTo < reference) {
+    return false;
+  }
+
+  return true;
+}
+
+function doesOfferApplyToProduct(offer: AutoOffer, product: Product): boolean {
+  const conditions = offer.conditions || {};
+
+  if (Array.isArray(conditions.customer_category) && conditions.customer_category.length > 0) {
+    if (!conditions.customer_category.includes(DEFAULT_CUSTOMER_CATEGORY)) {
+      return false;
+    }
+  }
+
+  if (conditions.minimum_order_value && product.price < conditions.minimum_order_value) {
+    return false;
+  }
+
+  if (Array.isArray(conditions.applicable_categories) && conditions.applicable_categories.length > 0) {
+    const productCategory = (product.category || '').toLowerCase();
+    const matchesCategory = conditions.applicable_categories.some((category) =>
+      typeof category === 'string' && category.toLowerCase() === productCategory
+    );
+    if (!matchesCategory) {
+      return false;
+    }
+  }
+
+  if (Array.isArray(conditions.applicable_product_ids) && conditions.applicable_product_ids.length > 0) {
+    if (!conditions.applicable_product_ids.includes(product.id)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function calculateOfferPriceForProduct(price: number, offer: AutoOffer): number {
+  const candidates = [price];
+  const percentage = typeof offer.discount_percentage === 'number'
+    ? offer.discount_percentage
+    : Number(offer.discount_percentage);
+  if (Number.isFinite(percentage) && percentage > 0) {
+    candidates.push(price * (1 - Math.min(percentage, 90) / 100));
+  }
+
+  const fixedAmount = typeof offer.discount_amount === 'number'
+    ? offer.discount_amount
+    : Number(offer.discount_amount);
+  if (Number.isFinite(fixedAmount) && fixedAmount > 0) {
+    candidates.push(price - fixedAmount);
+  }
+
+  let discounted = Math.min(...candidates);
+
+  if (offer.max_discount_amount && offer.max_discount_amount > 0) {
+    discounted = Math.max(discounted, price - offer.max_discount_amount);
+  }
+
+  return Math.max(0, discounted);
+}
+
+function applyAutoOffersToProducts(products: Product[], offers: AutoOffer[]): Product[] {
+  const now = new Date();
+  const safeOffers = offers.filter((offer) => offer?.is_active && offer.auto_apply);
+
+  return products.map((product) => {
+    const basePrice = product.price;
+    const existingOfferPrice = typeof product.offer_price === 'number' && product.offer_price > 0
+      ? product.offer_price
+      : basePrice;
+
+    let bestPrice = existingOfferPrice;
+    let appliedOffer: AutoOffer | null = null;
+
+    for (const offer of safeOffers) {
+      if (!isOfferCurrentlyValid(offer, now)) {
+        continue;
+      }
+      if (!doesOfferApplyToProduct(offer, product)) {
+        continue;
+      }
+
+      const candidatePrice = calculateOfferPriceForProduct(basePrice, offer);
+      if (candidatePrice < bestPrice) {
+        bestPrice = candidatePrice;
+        appliedOffer = offer;
+      }
+    }
+
+    const effectiveDiscount = basePrice > 0
+      ? Math.max(0, Math.round(((basePrice - bestPrice) / basePrice) * 100))
+      : 0;
+
+    if (appliedOffer || (existingOfferPrice < basePrice && effectiveDiscount > 0)) {
+      return {
+        ...product,
+        offer_price: Math.round(bestPrice),
+        discount_percentage: effectiveDiscount,
+        applied_offer_title: appliedOffer?.title ?? product.applied_offer_title,
+        applied_offer_id: appliedOffer?.id ?? product.applied_offer_id,
+      };
+    }
+
+    // Ensure explicit offer_price still updates discount percentage
+    if (!product.discount_percentage && existingOfferPrice < basePrice) {
+      return {
+        ...product,
+        offer_price: Math.round(existingOfferPrice),
+        discount_percentage: effectiveDiscount,
+      };
+    }
+
+    return product;
+  });
+}
 
 export function ShopPageContent() {
   const searchParams = useSearchParams();
@@ -84,12 +234,14 @@ export function ShopPageContent() {
         logger.info('ShopPage: Fetching products...');
         
         // Fetch products with prioritized products first, then by creation date
+        // Added pagination limit to prevent DoS/Crash on large inventory
         const { data, error } = await supabase
           .from('products')
           .select('*')
           .order('prioritized', { ascending: false, nullsFirst: false })
           .order('prioritized_at', { ascending: false, nullsFirst: false })
-          .order('created_at', { ascending: false });
+          .order('created_at', { ascending: false })
+          .range(0, 49);
         
         logger.info('ShopPage: Products fetched', { 
           count: data?.length || 0, 
@@ -175,12 +327,16 @@ export function ShopPageContent() {
         });
 
         logger.info('ShopPage: Products normalized', { count: normalized.length });
-        setProducts(normalized);
+
+        const activeOffers = normalized.length > 0 ? await fetchActiveAutoOffers() : [];
+        const enrichedProducts = applyAutoOffersToProducts(normalized, activeOffers);
+
+        setProducts(enrichedProducts);
         
         // Extract unique categories and brands
-        const uniqueCategories = [...new Set(normalized.map(p => p.category).filter(Boolean))];
+        const uniqueCategories = [...new Set(enrichedProducts.map(p => p.category).filter(Boolean))];
         const uniqueBrands = [...new Set(
-          normalized
+          enrichedProducts
             .map(p => p.brand)
             .filter((b): b is string => typeof b === 'string' && b.length > 0)
         )];
@@ -189,11 +345,11 @@ export function ShopPageContent() {
         setBrands(uniqueBrands);
         
         // Set price range based on actual product prices
-        if (normalized.length === 0) {
+        if (enrichedProducts.length === 0) {
           setMaxPrice(100000);
           setPriceRange([0, 100000]);
         } else {
-          const prices = normalized.map(p => p.price);
+          const prices = enrichedProducts.map(p => p.price);
           const min = Math.min(...prices);
           const max = Math.max(...prices);
           setMaxPrice(max);

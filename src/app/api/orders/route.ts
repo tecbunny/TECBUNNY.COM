@@ -37,16 +37,50 @@ export async function POST(request: NextRequest) {
 
     // Validate required fields
     if (!orderData.customer_name || !orderData.customer_email || !orderData.customer_phone) {
-  return apiError('VALIDATION_ERROR', { correlationId, overrideMessage: 'Missing required customer information' });
+      return apiError('VALIDATION_ERROR', { correlationId, overrideMessage: 'Missing required customer information' });
     }
 
-    // Calculate totals if not provided
-  const subtotal = orderData.subtotal || 0;
-  const gst_amount = orderData.gst_amount || (subtotal * 0.18);
-  const discount_amount = orderData.discount_amount || 0;
-  const shipping_amount = orderData.shipping_amount || 0;
-  const total = orderData.total || (subtotal + gst_amount);
-  const orderType = orderData.type || orderData.order_type || 'Delivery';
+    // Security: Recalculate totals server-side to prevent price tampering
+    const itemIds = (orderData.items || []).map((item: any) => item.id);
+    const { data: dbProducts, error: productsError } = await serviceSupabase
+      .from('products')
+      .select('id, price, offer_price, stock_quantity')
+      .in('id', itemIds);
+
+    if (productsError || !dbProducts) {
+       return apiError('INTERNAL_ERROR', { correlationId, overrideMessage: 'Failed to validate products' });
+    }
+
+    let calculatedSubtotal = 0;
+    const validatedItems = [];
+
+    for (const item of (orderData.items || [])) {
+      const dbProduct = dbProducts.find(p => p.id === item.id);
+      if (!dbProduct) {
+         return apiError('VALIDATION_ERROR', { correlationId, overrideMessage: `Product not found: ${item.id}` });
+      }
+      
+      // Check stock
+      if ((dbProduct.stock_quantity || 0) < item.quantity) {
+         return apiError('VALIDATION_ERROR', { correlationId, overrideMessage: `Insufficient stock for product: ${item.name}` });
+      }
+
+      const price = dbProduct.offer_price || dbProduct.price;
+      calculatedSubtotal += price * item.quantity;
+      
+      validatedItems.push({
+        ...item,
+        price: price // Enforce server price
+      });
+    }
+
+    const subtotal = calculatedSubtotal;
+    const gst_amount = orderData.gst_amount || (subtotal * 0.18); // You might want to recalculate GST too if logic permits
+    const discount_amount = orderData.discount_amount || 0; // Discounts should also be validated against coupons if applicable
+    const shipping_amount = orderData.shipping_amount || 0;
+    const total = subtotal + gst_amount + shipping_amount - discount_amount;
+    
+    const orderType = orderData.type || orderData.order_type || 'Delivery';
 
     // Store additional info that doesn't have dedicated columns in the items field
     const pickupStore = orderType === 'Pickup'
@@ -100,6 +134,19 @@ export async function POST(request: NextRequest) {
     if (error) {
       logger.error('order_create_db_error', { err: error.message, userId: user.id });
       return apiError('INTERNAL_ERROR', { correlationId, overrideMessage: 'Failed to create order', details: { error: error.message } });
+    }
+
+    // Deduct Stock
+    for (const item of validatedItems) {
+      const { error: stockError } = await serviceSupabase.rpc('decrement_product_stock', {
+        p_product_id: item.id,
+        p_quantity: item.quantity
+      });
+      
+      if (stockError) {
+        logger.error('order_stock_deduction_failed', { orderId: createdOrder.id, productId: item.id, error: stockError.message });
+        // Note: In a real production system, you might want to rollback the order here or alert admin
+      }
     }
 
     logger.info('order_created', { orderId: createdOrder.id, userId: user.id });

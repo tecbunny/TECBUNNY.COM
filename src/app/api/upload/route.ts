@@ -2,27 +2,28 @@ import { NextRequest } from 'next/server';
 
 import {
   createClient as createServerClient,
-  isSupabasePublicConfigured,
   isSupabaseServiceConfigured
 } from '../../../lib/supabase/server';
 import { logger } from '../../../lib/logger';
 import { apiError, apiSuccess } from '../../../lib/errors';
+import { requireAdmin } from '../../../lib/admin-auth';
 
 // Ensure Node.js runtime for streaming uploads
 export const runtime = 'nodejs';
 // Allow more time for larger uploads on serverless
 export const maxDuration = 60;
 import { uploadToSupabase, uploadFavicon, uploadLogo, uploadProductImage } from '../../../lib/supabase-storage';
-import { uploadHeroBanner } from '../../../lib/s3-storage';
+import { uploadHeroBanner, isS3Configured } from '../../../lib/s3-storage';
 
 export async function POST(request: NextRequest) {
   const correlationId = request.headers.get('x-correlation-id');
   try {
-    if (!isSupabasePublicConfigured || !isSupabaseServiceConfigured) {
+    // Allow server uploads if either Supabase service role OR S3 is configured.
+    if (!isS3Configured && !isSupabaseServiceConfigured) {
       logger.warn('upload_supabase_not_configured', {
         correlationId,
-        missingPublicConfig: !isSupabasePublicConfigured,
-        missingServiceConfig: !isSupabaseServiceConfigured
+        missingServiceConfig: !isSupabaseServiceConfigured,
+        missingS3Config: !isS3Configured
       });
       return apiError('SERVICE_UNAVAILABLE', {
         overrideMessage: 'File uploads are temporarily unavailable',
@@ -39,15 +40,20 @@ export async function POST(request: NextRequest) {
     });
     
     // Auth check
-  const supabase = await createServerClient();
+    const supabase = await createServerClient();
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      return apiError('UNAUTHORIZED', { correlationId });
+    
+    const { isAdmin, error: authError } = await requireAdmin(user, supabase);
+    if (!isAdmin) {
+      logger.warn('upload_unauthorized', { correlationId, user: user?.id, error: authError });
+      return apiError('UNAUTHORIZED', { correlationId, overrideMessage: authError });
     }
 
     const formData = await request.formData();
     const file = formData.get('file') as File;
     const type = formData.get('type') as string;
+    // Allow clients to suggest a folder/path (for hero carousel management)
+    const pathParam = formData.get('path') as string | null;
 
     logger.debug('upload_file_received', {
       correlationId,
@@ -98,13 +104,25 @@ export async function POST(request: NextRequest) {
         logger.debug('upload_variant', { correlationId, variant: 'product' });
         result = await uploadProductImage(file); break;
       case 'hero':
-        logger.debug('upload_variant', { correlationId, variant: 'hero' });
-        result = await uploadHeroBanner(file); break;
+        logger.debug('upload_variant', { correlationId, variant: 'hero', pathParam });
+        if (isS3Configured) {
+          // Use S3 helper when available
+          result = await uploadHeroBanner(file, pathParam || 'hero-banners');
+        } else {
+          // Fallback to Supabase storage for environments without S3
+          logger.debug('upload_variant_hero_fallback_supabase', { correlationId, folder: pathParam || 'hero-banners' });
+          result = await uploadToSupabase(file, pathParam || 'hero-banners', { publicAccess: true });
+        }
+        break;
       default:
         logger.debug('upload_variant', { correlationId, variant: 'general' });
         result = await uploadToSupabase(file);
     }
 
+    if (!result || (!result.secure_url && !result.url)) {
+      logger.error('upload_no_url_returned', { correlationId, result });
+      return apiError('INTERNAL_ERROR', { overrideMessage: 'Upload completed but no URL returned by storage provider', correlationId });
+    }
     logger.info('upload_success', { correlationId, publicId: result.public_id, format: result.format, width: result.width, height: result.height });
     return apiSuccess({
       secure_url: result.secure_url,

@@ -11,14 +11,6 @@ on:
     branches:
       - master
   workflow_dispatch: {}
-  workflow_call:
-    secrets:
-      SITE_URL:
-        required: true
-        description: Base URL of the deployed site
-      AUTO_FILL_SECRET:
-        required: true
-        description: Shared secret header for auto-fill trigger
   schedule:
     # Every day at 02:00 UTC
     - cron: '0 2 * * *'
@@ -61,4 +53,5 @@ jobs:
         uses: ./.github/actions/auto-fill-run
         with:
           api-url: ${{ secrets.SITE_URL }}
-          auto-fill-secret: ${{ secrets.AUTO_FILL_SECRET }}
+        env:
+          AUTO_FILL_SECRET: ${{ secrets.AUTO_FILL_SECRET }}

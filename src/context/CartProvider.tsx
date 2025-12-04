@@ -304,18 +304,10 @@ export const CartProvider: React.FC<{
         canCombineDiscounts: pricingData.canCombine,
       });
 
-      // Show auto-offer notification if new offer is applied
-      if (pricingData.bestOffer && pricingData.offerDiscount > 0) {
-        toast({
-          title: "🎉 Offer Applied!",
-          description: `${pricingData.bestOffer.title}: ₹${pricingData.offerDiscount.toFixed(2)} off`,
-          duration: 3000,
-        });
-      }
     } catch (error) {
       logger.error('Error calculating pricing', { error });
     }
-  }, [cartItems, customerCategory, toast, user, isGuestSessionExpired, pricing.appliedCoupon]);
+  }, [cartItems, customerCategory, pricing.appliedCoupon, user, isGuestSessionExpired]);
 
   // Save cart and refresh pricing when cart changes
   useEffect(() => {

@@ -3,8 +3,7 @@
 import * as React from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowRight, Package, ShoppingBag, Star, TrendingUp, Gift } from 'lucide-react';
-import DOMPurify from 'dompurify';
+import { ArrowRight, Package, Star, TrendingUp, Gift } from 'lucide-react';
 
 import { logger } from '../lib/logger';
 import type { Product } from '../lib/types';
@@ -15,10 +14,10 @@ import { usePageContent } from '../hooks/use-page-content';
 
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { Badge } from './ui/badge';
 import HeroUploadDialog from './admin/HeroUploadDialog';
 import HeroBanner from './HeroBanner';
 import HeroCarousel from './HeroCarousel';
+import { ProductCard as UnifiedProductCard } from './products/ProductCard';
 
 
 
@@ -59,184 +58,82 @@ function DefaultHomePage({ sectionFilter }: { sectionFilter?: string | null }) {
       setLoading(true);
       setError(null);
       try {
-        // First, check if the products table exists and has the expected structure
-        const { data: products, error: productsError } = await supabase
-          .from('products')
-          .select('id, title, name, description, price, popularity, rating, review_count, created_at, status, images, vendor, product_type')
-          .eq('status', 'active')
-          .order('created_at', { ascending: false });
-
-        if (productsError) {
-          logger.warn('Unable to fetch products:', { error: productsError.message });
-          setError(productsError.message || 'Unable to fetch products');
-          // Show empty sections instead of fallback products
-          setFeaturedProducts([]);
-          setNewArrivals([]);
-          setTrendingProducts([]);
-          setDealProducts([]);
-          setLoading(false);
-          return;
-        }
+        const productFields = 'id, title, name, description, price, popularity, rating, review_count, created_at, status, images, vendor, product_type, offer_price, stock_status, stock_quantity, prioritized';
         
-        const allProducts: Product[] = (products || [])
-          .map(p => {
-            const resolvedTitle = [p.title, p.name]
-              .map((value) => (typeof value === 'string' ? value.trim() : ''))
-              .find((value) => value.length > 0) || 'Unnamed Product';
-
-            // Ensure required fields are present
-            if (!p.id || !resolvedTitle) {
-              logger.warn('Product missing required fields:', { product: p });
-              return null;
-            }
+        // Run parallel queries for better performance
+        const [newArrivalsRes, trendingRes, featuredRes] = await Promise.all([
+          // New Arrivals
+          supabase
+            .from('products')
+            .select(productFields)
+            .eq('status', 'active')
+            .order('created_at', { ascending: false })
+            .limit(8),
             
-            // Extract primary image from images array (handles both string arrays and object arrays)
-            let primaryImage = 'https://placehold.co/600x400.png?text=No+Image';
-            if (Array.isArray(p.images) && p.images.length > 0) {
-              const firstImage = p.images[0];
-              // Handle both string URLs and {url: string} objects
-              primaryImage = typeof firstImage === 'string' ? firstImage : firstImage?.url || primaryImage;
-            }
+          // Trending
+          supabase
+            .from('products')
+            .select(productFields)
+            .eq('status', 'active')
+            .order('popularity', { ascending: false })
+            .limit(8),
             
-            const rawHsn =
-              (p as any).hsnCode ??
-              (p as any).hsn_code ??
-              (p as any).hsn ??
-              (p as any).hsn_sac ??
-              null;
-            const rawGst =
-              (p as any).gstRate ??
-              (p as any).gst_rate ??
-              (p as any).gst_percentage ??
-              null;
+          // Featured (using prioritized flag)
+          supabase
+            .from('products')
+            .select(productFields)
+            .eq('status', 'active')
+            .eq('prioritized', true)
+            .limit(8)
+        ]);
 
-            let resolvedGst: number | undefined;
-            if (typeof rawGst === 'number' && Number.isFinite(rawGst)) {
-              resolvedGst = rawGst;
-            } else if (typeof rawGst === 'string') {
-              const parsed = Number.parseFloat(rawGst);
-              resolvedGst = Number.isFinite(parsed) ? parsed : undefined;
-            }
+        if (newArrivalsRes.error) throw newArrivalsRes.error;
+        if (trendingRes.error) throw trendingRes.error;
+        if (featuredRes.error) throw featuredRes.error;
 
-            const resolvedHsn = typeof rawHsn === 'string' && rawHsn.trim().length > 0
-              ? rawHsn.trim()
-              : undefined;
+        const processProducts = (data: any[] | null) => {
+          return (data || [])
+            .map(p => {
+              const resolvedTitle = [p.title, p.name]
+                .map((value) => (typeof value === 'string' ? value.trim() : ''))
+                .find((value) => value.length > 0) || 'Unnamed Product';
 
-            return {
-              ...p,
-              name: resolvedTitle,
-              title: resolvedTitle,
-              image: primaryImage,
-              images: p.images, // Keep original images array for ProductCard
-              category: p.product_type || 'General',
-              popularity: p.popularity || 0,
-              rating: p.rating || 0,
-              reviewCount: (p as any).review_count ?? (p as any).reviewCount ?? 0,
-              description: p.description || 'No description available',
-              price: p.price || 0,
-              created_at: p.created_at || new Date().toISOString(),
-              hsnCode: resolvedHsn,
-              gstRate: resolvedGst,
-            } as Product;
-          })
-          .filter((p): p is Product => p !== null);
-
-        // Get settings for product sections
-        const { data: settings, error: settingsError } = await supabase
-          .from('settings')
-          .select('key, value');
-        
-        if (settingsError) {
-          logger.warn('Unable to fetch settings (using defaults):', { error: settingsError.message });
-        }
-        
-        const settingsMap = new Map(settings?.map(s => [s.key, s.value]) || []);
-
-        const MAX_COUNT = 15;
-
-        const getProductsByIds = (ids: string[], limit = MAX_COUNT): Product[] => {
-          const productMap = new Map(allProducts.map(p => [p.id, p]));
-          return ids.map(id => productMap.get(id)).filter((p): p is Product => p !== undefined).slice(0, limit);
+              if (!p.id || !resolvedTitle) return null;
+              
+              // Extract primary image
+              let primaryImage = null;
+              if (Array.isArray(p.images) && p.images.length > 0) {
+                const firstImage = p.images[0];
+                primaryImage = typeof firstImage === 'string' ? firstImage : firstImage?.url;
+              }
+              
+              return {
+                ...p,
+                title: resolvedTitle,
+                name: resolvedTitle,
+                image: primaryImage,
+                price: Number(p.price) || 0,
+                rating: Number(p.rating) || 0,
+                reviewCount: Number(p.review_count) || 0,
+                popularity: Number(p.popularity) || 0,
+                offer_price: p.offer_price ? Number(p.offer_price) : undefined
+              } as Product;
+            })
+            .filter(Boolean) as Product[];
         };
 
-        const loadSectionProducts = (key: string, defaultProducts: Product[], options?: { useFallback?: boolean, limit?: number }): Product[] => {
-          const shouldFallback = options?.useFallback ?? true;
-          try {
-            const storedIds = settingsMap.get(key);
-            const selectedIds = storedIds && typeof storedIds === 'string' ? JSON.parse(storedIds) : [];
-            if (Array.isArray(selectedIds) && selectedIds.length > 0) {
-              return getProductsByIds(selectedIds, options?.limit ?? MAX_COUNT);
-            }
-            return shouldFallback ? defaultProducts : [];
-          } catch (error) {
-            logger.warn(`Invalid JSON in setting ${key}, using defaults:`, { error, key });
-            return shouldFallback ? defaultProducts : [];
-          }
-        };
-
-        // Create default sections - show empty if no products
-        const sourceProducts = allProducts;
-
-        if (allProducts.length === 0) {
-          logger.info('No products returned from Supabase, showing empty sections');
-          setError('No products available yet. Add products to see them here.');
-          // Set all sections to empty arrays
-          setFeaturedProducts([]);
-          setNewArrivals([]);
-          setTrendingProducts([]);
-          setDealProducts([]);
-          setLoading(false);
-          return;
-        }
-
-        // Analytics-backed defaults (top 15)
-
-        // Featured: prioritize admin 'prioritized' flag, then popularity
-        const defaultFeatured = [...sourceProducts]
-          .sort((a, b) => {
-            const aP = a.prioritized ? 1 : 0;
-            const bP = b.prioritized ? 1 : 0;
-            if (aP !== bP) return bP - aP; // prioritized first
-            if ((a.popularity || 0) !== (b.popularity || 0)) return (b.popularity || 0) - (a.popularity || 0);
-            if ((a.rating || 0) !== (b.rating || 0)) return (b.rating || 0) - (a.rating || 0);
-            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-          })
-          .slice(0, MAX_COUNT);
-        // Use fallback defaults when admin override is not present
-        setFeaturedProducts(loadSectionProducts('featuredProductIds', defaultFeatured, { useFallback: true }));
-
-        const defaultNewArrivals = [...sourceProducts]
-          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-          .slice(0, MAX_COUNT);
-        setNewArrivals(loadSectionProducts('newArrivalProductIds', defaultNewArrivals, { useFallback: true }));
-
-        const defaultTrending = [...sourceProducts]
-          .sort((a, b) => {
-            // combine popularity, rating, and reviewCount
-            const aScore = (a.popularity || 0) * 0.6 + (a.rating || 0) * 0.3 + ((a.reviewCount || 0) * 0.1);
-            const bScore = (b.popularity || 0) * 0.6 + (b.rating || 0) * 0.3 + ((b.reviewCount || 0) * 0.1);
-            return bScore - aScore;
-          })
-          .slice(0, MAX_COUNT);
-        setTrendingProducts(loadSectionProducts('trendingProductIds', defaultTrending, { useFallback: true }));
-
-        const defaultDeals = [...sourceProducts]
-          .filter(p => (typeof p.offer_price === 'number' && p.offer_price < p.price) || (p.discount_percentage && p.discount_percentage > 0))
-          .sort((a, b) => {
-            const aDiscount = (a.price || 0) - (a.offer_price || a.price || 0);
-            const bDiscount = (b.price || 0) - (b.offer_price || b.price || 0);
-            // prefer higher discounts and then popularity
-            if (bDiscount !== aDiscount) return bDiscount - aDiscount;
-            return (b.popularity || 0) - (a.popularity || 0);
-          })
-          .slice(0, MAX_COUNT);
-        setDealProducts(loadSectionProducts('dealProductIds', defaultDeals));
+        setNewArrivals(processProducts(newArrivalsRes.data));
+        setTrendingProducts(processProducts(trendingRes.data));
+        setFeaturedProducts(processProducts(featuredRes.data));
         
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Failed to load homepage data';
-        logger.error('Homepage data loading error:', { error: errorMessage });
-        setError(errorMessage);
-        // Set empty arrays as fallback to prevent UI breaks
+        // For deals, we can reuse trending or fetch separately if needed, 
+        // but for now let's use trending products that have offers
+        const trending = processProducts(trendingRes.data);
+        setDealProducts(trending.filter(p => p.offer_price && p.offer_price < p.price));
+
+      } catch (err: any) {
+        logger.warn('Unable to fetch products:', { error: err.message });
+        setError(err.message || 'Unable to fetch products');
         setFeaturedProducts([]);
         setNewArrivals([]);
         setTrendingProducts([]);
@@ -245,83 +142,9 @@ function DefaultHomePage({ sectionFilter }: { sectionFilter?: string | null }) {
         setLoading(false);
       }
     };
-    
+
     getHomePageProducts();
   }, [supabase]);
-
-  const ProductCard = React.memo(function ProductCard({ product }: { product: Product }) {
-    const displayImage = product.image || (Array.isArray((product as any).images) && (product as any).images.length > 0
-      ? (typeof (product as any).images[0] === 'string' ? (product as any).images[0] : (product as any).images[0]?.url || '')
-      : '');
-    const displayPrice = product.offer_price || product.price;
-    const hasDiscount = product.offer_price && product.offer_price < product.price;
-    const descriptionText = React.useMemo(() => {
-      if (!product.description) {
-        return '';
-      }
-
-      const sanitized = DOMPurify.sanitize(product.description, { USE_PROFILES: { html: true } });
-      return sanitized
-        .replace(/<\/(p|div|li|br)[^>]*>/gi, '\n')
-        .replace(/<[^>]+>/g, '')
-        .replace(/\s+/g, ' ')
-        .trim();
-    }, [product.description]);
-    
-    return (
-      <Link href={`/products/${product.id}`}>
-        <Card className="hover:shadow-lg transition-shadow cursor-pointer h-full">
-          <div className="aspect-video bg-gray-100 rounded-t-lg flex items-center justify-center overflow-hidden">
-            {displayImage ? (
-              <img 
-                src={displayImage} 
-                alt={product.title || product.name || 'Product'} 
-                className="w-full h-full object-cover"
-                loading="lazy"
-                onError={(e) => {
-                  const target = e.target as HTMLImageElement;
-                  if (target.src !== '/placeholder-product.jpg') {
-                    target.src = '/placeholder-product.jpg';
-                  } else {
-                    target.style.display = 'none';
-                    const fallback = target.nextElementSibling as HTMLElement;
-                    if (fallback) {
-                      fallback.classList.remove('hidden');
-                    }
-                  }
-                }}
-              />
-            ) : null}
-            <div className={`flex items-center justify-center w-full h-full ${displayImage ? 'hidden' : ''}`}>
-              <ShoppingBag className="h-12 w-12 text-gray-400" />
-            </div>
-          </div>
-          <CardContent className="p-4">
-            <h3 className="font-semibold text-lg mb-2 line-clamp-2">{product.title || product.name || 'Product'}</h3>
-            <p className="text-sm text-gray-600 mb-3 line-clamp-2">
-              {descriptionText ? (descriptionText.length > 160 ? `${descriptionText.slice(0, 160)}…` : descriptionText) : 'No description available'}
-            </p>
-            <div className="flex items-center justify-between">
-              <div className="flex flex-col">
-                <span className="text-lg font-bold text-blue-600">₹{displayPrice}</span>
-                {hasDiscount && (
-                  <span className="text-sm text-gray-500 line-through">₹{product.price}</span>
-                )}
-              </div>
-              <div className="flex flex-col items-end">
-                {(product.popularity || 0) > 80 && <Badge variant="secondary">Popular</Badge>}
-                {hasDiscount && (
-                  <Badge variant="destructive" className="mt-1">
-                    {Math.round(((product.price - (product.offer_price || 0)) / product.price) * 100)}% OFF
-                  </Badge>
-                )}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </Link>
-    );
-  });
 
   const ProductSkeleton = () => (
     <Card className="h-full">
@@ -365,7 +188,7 @@ function DefaultHomePage({ sectionFilter }: { sectionFilter?: string | null }) {
         ) : products.length > 0 ? (
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
             {products.map((product) => (
-              <ProductCard key={product.id} product={product} />
+              <UnifiedProductCard key={product.id} product={product} />
             ))}
           </div>
         ) : (

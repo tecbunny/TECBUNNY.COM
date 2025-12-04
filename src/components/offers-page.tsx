@@ -1,7 +1,9 @@
+
 'use client';
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import DOMPurify from 'dompurify';
 
 import { logger } from '../lib/logger';
 
@@ -30,6 +32,23 @@ interface Offer {
   banner_color?: string;
   terms_and_conditions?: string;
 }
+
+const sanitizeTerms = (raw: string) =>
+  DOMPurify.sanitize(raw, {
+    USE_PROFILES: { html: true },
+    ADD_ATTR: ['target', 'rel'],
+  });
+
+const getReadableTextColor = (hex?: string) => {
+  if (!hex) return '#ffffff';
+  const normalized = hex.replace('#', '');
+  if (normalized.length !== 6) return '#ffffff';
+  const r = parseInt(normalized.slice(0, 2), 16);
+  const g = parseInt(normalized.slice(2, 4), 16);
+  const b = parseInt(normalized.slice(4, 6), 16);
+  const yiq = (r * 299 + g * 587 + b * 114) / 1000;
+  return yiq >= 160 ? '#111827' : '#ffffff';
+};
 
 export default function OffersPage() {
   const [offers, setOffers] = useState<Offer[]>([]);
@@ -187,6 +206,17 @@ export default function OffersPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
+                  {offer.banner_text && (
+                    <div
+                      className="mb-4 rounded-lg px-4 py-2 text-sm font-semibold shadow-sm"
+                      style={{
+                        backgroundColor: offer.banner_color || '#dc2626',
+                        color: getReadableTextColor(offer.banner_color || '#dc2626'),
+                      }}
+                    >
+                      {offer.banner_text}
+                    </div>
+                  )}
                   <div className="flex items-center gap-4 mb-4">
                     <div className="bg-primary text-primary-foreground px-4 py-2 rounded-lg font-bold">
                       {getDiscountDisplay(offer)}
@@ -210,9 +240,10 @@ export default function OffersPage() {
                     )}
                   </div>
                   {offer.terms_and_conditions && (
-                    <p className="text-xs text-muted-foreground mt-4">
-                      {offer.terms_and_conditions}
-                    </p>
+                    <div
+                      className="prose prose-xs mt-4 max-w-none text-muted-foreground [&_a]:underline"
+                      dangerouslySetInnerHTML={{ __html: sanitizeTerms(offer.terms_and_conditions) }}
+                    />
                   )}
                 </CardContent>
               </Card>
@@ -234,6 +265,17 @@ export default function OffersPage() {
                   <CardDescription>{offer.description}</CardDescription>
                 </CardHeader>
                 <CardContent>
+                  {offer.banner_text && (
+                    <div
+                      className="mb-4 rounded-lg px-3 py-2 text-xs font-semibold shadow-sm"
+                      style={{
+                        backgroundColor: offer.banner_color || '#dc2626',
+                        color: getReadableTextColor(offer.banner_color || '#dc2626'),
+                      }}
+                    >
+                      {offer.banner_text}
+                    </div>
+                  )}
                   <div className="mb-4">
                     <div className="bg-muted text-foreground px-3 py-2 rounded font-semibold text-center">
                       {getDiscountDisplay(offer)}
@@ -257,6 +299,12 @@ export default function OffersPage() {
                         </code>
                       </span>
                     </div>
+                  )}
+                  {offer.terms_and_conditions && (
+                    <div
+                      className="prose prose-xs mt-4 max-w-none text-muted-foreground [&_a]:underline"
+                      dangerouslySetInnerHTML={{ __html: sanitizeTerms(offer.terms_and_conditions) }}
+                    />
                   )}
                 </CardContent>
               </Card>

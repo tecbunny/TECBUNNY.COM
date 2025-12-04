@@ -5,10 +5,12 @@
 
 import { zohoCRMSync } from './zoho-crm';
 import { ZohoInventoryAPI, ZohoInventorySync } from './zoho-inventory';
+import { ZohoTokenManager } from './zoho-token-manager';
 import { logger } from './logger';
 import { createServiceClient, isSupabaseServiceConfigured } from './supabase/server';
 
 const supabase = createServiceClient();
+const tokenManager = new ZohoTokenManager();
 
 // Initialize APIs
 const inventoryConfig = {
@@ -18,6 +20,9 @@ const inventoryConfig = {
   organizationId: process.env.ZOHO_ORGANIZATION_ID!,
   accessToken: process.env.ZOHO_ACCESS_TOKEN,
   refreshToken: process.env.ZOHO_REFRESH_TOKEN,
+  onTokenRefreshed: async (token: string, expiresIn: number) => {
+    await tokenManager.storeTokens(token, undefined, expiresIn);
+  }
 };
 
 const zohoInventoryAPI = new ZohoInventoryAPI(inventoryConfig);

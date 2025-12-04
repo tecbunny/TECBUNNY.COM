@@ -5,6 +5,28 @@ import { createClient } from '../lib/supabase/client';
 
 import { logger } from './logger';
 
+type MarketingOfferRecord = {
+    id: string;
+    title?: string;
+    description?: string;
+    discount_type?: string;
+    discount_value?: number | string;
+    applicable_categories?: string[];
+    minimum_purchase_amount?: number | string;
+    customer_eligibility?: string;
+    priority?: number | string;
+    maximum_discount_amount?: number | string;
+    usage_limit?: number | string;
+    usage_count?: number | string;
+    usage_limit_per_customer?: number | string;
+    start_date?: string;
+    end_date?: string;
+    created_at?: string;
+    updated_at?: string;
+    offer_code?: string;
+    is_active?: boolean;
+};
+
 /**
  * Enhanced Offer and Discount Service
  * Handles auto-offers and manual discounts with combination rules
@@ -17,7 +39,8 @@ export class OfferDiscountService {
      */
     async getActiveOffers(): Promise<AutoOffer[]> {
         const now = new Date().toISOString();
-        
+
+        // Prefer the dedicated auto-offers API (service-role powered on the server).
         try {
             const response = await fetch(`/api/auto-offers?active=true&t=${encodeURIComponent(now)}`, {
                 headers: { 'Cache-Control': 'no-store' }
@@ -26,7 +49,10 @@ export class OfferDiscountService {
             if (response.ok) {
                 const payload = await response.json();
                 const offers = Array.isArray(payload) ? payload : (Array.isArray(payload?.data) ? payload.data : []);
-                return this.normalizeOffers(offers, now);
+                const normalized = this.normalizeOffers(offers, now);
+                if (normalized.length > 0) {
+                    return normalized;
+                }
             } else {
                 const details = await response.json().catch(() => null);
                 logger.warn('OfferDiscountService.getActiveOffers.api_failed', { status: response.status, details });
@@ -35,7 +61,136 @@ export class OfferDiscountService {
             logger.warn('OfferDiscountService.getActiveOffers.api_error', { error: err });
         }
 
-        return [];
+        // Fallback: query the table directly via the anon Supabase client (requires read RLS).
+        try {
+            const { data, error } = await this.supabase
+                .from('auto_offers')
+                .select('*')
+                .eq('is_active', true)
+                .order('priority', { ascending: false });
+
+            if (!error) {
+                const normalized = this.normalizeOffers(data ?? [], now);
+                if (normalized.length > 0) {
+                    return normalized;
+                }
+            } else {
+                logger.error('OfferDiscountService.getActiveOffers.supabase_failed', { error: error.message });
+            }
+        } catch (fallbackError) {
+            logger.error('OfferDiscountService.getActiveOffers.supabase_error', { error: fallbackError });
+        }
+
+        // Final fallback: adapt marketing offers (from /api/offers) into auto-applied discounts.
+        return this.fetchMarketingOffersFallback(now);
+    }
+
+    private async fetchMarketingOffersFallback(now: string): Promise<AutoOffer[]> {
+        const offers = await this.fetchMarketingOffersPayload();
+        if (!offers.length) {
+            return [];
+        }
+        return this.normalizeOffers(this.mapMarketingOffersToAutoOffers(offers, now), now);
+    }
+
+    private mapMarketingOffersToAutoOffers(records: MarketingOfferRecord[], nowIso: string): AutoOffer[] {
+        return records
+            .filter((offer) => offer && offer.is_active && !offer.offer_code) // Only auto-applied promos
+            .map((offer) => {
+                const discountType = (offer.discount_type ?? '').toLowerCase();
+                const discountValue = typeof offer.discount_value === 'number' ? offer.discount_value : Number(offer.discount_value) || 0;
+                const categories = Array.isArray(offer.applicable_categories) ? offer.applicable_categories.filter(Boolean) : undefined;
+                const minOrder = typeof offer.minimum_purchase_amount === 'number'
+                    ? offer.minimum_purchase_amount
+                    : Number(offer.minimum_purchase_amount) || undefined;
+                const priority = typeof offer.priority === 'number' ? offer.priority : Number(offer.priority) || 0;
+
+                const autoOffer: AutoOffer = {
+                    id: offer.id,
+                    title: offer.title ?? 'Special Offer',
+                    description: offer.description ?? '',
+                    type: 'seasonal',
+                    discount_percentage: discountType === 'percentage' ? discountValue : undefined,
+                    discount_amount: discountType !== 'percentage' ? discountValue : undefined,
+                    conditions: {
+                        customer_category: this.normalizeCustomerEligibility(offer.customer_eligibility),
+                        minimum_order_value: minOrder,
+                        applicable_categories: categories,
+                        applicable_product_ids: undefined,
+                        valid_from: offer.start_date || nowIso,
+                        valid_to: offer.end_date || nowIso,
+                    },
+                    is_active: true,
+                    auto_apply: true,
+                    priority,
+                    max_discount_amount: typeof offer.maximum_discount_amount === 'number'
+                        ? offer.maximum_discount_amount
+                        : Number(offer.maximum_discount_amount) || undefined,
+                    created_at: offer.created_at || nowIso,
+                    updated_at: offer.updated_at || undefined,
+                };
+
+                return autoOffer;
+            })
+            .filter((offer) => (offer.discount_amount ?? 0) > 0 || (offer.discount_percentage ?? 0) > 0);
+    }
+
+    private mapMarketingOffersToCoupons(records: MarketingOfferRecord[], nowIso: string): Coupon[] {
+        return records
+            .filter((offer) => offer && offer.is_active && Boolean(offer.offer_code))
+            .map((offer) => {
+                const couponType = this.normalizeCouponType(offer.discount_type);
+                const couponValue = this.parseNumber(offer.discount_value) ?? 0;
+                const minPurchase = this.parseNumber(offer.minimum_purchase_amount);
+                const usageLimit = this.parseNumber(offer.usage_limit) ?? 0;
+                const usageCount = this.parseNumber(offer.usage_count) ?? 0;
+                const perUserLimit = this.parseNumber(offer.usage_limit_per_customer) ?? 0;
+                const startDate = offer.start_date || nowIso;
+                const endDate = offer.end_date || nowIso;
+
+                const coupon: Coupon = {
+                    id: offer.id,
+                    code: String(offer.offer_code).toUpperCase(),
+                    type: couponType,
+                    value: couponValue > 0 ? couponValue : 0,
+                    start_date: startDate,
+                    expiry_date: endDate,
+                    min_purchase: typeof minPurchase === 'number' && minPurchase > 0 ? minPurchase : undefined,
+                    usage_limit: usageLimit,
+                    usage_count: usageCount,
+                    per_user_limit: perUserLimit,
+                    status: offer.is_active ? 'active' : 'inactive',
+                    applicable_category: undefined,
+                    applicable_product_id: undefined,
+                };
+
+                return coupon;
+            })
+            .filter((coupon) => {
+                if (!coupon.code || coupon.value <= 0) {
+                    return false;
+                }
+                return this.isWithinDateRange(coupon.start_date, coupon.expiry_date, nowIso);
+            });
+    }
+
+    private async fetchMarketingOffersPayload(): Promise<MarketingOfferRecord[]> {
+        try {
+            const response = await fetch('/api/offers?active=true', { headers: { 'Cache-Control': 'no-store' } });
+            if (!response.ok) {
+                const details = await response.json().catch(() => null);
+                logger.warn('OfferDiscountService.marketing.fetch_failed', { status: response.status, details });
+                return [];
+            }
+            const payload = await response.json();
+            const rows = Array.isArray((payload as { offers?: MarketingOfferRecord[] })?.offers)
+                ? ((payload as { offers?: MarketingOfferRecord[] }).offers ?? [])
+                : (Array.isArray(payload) ? (payload as MarketingOfferRecord[]) : []);
+            return Array.isArray(rows) ? rows.filter(Boolean) : [];
+        } catch (error) {
+            logger.error('OfferDiscountService.marketing.fetch_error', { error });
+            return [];
+        }
     }
 
     private normalizeOffers(rawOffers: AutoOffer[], nowIso: string): AutoOffer[] {
@@ -78,26 +233,45 @@ export class OfferDiscountService {
             })
             .filter((offer): offer is AutoOffer => Boolean(offer));
     }
-    
-    /**
-     * Get all active discount coupons
-     */
+
+    private normalizeCustomerEligibility(value?: string | null): CustomerCategory[] | undefined {
+        if (!value) return undefined;
+        const normalized = String(value).trim().toLowerCase();
+        if (!normalized || normalized === 'all') {
+            return undefined;
+        }
+
+        const mapping: Record<string, CustomerCategory> = {
+            normal: 'Normal',
+            standard: 'Standard',
+            premium: 'Premium',
+        };
+
+        const match = mapping[normalized];
+        return match ? [match] : undefined;
+    }
+
     async getActiveCoupons(): Promise<Coupon[]> {
         const now = new Date().toISOString();
-        
-        const { data, error } = await this.supabase
-            .from('coupons')
-            .select('*')
-            .eq('status', 'active')
-            .lte('start_date', now)
-            .gte('expiry_date', now);
-            
-        if (error) {
-            logger.error('Error fetching coupons', { error });
-            return [];
+
+        const [couponResult, marketingOffers] = await Promise.all([
+            this.supabase
+                .from('coupons')
+                .select('*')
+                .eq('status', 'active')
+                .lte('start_date', now)
+                .gte('expiry_date', now),
+            this.fetchMarketingOffersPayload()
+        ]);
+
+        if (couponResult.error) {
+            logger.error('OfferDiscountService.getActiveCoupons.supabase_failed', { error: couponResult.error });
         }
-        
-        return data || [];
+
+        const directCoupons = couponResult.data ?? [];
+        const marketingCoupons = marketingOffers.length ? this.mapMarketingOffersToCoupons(marketingOffers, now) : [];
+
+        return [...directCoupons, ...marketingCoupons];
     }
     
     /**
@@ -390,6 +564,40 @@ export class OfferDiscountService {
             return false;
         }
         
+        return true;
+    }
+    private normalizeCouponType(value?: string | null): Coupon['type'] {
+        const normalized = (value ?? '').toLowerCase();
+        if (normalized === 'fixed' || normalized === 'fixed_amount' || normalized === 'amount') {
+            return 'fixed';
+        }
+        return 'percentage';
+    }
+
+    private parseNumber(value: unknown): number | undefined {
+        if (typeof value === 'number' && Number.isFinite(value)) {
+            return value;
+        }
+        if (typeof value === 'string' && value.trim().length > 0) {
+            const parsed = Number(value);
+            return Number.isFinite(parsed) ? parsed : undefined;
+        }
+        return undefined;
+    }
+
+    private isWithinDateRange(start: string, end: string, nowIso: string): boolean {
+        const now = new Date(nowIso).getTime();
+        const startTime = new Date(start).getTime();
+        const endTime = new Date(end).getTime();
+
+        if (Number.isFinite(startTime) && startTime > now) {
+            return false;
+        }
+
+        if (Number.isFinite(endTime) && endTime < now) {
+            return false;
+        }
+
         return true;
     }
 }

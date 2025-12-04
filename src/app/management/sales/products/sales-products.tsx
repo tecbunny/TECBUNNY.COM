@@ -63,7 +63,12 @@ export default function ProductManagementPage() {
         console.error('Failed to fetch products:', error);
         toast({ variant: 'destructive', title: 'Error', description: 'Could not fetch product list.'});
     } else {
-        setProductList(data as Product[]);
+        const normalized = (data as Product[] ?? []).map((product) => ({
+          ...product,
+          name: product?.name || product?.title || product?.model_number || 'Unnamed Product',
+          price: Number(product?.price ?? product?.offer_price ?? product?.mrp ?? 0),
+        }));
+        setProductList(normalized);
     }
   }, [supabase, toast]);
 
@@ -299,7 +304,7 @@ export default function ProductManagementPage() {
                   <TableCell>
                     <Badge variant="outline">{product.category}</Badge>
                   </TableCell>
-                  <TableCell>₹{product.price.toFixed(2)}</TableCell>
+                  <TableCell>₹{Number(product.price ?? 0).toFixed(2)}</TableCell>
                   <TableCell>{product.popularity}</TableCell>
                   <TableCell>
                     <DropdownMenu>

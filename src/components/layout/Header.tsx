@@ -12,7 +12,7 @@ import { logger } from '../../lib/logger';
 import { Button } from '../../components/ui/button';
 import { DynamicLogo } from '../../components/ui/dynamic-logo';
 import { ProductSearch } from '../../components/products/ProductSearch';
-import { CartSheet } from '../../components/cart/CartSheet';
+import { EnhancedCartSheet } from '../../components/cart/EnhancedCartSheet';
 import { useAuth, useCart, useWishlist } from '../../lib/hooks';
 import { Badge } from '../../components/ui/badge';
 import {
@@ -31,6 +31,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTr
   const navLinks = [
     { name: 'Home', href: '/' },
     { name: 'Products', href: '/products' },
+    { name: 'Services', href: '/services' },
     { name: 'Customised Setups', href: '/customised-setups' },
     { name: 'Offers', href: '/offers' },
     { name: 'About Us', href: '/about' },
@@ -232,7 +233,7 @@ export function Header() {
 
           <div className="flex items-center gap-2">
             <div className="hidden md:flex items-center gap-2">
-              <CartSheet>
+                <EnhancedCartSheet>
                   <Button variant="ghost" size="icon" className="relative">
                   <ShoppingCart className="h-5 w-5" />
                   {cartCount > 0 && (
@@ -245,7 +246,7 @@ export function Header() {
                   )}
                   <span className="sr-only">Open Cart</span>
                   </Button>
-              </CartSheet>
+              </EnhancedCartSheet>
 
               <Button variant="ghost" size="icon" className="relative" disabled>
                   <Heart className="h-5 w-5" />
@@ -401,13 +402,13 @@ export function Header() {
                           </div>
                        </nav>
                        <div className="flex items-center gap-4">
-                          <CartSheet>
+                            <EnhancedCartSheet>
                               <Button variant="ghost" size="icon" className="relative">
                                   <ShoppingCart className="h-5 w-5" />
                                   {cartCount > 0 && <Badge variant="destructive" className="absolute -top-1 -right-1 h-5 w-5 justify-center p-0">{cartCount}</Badge>}
                                   <span className="sr-only">Open Cart</span>
                               </Button>
-                          </CartSheet>
+                          </EnhancedCartSheet>
 
                           <Button variant="ghost" size="icon" className="relative" disabled>
                               <Heart className="h-5 w-5" />

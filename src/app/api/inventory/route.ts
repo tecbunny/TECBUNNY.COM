@@ -1,14 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { createClient } from '../../../lib/supabase/server';
+import { requireApiRole, type RoleCheckOptions } from '../../../lib/server-role-guard';
+
+const INVENTORY_ACCESS: RoleCheckOptions = {
+  allowedRoles: ['sales', 'manager'],
+  minimumRole: 'admin'
+};
 
 export async function GET(_request: NextRequest) {
   try {
-    const supabase = await createClient();
+    const access = await requireApiRole(INVENTORY_ACCESS);
+    if ('error' in access) {
+      return access.error;
+    }
+    const { supabase } = access;
     
-    // Get inventory summary using the view
+    // Get inventory summary using the consolidated view
     const { data: inventory, error } = await supabase
-      .from('inventory_summary')
+      .from('inventory_items')
       .select('*')
       .order('name');
 
@@ -53,7 +62,11 @@ export async function GET(_request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient();
+    const access = await requireApiRole(INVENTORY_ACCESS);
+    if ('error' in access) {
+      return access.error;
+    }
+    const { supabase } = access;
     const { product_id, movement_type, quantity, notes, reference_type } = await request.json();
 
     if (!product_id || !movement_type || quantity === undefined) {
@@ -172,7 +185,11 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    const supabase = await createClient();
+    const access = await requireApiRole(INVENTORY_ACCESS);
+    if ('error' in access) {
+      return access.error;
+    }
+    const { supabase } = access;
     const { product_id, new_quantity } = await request.json();
 
     if (!product_id || new_quantity === undefined) {

@@ -4,16 +4,13 @@ inputs:
   api-url:
     description: Base SITE_URL (including scheme)
     required: true
-  auto-fill-secret:
-    description: Shared secret used to authorize the auto-fill run endpoint
-    required: true
 runs:
   using: composite
   steps:
     - shell: bash
       run: |
         API_URL="${{ inputs.api-url }}"
-        AUTO_FILL_SECRET="${{ inputs.auto-fill-secret }}"
+        AUTO_FILL_SECRET="${{ env.AUTO_FILL_SECRET }}"
 
         if [ -z "$API_URL" ] || [ -z "$AUTO_FILL_SECRET" ]; then
           echo "SITE_URL or AUTO_FILL_SECRET not set; skipping auto-fill run";

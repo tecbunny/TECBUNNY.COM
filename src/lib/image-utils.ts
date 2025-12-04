@@ -45,7 +45,7 @@ export function isValidImageUrl(url: any): url is string {
  * Gets the first valid image from an array of images
  */
 export function getFirstValidImage(imageArray: any[]): string {
-  if (!Array.isArray(imageArray)) return '';
+  if (!Array.isArray(imageArray)) return '/images/placeholder.png';
   
   for (const img of imageArray) {
     const url = typeof img === 'string' ? img : img?.url || '';
@@ -53,7 +53,7 @@ export function getFirstValidImage(imageArray: any[]): string {
       return url;
     }
   }
-  return '';
+  return '/images/placeholder.png';
 }
 
 /**

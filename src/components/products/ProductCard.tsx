@@ -73,6 +73,10 @@ export function ProductCard({ product, viewMode = 'grid' }: ProductCardProps) {
     
     // Calculate savings amount from MRP to Sale Price
     const savingsAmount = mrp > salePrice ? mrp - salePrice : 0;
+
+    const explicitOfferPrice = typeof product.offer_price === 'number' && product.offer_price > 0
+      ? product.offer_price
+      : null;
     
     // Apply system discounts for offer price
     // Dynamic system discount: only apply if product has an explicit discount flag/fields
@@ -87,25 +91,49 @@ export function ProductCard({ product, viewMode = 'grid' }: ProductCardProps) {
     } else if (categoryDiscounts[product.category]) {
       systemDiscountPercentage = categoryDiscounts[product.category] || 0;
     }
-    const offerPrice = Math.round(salePrice * (1 - systemDiscountPercentage / 100));
-    
+
+    let computedOfferPrice = systemDiscountPercentage > 0
+      ? Math.round(salePrice * (1 - systemDiscountPercentage / 100))
+      : salePrice;
+
+    if (explicitOfferPrice && explicitOfferPrice < computedOfferPrice) {
+      computedOfferPrice = Math.round(explicitOfferPrice);
+    }
+
+    if (computedOfferPrice >= salePrice) {
+      computedOfferPrice = salePrice;
+    }
+
+    const effectiveDiscountPercentage = salePrice > 0
+      ? Math.max(0, Math.round(((salePrice - computedOfferPrice) / salePrice) * 100))
+      : 0;
+
     // Calculate extra discount amount (from sale price to offer price)
-    const extraDiscount = salePrice - offerPrice;
+    const extraDiscount = salePrice - computedOfferPrice;
+
+    const appliedDiscounts: string[] = [];
+    if (product.applied_offer_title) {
+      appliedDiscounts.push(product.applied_offer_title);
+    } else if (effectiveDiscountPercentage > 0) {
+      appliedDiscounts.push((product as any).discount_source || 'Automatic Discount');
+    }
     
     return {
       mrp,
       salePrice,
-      offerPrice,
+      offerPrice: computedOfferPrice,
       originalPrice: salePrice, // For compatibility
       percentageOff,
       savingsAmount,
-      systemDiscountPercentage,
+      systemDiscountPercentage: effectiveDiscountPercentage,
       extraDiscount,
-      discountPercentage: systemDiscountPercentage, // For compatibility
-      totalDiscount: salePrice - offerPrice,
-  appliedDiscounts: systemDiscountPercentage > 0 ? [ (product as any).discount_source || 'Automatic Discount' ] : []
+      discountPercentage: effectiveDiscountPercentage, // For compatibility
+      totalDiscount: salePrice - computedOfferPrice,
+      appliedDiscounts
     };
   }, [product]);
+
+  const hasOfferPrice = pricing.offerPrice < pricing.salePrice;
 
   // Get stock status display with better messaging
   const stockInfo = React.useMemo(() => {
@@ -270,30 +298,34 @@ export function ProductCard({ product, viewMode = 'grid' }: ProductCardProps) {
                   </div>
                 </div>
                 
-                {/* Offer Price and Extra Discount */}
-                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xl font-bold text-green-700">
-                      Offer Price: ₹{pricing.offerPrice.toLocaleString()}
-                    </span>
-                    <span className="text-base font-bold text-orange-600">
-                      {pricing.systemDiscountPercentage}% OFF
-                    </span>
-                  </div>
-                  {pricing.extraDiscount > 0 && (
-                    <span className="text-base text-green-600 font-medium">
-                      Extra Discount: ₹{pricing.extraDiscount.toLocaleString()}
-                    </span>
-                  )}
-                </div>
-                
-                {pricing.appliedDiscounts.length > 0 && (
-                  <div className="flex items-center gap-2">
-                    <Tag className="h-4 w-4 text-green-600" />
-                    <span className="text-base text-green-600 font-medium">
-                      {pricing.appliedDiscounts[0]}
-                    </span>
-                  </div>
+                {hasOfferPrice && (
+                  <>
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xl font-bold text-green-700">
+                          Offer Price: ₹{pricing.offerPrice.toLocaleString()}
+                        </span>
+                        {pricing.systemDiscountPercentage > 0 && (
+                          <span className="text-base font-bold text-orange-600">
+                            {pricing.systemDiscountPercentage}% OFF
+                          </span>
+                        )}
+                      </div>
+                      {pricing.extraDiscount > 0 && (
+                        <span className="text-base text-green-600 font-medium">
+                          Extra Discount: ₹{pricing.extraDiscount.toLocaleString()}
+                        </span>
+                      )}
+                    </div>
+                    {pricing.appliedDiscounts.length > 0 && (
+                      <div className="flex items-center gap-2">
+                        <Tag className="h-4 w-4 text-green-600" />
+                        <span className="text-base text-green-600 font-medium">
+                          {pricing.appliedDiscounts[0]}
+                        </span>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </div>
@@ -399,7 +431,7 @@ export function ProductCard({ product, viewMode = 'grid' }: ProductCardProps) {
           </div>
           
           {/* Product Name */}
-          <CardTitle className="text-lg font-bold leading-tight line-clamp-2 mb-3 text-foreground min-h-[3.5rem] flex items-start">
+          <CardTitle className="text-lg font-bold leading-tight line-clamp-2 mb-3 text-foreground h-14 flex items-start">
             <span className="hover:text-primary transition-colors">{displayName}</span>
           </CardTitle>
           
@@ -455,31 +487,34 @@ export function ProductCard({ product, viewMode = 'grid' }: ProductCardProps) {
             </div>
           </div>
           
-          {/* Offer Price and Extra Discount */}
-          <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-lg font-bold text-green-700">
-                Offer Price: ₹{pricing.offerPrice.toLocaleString()}
-              </span>
-              <span className="text-sm font-bold text-orange-600">
-                {pricing.systemDiscountPercentage}% OFF
-              </span>
-            </div>
-            {pricing.extraDiscount > 0 && (
-              <span className="text-sm text-green-600 font-medium">
-                Extra Discount: ₹{pricing.extraDiscount.toLocaleString()}
-              </span>
-            )}
-          </div>
-          
-          {/* Applied System Discount */}
-          {pricing.appliedDiscounts.length > 0 && (
-            <div className="flex items-center gap-2">
-              <Tag className="h-4 w-4 text-green-600" />
-              <span className="text-sm text-green-600 font-medium">
-                {pricing.appliedDiscounts[0]}
-              </span>
-            </div>
+          {hasOfferPrice && (
+            <>
+              <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-lg font-bold text-green-700">
+                    Offer Price: ₹{pricing.offerPrice.toLocaleString()}
+                  </span>
+                  {pricing.systemDiscountPercentage > 0 && (
+                    <span className="text-sm font-bold text-orange-600">
+                      {pricing.systemDiscountPercentage}% OFF
+                    </span>
+                  )}
+                </div>
+                {pricing.extraDiscount > 0 && (
+                  <span className="text-sm text-green-600 font-medium">
+                    Extra Discount: ₹{pricing.extraDiscount.toLocaleString()}
+                  </span>
+                )}
+              </div>
+              {pricing.appliedDiscounts.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <Tag className="h-4 w-4 text-green-600" />
+                  <span className="text-sm text-green-600 font-medium">
+                    {pricing.appliedDiscounts[0]}
+                  </span>
+                </div>
+              )}
+            </>
           )}
         </div>
         

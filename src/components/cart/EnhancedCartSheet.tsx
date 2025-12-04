@@ -18,105 +18,99 @@ import { ScrollArea } from '../../components/ui/scroll-area';
 import { Separator } from '../../components/ui/separator';
 import { Badge } from '../../components/ui/badge';
 import { useCart } from '../../lib/hooks';
+import { logger } from '../../lib/logger';
 
 import type { Coupon } from '../../lib/types';
 import { Input } from '../../components/ui/input';
 import { useToast } from '../../hooks/use-toast';
 
 import { CartItemCard } from './CartItemCard';
-import { CouponDialog } from './CouponDialog';
 
 interface EnhancedCartSheetProps {
     children: React.ReactNode;
 }
 
 export function EnhancedCartSheet({ children }: EnhancedCartSheetProps) {
-  const { cartItems, cartCount, cartSubtotal, cartGst, cartTotal } = useCart();
+  const {
+    cartItems,
+    cartCount,
+    cartSubtotal,
+    cartGst,
+    cartTotal,
+    pricing,
+    applyCoupon,
+    removeCoupon,
+    refreshPricing,
+  } = useCart();
   const { toast } = useToast();
   const [open, setOpen] = React.useState(false);
   const [couponCode, setCouponCode] = React.useState('');
-  const [appliedCoupon, setAppliedCoupon] = React.useState<Coupon | null>(null);
-  const [availableCoupons] = React.useState<Coupon[]>([]);
-  const [discount, setDiscount] = React.useState(0);
-  const [autoOfferDiscount, setAutoOfferDiscount] = React.useState(0);
-  const [autoOffer, setAutoOffer] = React.useState<{title: string; description: string} | null>(null);
+  const [isApplyingCoupon, setIsApplyingCoupon] = React.useState(false);
+
+  const fetchCouponByCode = React.useCallback(async (code: string): Promise<Coupon | null> => {
+    try {
+      const response = await fetch(`/api/coupons?code=${encodeURIComponent(code)}`, { cache: 'no-store' });
+      if (!response.ok) {
+        return null;
+      }
+      const data = await response.json();
+      return data as Coupon;
+    } catch (error) {
+      logger.error('cart_fetch_coupon_failed', { error, code });
+      return null;
+    }
+  }, []);
+
+  const availableCoupons = React.useMemo(
+    () => pricing?.availableCoupons ?? [],
+    [pricing?.availableCoupons]
+  );
+  const appliedCoupon = pricing?.appliedCoupon ?? null;
+  const autoOffer = pricing?.autoOffer ?? null;
+  const autoOfferDiscount = pricing?.autoOfferDiscount ?? 0;
+  const couponDiscount = pricing?.couponDiscount ?? 0;
+  const totalDiscount = pricing?.totalDiscount ?? autoOfferDiscount + couponDiscount;
+  const canCombineDiscounts = pricing?.canCombineDiscounts ?? false;
+  const subtotalDisplay = pricing?.subtotal ?? cartSubtotal;
+  const gstDisplay = pricing?.gstAmount ?? cartGst;
+  const finalTotal = pricing?.finalTotal ?? Math.max(0, cartTotal - totalDiscount);
 
   React.useEffect(() => {
-    // Simulate auto-offer detection
-    if (cartItems.length > 0) {
-      // Sample auto-offer logic
-      if (cartTotal > 5000) {
-        setAutoOffer({
-          title: "Minimum Order Offer",
-          description: "Get ₹500 off on orders above ₹5000"
-        });
-        setAutoOfferDiscount(500);
-      } else if (cartItems.some(item => item.category === 'Laptops')) {
-        setAutoOffer({
-          title: "Laptop Category Offer",
-          description: "20% off on all laptops"
-        });
-        setAutoOfferDiscount(cartTotal * 0.2);
-      } else {
-        setAutoOffer(null);
-        setAutoOfferDiscount(0);
-      }
-    } else {
-      setAutoOffer(null);
-      setAutoOfferDiscount(0);
+    if (open) {
+      refreshPricing(pricing?.appliedCoupon ?? undefined);
     }
-  }, [cartItems, cartTotal]);
+  }, [open, refreshPricing, pricing?.appliedCoupon]);
 
-  const handleApplyCoupon = async (code: string) => {
-    if (!code.trim()) return;
-    
-    // Simple coupon validation (in real app, would call API)
-    const mockCoupon = {
-      id: '1',
-      code: code.toUpperCase(),
-      type: 'percentage' as const,
-      value: 10,
-      start_date: '2025-01-01',
-      expiry_date: '2025-12-31',
-      status: 'active' as const,
-      usage_limit: 100,
-      usage_count: 0,
-      per_user_limit: 1
-    };
-    
-    setAppliedCoupon(mockCoupon);
-    setDiscount(cartTotal * 0.1); // 10% discount
-    setCouponCode('');
-    
-    toast({
-      title: "Coupon Applied!",
-      description: `${code} has been applied to your cart.`,
-    });
-  };
+  const handleApplyCoupon = React.useCallback(async () => {
+    const trimmed = couponCode.trim().toUpperCase();
+    if (!trimmed || isApplyingCoupon) return;
 
-  const onCouponSelected = async (coupon: Coupon | null) => {
-    if (coupon) {
-      setAppliedCoupon(coupon);
-      setDiscount(cartTotal * (coupon.value / 100));
+    let coupon = availableCoupons.find((c) => c.code.toUpperCase() === trimmed);
+    if (!coupon) {
+      const fetchedCoupon = await fetchCouponByCode(trimmed);
+      coupon = fetchedCoupon ?? coupon;
+    }
+    if (!coupon) {
       toast({
-        title: "Coupon Applied!",
-        description: `${coupon.code} has been applied to your cart.`,
+        title: 'Coupon Not Available',
+        description: 'This code is not applicable to your current cart.',
+        variant: 'destructive',
       });
+      return;
     }
-  };
 
-  const handleRemoveCoupon = () => {
-    setAppliedCoupon(null);
-    setDiscount(0);
+    setIsApplyingCoupon(true);
+    const success = await applyCoupon(coupon);
+    setIsApplyingCoupon(false);
+    if (success) {
+      setCouponCode('');
+    }
+  }, [couponCode, isApplyingCoupon, availableCoupons, applyCoupon, toast, fetchCouponByCode]);
+
+  const handleRemoveCoupon = React.useCallback(() => {
+    removeCoupon();
     setCouponCode('');
-    toast({
-      title: "Coupon Removed",
-      description: "The coupon has been removed from your cart.",
-    });
-  };
-
-  const totalDiscount = autoOfferDiscount + discount;
-  const finalTotal = Math.max(0, cartTotal - totalDiscount + cartGst);
+  }, [removeCoupon]);
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -157,7 +151,7 @@ export function EnhancedCartSheet({ children }: EnhancedCartSheetProps) {
                 )}
                 
                 {/* Applied Coupon */}
-                {appliedCoupon && discount > 0 && (
+                {appliedCoupon && couponDiscount > 0 && (
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
@@ -184,14 +178,14 @@ export function EnhancedCartSheet({ children }: EnhancedCartSheetProps) {
                         }
                       </span>
                       <span className="font-medium text-blue-800">
-                        -₹{discount.toFixed(2)}
+                        -₹{couponDiscount.toFixed(2)}
                       </span>
                     </div>
                   </div>
                 )}
                 
                 {/* Combination Notice */}
-                {autoOffer && appliedCoupon && (
+                {autoOffer && appliedCoupon && canCombineDiscounts && (
                   <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-2">
                     <p className="text-xs text-yellow-700 text-center">
                       🎉 Great! Your offer and discount are combined for maximum savings
@@ -208,15 +202,16 @@ export function EnhancedCartSheet({ children }: EnhancedCartSheetProps) {
                         placeholder="Enter coupon code" 
                         value={couponCode}
                         onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                        onKeyPress={(e) => {
+                        onKeyDown={(e) => {
                           if (e.key === 'Enter') {
-                            handleApplyCoupon(couponCode);
+                            e.preventDefault();
+                            void handleApplyCoupon();
                           }
                         }}
                       />
                       <Button 
-                        onClick={() => handleApplyCoupon(couponCode)} 
-                        disabled={!couponCode.trim()}
+                        onClick={() => void handleApplyCoupon()} 
+                        disabled={!couponCode.trim() || isApplyingCoupon}
                         size="sm"
                       >
                         Apply
@@ -225,13 +220,10 @@ export function EnhancedCartSheet({ children }: EnhancedCartSheetProps) {
                   </div>
                 )}
                 
-                {/* Available Coupons Dialog */}
-                {availableCoupons.length > 0 && !appliedCoupon && (
-                  <CouponDialog 
-                    availableCoupons={availableCoupons}
-                    onCouponSelected={onCouponSelected}
-                    appliedCouponCode={undefined}
-                  />
+                {!appliedCoupon && (
+                  <p className="text-xs text-muted-foreground">
+                    Have a coupon? Enter the code above to redeem it. Eligible codes still work even if they are not listed here.
+                  </p>
                 )}
               </div>
             </div>
@@ -241,7 +233,7 @@ export function EnhancedCartSheet({ children }: EnhancedCartSheetProps) {
               <div className="w-full space-y-2">
                 <div className="flex justify-between text-base">
                   <span>Subtotal</span>
-                  <span>₹{cartSubtotal.toFixed(2)}</span>
+                  <span>₹{subtotalDisplay.toFixed(2)}</span>
                 </div>
                 
                 {/* Auto Offer Discount */}
@@ -253,10 +245,10 @@ export function EnhancedCartSheet({ children }: EnhancedCartSheetProps) {
                 )}
                 
                 {/* Manual Coupon Discount */}
-                {discount > 0 && (
+                {couponDiscount > 0 && (
                   <div className="flex justify-between text-base text-blue-600">
                     <span>Discount ({appliedCoupon?.code})</span>
-                    <span>-₹{discount.toFixed(2)}</span>
+                    <span>-₹{couponDiscount.toFixed(2)}</span>
                   </div>
                 )}
                 
@@ -270,7 +262,7 @@ export function EnhancedCartSheet({ children }: EnhancedCartSheetProps) {
                 
                 <div className="flex justify-between text-base">
                   <span>GST</span>
-                  <span>₹{cartGst.toFixed(2)}</span>
+                  <span>₹{gstDisplay.toFixed(2)}</span>
                 </div>
                 
                 <Separator />
@@ -283,7 +275,12 @@ export function EnhancedCartSheet({ children }: EnhancedCartSheetProps) {
                 <p className="text-xs text-muted-foreground">Shipping calculated at checkout.</p>
                 
                 <Button className="w-full" size="lg" asChild>
-                  <Link href="/checkout">Proceed to Checkout</Link>
+                  <Link
+                    href="/checkout"
+                    onClick={() => setOpen(false)}
+                  >
+                    Proceed to Checkout
+                  </Link>
                 </Button>
               </div>
             </SheetFooter>

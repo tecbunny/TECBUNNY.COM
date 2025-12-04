@@ -44,6 +44,8 @@ export interface Product {
   stock_status?: 'in_stock' | 'low_stock' | 'out_of_stock' | 'backorder';
   offer_price?: number;
   discount_percentage?: number;
+  applied_offer_title?: string;
+  applied_offer_id?: string;
   // Enhanced product fields
   product_url?: string;           // Direct product URL/link
   additional_images?: string[];   // Multiple product images
@@ -355,7 +357,7 @@ export interface Purchase {
 
 export type ServiceStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled';
 export type ServicePriority = 'low' | 'medium' | 'high' | 'urgent';
-export type ServiceCategory = 'Support' | 'Protection' | 'Installation' | 'Trade' | 'Business';
+export type ServiceCategory = 'Support' | 'Protection' | 'Installation' | 'Trade' | 'Business' | 'CCTV' | 'Computer';
 
 // Sales Agent Types
 export type SalesAgentStatus = 'pending' | 'approved' | 'rejected';

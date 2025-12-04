@@ -6,7 +6,7 @@ export interface APIError {
   code: string;
   message: string;
   statusCode: number;
-  details?: any;
+  details?: unknown;
   timestamp: string;
   requestId?: string;
 }
@@ -105,7 +105,7 @@ export class APIErrorHandler {
         message: apiError.message,
         timestamp: apiError.timestamp,
         requestId: apiError.requestId,
-        ...(apiError.details && { details: apiError.details })
+        ...(apiError.details ? { details: apiError.details } : {})
       },
       { status: apiError.statusCode }
     );
@@ -162,7 +162,7 @@ export function asyncHandler(
 }
 
 // Validation helpers
-export function validateRequired(value: any, fieldName: string): void {
+export function validateRequired(value: unknown, fieldName: string): void {
   if (value === undefined || value === null || value === '') {
     throw new ValidationError(`${fieldName} is required`);
   }

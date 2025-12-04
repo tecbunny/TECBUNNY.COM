@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 
 import { 
   Plus, 
@@ -164,6 +164,10 @@ export default function AdminProductCatalogPage() {
   const { toast } = useToast();
 
   const fetchProducts = useCallback(async () => {
+    // Ensure only the most recent query updates the grid
+    fetchControllerRef.current?.abort();
+    const controller = new AbortController();
+    fetchControllerRef.current = controller;
     setLoading(true);
     try {
       const params = new URLSearchParams({
@@ -180,9 +184,15 @@ export default function AdminProductCatalogPage() {
       }
 
       // Fetch products sorted by creation date (first added = first in order)
-      const response = await fetch(`/api/products?${params.toString()}`);
+      const response = await fetch(`/api/products?${params.toString()}`, {
+        signal: controller.signal,
+      });
       const result = await response.json();
       
+      if (controller.signal.aborted) {
+        return;
+      }
+
       logger.debug('Fetch products response:', { result, search: debouncedSearch });
       
       if (result.success) {
@@ -201,6 +211,9 @@ export default function AdminProductCatalogPage() {
         setProducts([]); // Clear products on error
       }
     } catch (error) {
+      if ((error as DOMException)?.name === 'AbortError') {
+        return;
+      }
       logger.error('Error fetching products:', { error });
       toast({
         title: "Error",
@@ -209,13 +222,22 @@ export default function AdminProductCatalogPage() {
       });
       setProducts([]); // Clear products on error
     } finally {
-      setLoading(false);
+      if (fetchControllerRef.current === controller) {
+        fetchControllerRef.current = null;
+        setLoading(false);
+      }
     }
   }, [page, limit, toast, debouncedSearch]);
 
   useEffect(() => {
     fetchProducts();
   }, [fetchProducts]);
+
+  useEffect(() => {
+    return () => {
+      fetchControllerRef.current?.abort();
+    };
+  }, []);
 
   const handleSaveProduct = async () => {
     try {
@@ -276,6 +298,7 @@ export default function AdminProductCatalogPage() {
           title: "Success",
           description: (isEdit ? "Product updated" : "Product saved") + (json.warnings?.length ? ` (with warnings: ${json.warnings.join('; ')})` : '!'),
         });
+        await fetchProducts();
         setShowAddForm(false);
         setEditMode(false);
         setSelectedProduct(null);
@@ -398,6 +421,7 @@ export default function AdminProductCatalogPage() {
     () => deriveStockStatus(formData.stock_quantity, formData.min_stock_level),
     [formData.stock_quantity, formData.min_stock_level]
   );
+  const fetchControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     setFormData(prev => {

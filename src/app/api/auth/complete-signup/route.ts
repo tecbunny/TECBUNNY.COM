@@ -172,15 +172,17 @@ export async function POST(request: NextRequest) {
 
     // Set auth cookies for automatic sign-in
     if (signInData.session) {
+      // Access token is sent to client via JSON as well; keep it accessible to client-side JS.
       response.cookies.set('sb-access-token', signInData.session.access_token, {
         httpOnly: false,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
         maxAge: signInData.session.expires_in
       });
-      
+
+      // Refresh token should be HttpOnly to reduce XSS risk.
       response.cookies.set('sb-refresh-token', signInData.session.refresh_token, {
-        httpOnly: false,
+        httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
         maxAge: 60 * 60 * 24 * 7 // 7 days

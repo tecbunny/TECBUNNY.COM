@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Gift, ShoppingCart, Tag } from "lucide-react";
 
 import { useCart } from "../../lib/hooks";
+import { logger } from "../../lib/logger";
 import type { Coupon } from "../../lib/types";
 import { Button } from "../ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "../ui/card";
@@ -16,7 +17,6 @@ import { Input } from "../ui/input";
 import { useToast } from "../../hooks/use-toast";
 
 import { CartItemCard } from "./CartItemCard";
-import { CouponDialog } from "./CouponDialog";
 
 const formatCurrency = (value: number) =>
   value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -34,23 +34,27 @@ export default function CartPage() {
     isSessionExpired,
     resetGuestSession,
   } = useCart();
-  const [applyingCouponId, setApplyingCouponId] = React.useState<string | null>(null);
   const [couponCode, setCouponCode] = React.useState("");
   const [applyingCode, setApplyingCode] = React.useState(false);
   const { toast } = useToast();
 
+  const fetchCouponByCode = React.useCallback(async (code: string): Promise<Coupon | null> => {
+    try {
+      const response = await fetch(`/api/coupons?code=${encodeURIComponent(code)}`, { cache: "no-store" });
+      if (!response.ok) {
+        return null;
+      }
+      const data = await response.json();
+      return data as Coupon;
+    } catch (error) {
+      logger.error("cart_fetch_coupon_failed", { error, code });
+      return null;
+    }
+  }, []);
+
   React.useEffect(() => {
     void refreshPricing();
   }, [refreshPricing]);
-
-  const handleApplyCoupon = async (coupon: Coupon) => {
-    setApplyingCouponId(coupon.id);
-    try {
-      await applyCoupon(coupon);
-    } finally {
-      setApplyingCouponId(null);
-    }
-  };
 
   const handleApplyCouponCode = async () => {
     const code = couponCode.trim();
@@ -58,9 +62,14 @@ export default function CartPage() {
       return;
     }
 
-    const matchingCoupon = availableCoupons.find(
+    let matchingCoupon = availableCoupons.find(
       (coupon) => coupon.code.toUpperCase() === code.toUpperCase()
     );
+
+    if (!matchingCoupon) {
+      const fetchedCoupon = await fetchCouponByCode(code.toUpperCase());
+      matchingCoupon = fetchedCoupon ?? matchingCoupon;
+    }
 
     if (!matchingCoupon) {
       toast({
@@ -82,15 +91,6 @@ export default function CartPage() {
     }
   };
 
-  const handleCouponSelected = (coupon: Coupon | null) => {
-    if (!coupon) {
-      removeCoupon();
-      return;
-    }
-
-    void handleApplyCoupon(coupon);
-  };
-
   const hasItems = cartItems.length > 0;
   const {
     finalTotal,
@@ -98,10 +98,10 @@ export default function CartPage() {
     autoOfferDiscount,
     appliedCoupon,
     couponDiscount,
-    availableCoupons,
     totalDiscount,
     canCombineDiscounts,
   } = pricing;
+  const availableCoupons = pricing.availableCoupons;
 
   const subtotal = cartSubtotal;
   const gstAmount = cartGst;
@@ -234,49 +234,12 @@ export default function CartPage() {
                   )}
                 </div>
 
-                {availableCoupons.length > 0 && !appliedCoupon && (
-                  <div className="space-y-3">
-                    <p className="text-sm font-medium">Available Coupons</p>
-                    <div className="space-y-2">
-                      {availableCoupons.map((coupon) => (
-                        <div
-                          key={coupon.id}
-                          className="flex items-center justify-between rounded-md border border-dashed p-3 text-sm"
-                        >
-                          <div>
-                            <span className="font-semibold">{coupon.code}</span>
-                            <p className="text-xs text-muted-foreground">
-                              {coupon.type === "percentage"
-                                ? `${coupon.value}% off`
-                                : `Flat ₹${formatCurrency(coupon.value)} off`}
-                            </p>
-                          </div>
-                          <Button
-                            size="sm"
-                            onClick={() => handleApplyCoupon(coupon)}
-                            disabled={applyingCouponId === coupon.id}
-                          >
-                            {applyingCouponId === coupon.id ? "Applying..." : "Apply"}
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
                 <div className="rounded-md border border-dashed p-4 space-y-3">
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 text-sm font-medium">
                       <Tag className="h-4 w-4" />
                       <span>Apply coupon</span>
                     </div>
-                    {availableCoupons.length > 0 && (
-                      <CouponDialog
-                        availableCoupons={availableCoupons}
-                        onCouponSelected={handleCouponSelected}
-                        appliedCouponCode={appliedCoupon?.code}
-                      />
-                    )}
                   </div>
                   <form
                     onSubmit={(event) => {
@@ -298,11 +261,9 @@ export default function CartPage() {
                       {applyingCode ? "Applying..." : "Apply"}
                     </Button>
                   </form>
-                  {availableCoupons.length === 0 && (
-                    <p className="text-xs text-muted-foreground">
-                      No coupons are currently available for your cart. Add eligible items to unlock offers.
-                    </p>
-                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Have a discount code? Enter it above to redeem. Eligible coupons remain valid even if they are not listed.
+                  </p>
                 </div>
 
                 {totalDiscount > 0 && (

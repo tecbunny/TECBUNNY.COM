@@ -23,7 +23,6 @@ import { createClient } from '../../lib/supabase/client';
 import type { CartItem, Coupon, Discount } from '../../lib/types';
 
 import { CartItemCard } from './CartItemCard';
-import { CouponDialog } from './CouponDialog';
 
 interface CartSheetProps {
     children: React.ReactNode;
@@ -37,7 +36,6 @@ export function CartSheet({ children }: CartSheetProps) {
   
   const [couponCode, setCouponCode] = React.useState('');
   const [appliedCoupon, setAppliedCoupon] = React.useState<Coupon | null>(null);
-  const [allCoupons, setAllCoupons] = React.useState<Coupon[]>([]);
   const [discount, setDiscount] = React.useState(0); // coupon discount
   const [autoDiscount, setAutoDiscount] = React.useState(0);
   const [autoDiscountApplied, setAutoDiscountApplied] = React.useState<Discount | null>(null);
@@ -47,13 +45,6 @@ export function CartSheet({ children }: CartSheetProps) {
   React.useEffect(() => {
     if (!open) return;
     const fetchData = async () => {
-      const { data: coupons, error } = await supabase.from('coupons').select('*');
-      if (error) {
-        logger.error('Error fetching coupons:', { error });
-        toast({ variant: 'destructive', title: 'Could not load coupons', description: 'There was an issue fetching available offers.' });
-      } else {
-        setAllCoupons(coupons as Coupon[]);
-      }
       // Auto discounts
       const { data: discountsData, error: discErr } = await supabase.from('discounts').select('*').eq('status','active');
       if (!discErr && discountsData) {
@@ -129,35 +120,37 @@ export function CartSheet({ children }: CartSheetProps) {
     return true; // General coupon
   }
 
-  const availableCoupons = React.useMemo(() => {
-    return allCoupons.filter(coupon => isCouponValid(coupon, cartItems, cartTotal));
-  }, [allCoupons, cartItems, cartTotal]);
+  const fetchCouponByCode = React.useCallback(async (code: string): Promise<Coupon | null> => {
+    try {
+      const response = await fetch(`/api/coupons?code=${encodeURIComponent(code)}`, { cache: 'no-store' });
+      if (!response.ok) {
+        return null;
+      }
+      return (await response.json()) as Coupon;
+    } catch (error) {
+      logger.error('cart_sheet_fetch_coupon_failed', { error, code });
+      return null;
+    }
+  }, []);
 
-
-  const handleApplyCoupon = (code: string) => {
+  const handleApplyCoupon = React.useCallback(async (code: string) => {
     if (applying) return;
-    setApplying(true);
-    const couponToApply = allCoupons.find(c => c.code.toUpperCase() === code.toUpperCase());
+    const normalized = code.trim().toUpperCase();
+    if (!normalized) return;
 
-    if (couponToApply && isCouponValid(couponToApply, cartItems, cartTotal)) {
-        setAppliedCoupon(couponToApply);
-        setCouponCode(couponToApply.code);
-        toast({ title: 'Coupon Applied', description: `Successfully applied coupon: ${couponToApply.code}` });
+    setApplying(true);
+    const coupon = await fetchCouponByCode(normalized);
+
+    if (coupon && isCouponValid(coupon, cartItems, cartTotal)) {
+        setAppliedCoupon(coupon);
+        setCouponCode('');
+        toast({ title: 'Coupon Applied', description: `Successfully applied coupon: ${coupon.code}` });
     } else {
         setAppliedCoupon(null);
         toast({ variant: 'destructive', title: 'Invalid Coupon', description: 'This coupon is not valid for your current cart.' });
     }
-    setTimeout(() => setApplying(false), 300);
-  };
-
-  const onCouponSelected = (coupon: Coupon | null) => {
-    if (coupon) {
-      handleApplyCoupon(coupon.code);
-    } else {
-      setAppliedCoupon(null);
-      setCouponCode('');
-    }
-  };
+    setApplying(false);
+  }, [applying, fetchCouponByCode, cartItems, cartTotal, toast]);
   
   React.useEffect(() => {
     if (appliedCoupon && isCouponValid(appliedCoupon, cartItems, cartTotal)) {
@@ -227,14 +220,12 @@ export function CartSheet({ children }: CartSheetProps) {
                                 value={couponCode}
                                 onChange={(e) => setCouponCode(e.target.value)}
                             />
-                            <Button onClick={() => handleApplyCoupon(couponCode)} disabled={!couponCode || applying}>Apply</Button>
+                          <Button onClick={() => void handleApplyCoupon(couponCode)} disabled={!couponCode || applying}>Apply</Button>
                         </div>
                     </div>
-                    <CouponDialog 
-                        availableCoupons={availableCoupons}
-                        onCouponSelected={onCouponSelected}
-                        appliedCouponCode={appliedCoupon?.code}
-                    />
+                    <p className="text-xs text-muted-foreground">
+                      Enter a valid coupon code to redeem savings. Offers are not listed publicly in the cart.
+                    </p>
                 </div>
             </div>
             

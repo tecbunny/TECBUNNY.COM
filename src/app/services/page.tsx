@@ -2,6 +2,7 @@ import { Metadata } from 'next';
 
 import ServicesPage from '../../components/services-page';
 import { logger } from '../../lib/logger';
+import { servicesData } from '../../lib/servicesData';
 import { createClient, createServiceClient, isSupabaseServiceConfigured } from '../../lib/supabase/server';
 
 // Static metadata for better SEO and performance
@@ -39,11 +40,9 @@ export default async function Page() {
         hint: error.hint,
         code: error.code,
       });
-      // Instead of throwing an error during build, return empty services
-      return <ServicesPage services={[]} />;
-    }
-
-    services = (data || [])
+      services = [];
+    } else {
+      services = (data || [])
       .map((s: any) => {
     const statusVal = s.status;
     const isActive = typeof s.is_active === 'boolean'
@@ -82,12 +81,26 @@ export default async function Page() {
     if (bo !== null) return 1;
     return String(a.title).localeCompare(String(b.title));
   });
+    }
   
   } catch (error) {
     logger.error('Error in services page', { error });
     // Return empty services on error to prevent build failure
     services = [];
   }
+  
+  if (!services.length) {
+    services = servicesData.filter(service => service.is_active !== false);
+  }
+
+  services.sort((a: any, b: any) => {
+    const ao = typeof a.display_order === 'number' ? a.display_order : null;
+    const bo = typeof b.display_order === 'number' ? b.display_order : null;
+    if (ao !== null && bo !== null) return ao - bo;
+    if (ao !== null) return -1;
+    if (bo !== null) return 1;
+    return String(a.title).localeCompare(String(b.title));
+  });
   
   return <ServicesPage services={services} />;
 }

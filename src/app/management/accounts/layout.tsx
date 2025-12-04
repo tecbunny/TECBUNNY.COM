@@ -1,46 +1,26 @@
-'use client';
+import type { ReactNode } from 'react';
 
-import * as React from 'react';
-import { useRouter } from 'next/navigation';
+import { redirect } from 'next/navigation';
 
-import { useAuth } from '../../../lib/hooks';
-import { AccountsSidebar } from '../../../components/accounts/AccountsSidebar';
-import { Toaster } from '../../../components/ui/toaster';
+import { getServerAuthState, roleMatches, type RoleCheckOptions } from '../../../lib/server-role-guard';
 
-export default function AccountsLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  const { user, loading } = useAuth();
-  const router = useRouter();
-  const [navReady, setNavReady] = React.useState(false);
+import AccountsLayoutClient from './AccountsLayoutClient';
 
-  React.useEffect(() => {
-    if (!loading) {
-      if (!user || user.role !== 'accounts') {
-        router.replace('/');
-        return;
-      }
-      setTimeout(() => setNavReady(true), 0);
-    }
-  }, [user, loading, router]);
+const ACCOUNTING_ACCESS: RoleCheckOptions = {
+  allowedRoles: ['accounts', 'manager'],
+  minimumRole: 'admin'
+};
 
-  if (loading || !user || user.role !== 'accounts') {
-    return (
-      <div className="flex h-screen items-center justify-center">
-        <p>Loading...</p>
-      </div>
-    );
+export default async function AccountsLayout({ children }: { children: ReactNode }) {
+  const { session, role } = await getServerAuthState();
+
+  if (!session) {
+    redirect('/auth/signin');
   }
 
-  return (
-    <div className={`flex min-h-screen bg-muted/40${  !navReady ? " pointer-events-none select-none opacity-80" : ""  }${!navReady ? " transition-opacity" : ""}` }>
-      <div className={!navReady ? "animate-pulse" : undefined}>
-        <AccountsSidebar />
-      </div>
-      <main className="flex-1 p-4 sm:p-6">{children}</main>
-      <Toaster />
-    </div>
-  );
+  if (!roleMatches(role, ACCOUNTING_ACCESS)) {
+    redirect('/');
+  }
+
+  return <AccountsLayoutClient>{children}</AccountsLayoutClient>;
 }

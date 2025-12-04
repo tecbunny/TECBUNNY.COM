@@ -193,6 +193,66 @@ function applyOfferFilters(offers: NormalizedOffer[], filters: OfferFilters): No
   });
 }
 
+const logOfferValidationFailure = (reason: string, context: Record<string, any>) => {
+  logger.warn('offers.validation_failed', {
+    reason,
+    ...context
+  });
+};
+
+const validateOfferBusinessRules = (payload: Record<string, any>): string | null => {
+  const discountType = typeof payload.discount_type === 'string' ? payload.discount_type : undefined;
+  const discountValue = toNumber(payload.discount_value);
+
+  if (discountType === 'percentage') {
+    if (discountValue === null) {
+      return 'Percentage offers require a discount value.';
+    }
+    if (discountValue <= 0 || discountValue > 100) {
+      return 'Percentage discounts must be between 0 and 100.';
+    }
+  }
+
+  if (discountType === 'fixed_amount') {
+    if (discountValue === null) {
+      return 'Fixed amount offers require a discount value.';
+    }
+    if (discountValue <= 0) {
+      return 'Fixed amount discounts must be greater than 0.';
+    }
+  }
+
+  const minimumPurchase = toNumber(payload.minimum_purchase_amount ?? payload.minimum_order_amount);
+  if (minimumPurchase !== null && minimumPurchase < 0) {
+    return 'Minimum purchase amount cannot be negative.';
+  }
+
+  const maximumDiscount = toNumber(payload.maximum_discount_amount);
+  if (maximumDiscount !== null && maximumDiscount < 0) {
+    return 'Maximum discount amount cannot be negative.';
+  }
+
+  const usageLimit = toNumber(payload.usage_limit);
+  if (usageLimit !== null && usageLimit <= 0) {
+    return 'Usage limit must be greater than 0.';
+  }
+
+  const usageLimitPerCustomer = toNumber(payload.usage_limit_per_customer);
+  if (usageLimitPerCustomer !== null && usageLimitPerCustomer <= 0) {
+    return 'Per-customer usage limit must be greater than 0.';
+  }
+
+  if (
+    usageLimit !== null &&
+    usageLimitPerCustomer !== null &&
+    usageLimitPerCustomer > usageLimit
+  ) {
+    return 'Per-customer usage limit cannot exceed the total usage limit.';
+  }
+
+  return null;
+};
+
 // GET /api/offers - Fetch offers
 export async function GET(request: NextRequest) {
   try {
@@ -309,6 +369,16 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const businessRuleError = validateOfferBusinessRules(offerData);
+    if (businessRuleError) {
+      logOfferValidationFailure(businessRuleError, {
+        stage: 'create',
+        offerCode: offerData.offer_code ?? null,
+        discountType: offerData.discount_type
+      });
+      return NextResponse.json({ error: businessRuleError }, { status: 400 });
+    }
+
     // Insert the new offer
     const { data: newOffer, error: insertError } = await supabase
       .from('offers')
@@ -353,10 +423,23 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Offer ID is required' }, { status: 400 });
     }
 
+    const { data: existingOffer, error: existingOfferError } = await supabase
+      .from('offers')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (existingOfferError) {
+      logger.error('offers.update.fetch_failed', { code: existingOfferError.code, message: existingOfferError.message, id });
+      return NextResponse.json({ error: 'Offer not found' }, { status: 404 });
+    }
+
     // Validate date range if provided
-    if (updateData.start_date && updateData.end_date) {
-      const startDate = new Date(updateData.start_date);
-      const endDate = new Date(updateData.end_date);
+    const effectiveStartDate = updateData.start_date ?? existingOffer.start_date;
+    const effectiveEndDate = updateData.end_date ?? existingOffer.end_date;
+    if (effectiveStartDate && effectiveEndDate) {
+      const startDate = new Date(effectiveStartDate);
+      const endDate = new Date(effectiveEndDate);
       if (endDate <= startDate) {
         return NextResponse.json({ 
           error: 'End date must be after start date' 
@@ -365,19 +448,30 @@ export async function PUT(request: NextRequest) {
     }
 
     // Check for duplicate offer code if being updated
-    if (updateData.offer_code) {
-      const { data: existingOffer } = await supabase
+    if (updateData.offer_code && updateData.offer_code !== existingOffer.offer_code) {
+      const { data: conflictingOffer } = await supabase
         .from('offers')
         .select('id')
         .eq('offer_code', updateData.offer_code)
         .neq('id', id)
         .single();
 
-      if (existingOffer) {
+      if (conflictingOffer) {
         return NextResponse.json({ 
           error: 'Offer code already exists' 
         }, { status: 400 });
       }
+    }
+
+    const mergedOffer = { ...existingOffer, ...updateData };
+    const businessRuleError = validateOfferBusinessRules(mergedOffer);
+    if (businessRuleError) {
+      logOfferValidationFailure(businessRuleError, {
+        stage: 'update',
+        offerId: id,
+        discountType: mergedOffer.discount_type
+      });
+      return NextResponse.json({ error: businessRuleError }, { status: 400 });
     }
 
     // Update the offer

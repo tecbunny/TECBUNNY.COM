@@ -10,6 +10,18 @@ const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholde
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 'placeholder-service-role-key';
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-anon-key';
 
+const STAFF_ROLES = ['admin', 'manager', 'accounts'];
+const ROLE_SENTINEL_NONE = '__none__';
+const SORTABLE_COLUMNS: Record<string, string> = {
+  name: 'name',
+  email: 'email',
+  role: 'role',
+  customerCategory: 'customer_category',
+  discountPercentage: 'discount_percentage',
+  created_at: 'created_at',
+  updated_at: 'updated_at'
+};
+
 function isSupabaseConfigured() {
   return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 }
@@ -26,36 +38,56 @@ const supabaseAdmin = createClient(
   }
 );
 
+const createAnonClient = () => createClient(
+  SUPABASE_URL,
+  SUPABASE_ANON_KEY,
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    }
+  }
+);
+
+const parseCsvParam = (value: string | null) =>
+  value
+    ? value
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean)
+    : [];
+
+async function getUserTotals() {
+  const [totalRes, staffRes, customerRes, salesRes] = await Promise.all([
+    supabaseAdmin.from('profiles').select('id', { count: 'exact', head: true }),
+    supabaseAdmin.from('profiles').select('id', { count: 'exact', head: true }).in('role', STAFF_ROLES),
+    supabaseAdmin.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'customer'),
+    supabaseAdmin.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'sales')
+  ]);
+
+  return {
+    total: totalRes.count ?? 0,
+    staff: staffRes.count ?? 0,
+    customers: customerRes.count ?? 0,
+    sales: salesRes.count ?? 0
+  };
+}
+
 // Create client for current user authentication
 async function createAuthenticatedClient(request: NextRequest) {
-  // Try to get authorization from header first
   const authHeader = request.headers.get('authorization');
   if (authHeader?.startsWith('Bearer ')) {
-    const token = authHeader.substring(7);
-    const supabase = createClient(
-      SUPABASE_URL,
-      SUPABASE_ANON_KEY
-    );
-    
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session) {
-      const role = await getEffectiveUserRole(session.user);
-      return { supabase, session, role };
-    }
-    
-    // Try to set session with token
-    const { data, error: setError } = await supabase.auth.setSession({
-      access_token: token,
-      refresh_token: token
-    });
-    
-    if (!setError && data.session) {
-      const role = await getEffectiveUserRole(data.session.user);
-      return { supabase, session: data.session, role };
+    const token = authHeader.substring(7).trim();
+    if (token) {
+      const supabase = createAnonClient();
+      const { data, error } = await supabase.auth.getUser(token);
+      if (!error && data?.user) {
+        const role = await getEffectiveUserRole(data.user);
+        return { supabase, session: { user: data.user }, role };
+      }
     }
   }
 
-  // Fallback to server-side cookie-based authentication
   const supabase = await createServerClient();
   const { data: { session } } = await supabase.auth.getSession();
   const role = session ? await getEffectiveUserRole(session.user) : null;
@@ -66,58 +98,141 @@ async function createAuthenticatedClient(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     if (!isSupabaseConfigured()) {
-      logger.error('users.supabase_configuration_missing');
-      return NextResponse.json({ error: 'Service configuration error' }, { status: 503 });
+      return NextResponse.json({ error: 'Service unavailable' }, { status: 503 });
     }
-  const { session, role } = await createAuthenticatedClient(request);
-    
+
+    // Security: Admin Only
+    const { session, role } = await createAuthenticatedClient(request);
+
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Check if user is admin
-  if (!role || !['superadmin', 'admin', 'manager'].includes(role)) {
+    if (!role || !['superadmin', 'admin', 'manager'].includes(role)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    // Get users with profiles
-    const { data: { users }, error: authError } = await supabaseAdmin.auth.admin.listUsers();
-    
-    if (authError) {
-      logger.error('Error fetching auth users:', { error: authError });
+    const { searchParams } = new URL(request.url);
+
+    const pageParam = Number(searchParams.get('page'));
+    const pageSizeParam = Number(searchParams.get('pageSize'));
+    const page = Number.isFinite(pageParam) && pageParam > 0 ? Math.floor(pageParam) : 1;
+    const pageSize = Number.isFinite(pageSizeParam) && pageSizeParam > 0 ? Math.min(Math.floor(pageSizeParam), 100) : 25;
+    const offset = (page - 1) * pageSize;
+
+    const search = (searchParams.get('search') || '').trim();
+    const roles = parseCsvParam(searchParams.get('role'));
+    const status = searchParams.get('status');
+    const customerCategories = parseCsvParam(searchParams.get('customerCategory'));
+    const discountMinParam = searchParams.get('discountMin');
+    const discountMaxParam = searchParams.get('discountMax');
+    const sortFieldParam = searchParams.get('sortField') || 'name';
+    const sortDirectionParam = searchParams.get('sortDirection') === 'desc' ? 'desc' : 'asc';
+    const includeCounts = searchParams.get('includeCounts') !== 'false';
+
+    const sortColumn = SORTABLE_COLUMNS[sortFieldParam] || SORTABLE_COLUMNS.name;
+    const discountMin = discountMinParam !== null && discountMinParam !== '' ? Number(discountMinParam) : null;
+    const discountMax = discountMaxParam !== null && discountMaxParam !== '' ? Number(discountMaxParam) : null;
+
+    let totals = null;
+    if (includeCounts) {
+      try {
+        totals = await getUserTotals();
+      } catch (totalsError) {
+        logger.error('users.fetch_totals_failed', { error: totalsError });
+      }
+    }
+
+    if (roles.includes(ROLE_SENTINEL_NONE)) {
+      return NextResponse.json({
+        users: [],
+        total: 0,
+        page,
+        pageSize,
+        totals
+      });
+    }
+
+    let profileQuery = supabaseAdmin
+      .from('profiles')
+      .select('*', { count: 'exact' });
+
+    if (roles.length) {
+      profileQuery = profileQuery.in('role', roles);
+    }
+
+    if (status === 'active') {
+      profileQuery = profileQuery.eq('is_active', true);
+    } else if (status === 'inactive') {
+      profileQuery = profileQuery.eq('is_active', false);
+    }
+
+    if (customerCategories.length) {
+      profileQuery = profileQuery.in('customer_category', customerCategories);
+    }
+
+    if (discountMin !== null && Number.isFinite(discountMin)) {
+      profileQuery = profileQuery.gte('discount_percentage', discountMin);
+    }
+
+    if (discountMax !== null && Number.isFinite(discountMax)) {
+      profileQuery = profileQuery.lte('discount_percentage', discountMax);
+    }
+
+    if (search) {
+      const sanitizedSearch = search.replace(/[%_]/g, (match) => `\\${match}`);
+      const pattern = `%${sanitizedSearch}%`;
+      profileQuery = profileQuery.or(
+        `name.ilike.${pattern},email.ilike.${pattern},mobile.ilike.${pattern}`
+      );
+    }
+
+    const { data: profiles, count, error } = await profileQuery
+      .order(sortColumn, { ascending: sortDirectionParam === 'asc', nullsFirst: sortDirectionParam === 'asc' })
+      .range(offset, offset + pageSize - 1);
+
+    if (error) {
+      logger.error('users.fetch_profiles_failed', { error });
       return NextResponse.json({ error: 'Failed to fetch users' }, { status: 500 });
     }
 
-    // Get profiles for all users
-    const { data: profiles, error: profilesError } = await supabaseAdmin
-      .from('profiles')
-      .select('*');
+    const authUsers = await Promise.all(
+      (profiles || []).map(async (profile) => {
+        try {
+          const { data, error: userError } = await supabaseAdmin.auth.admin.getUserById(profile.id);
+          if (userError || !data?.user) {
+            logger.warn('users.auth_lookup_failed', { userId: profile.id, error: userError });
+            return null;
+          }
+          return data.user;
+        } catch (authLookupError) {
+          logger.error('users.auth_lookup_exception', { userId: profile.id, error: authLookupError });
+          return null;
+        }
+      })
+    );
 
-    if (profilesError) {
-      logger.error('Error fetching profiles:', { error: profilesError });
-      return NextResponse.json({ error: 'Failed to fetch user profiles' }, { status: 500 });
-    }
-
-    // Combine auth and profile data
-    const usersWithProfiles = users.map(user => {
-      const profile = profiles.find(p => p.id === user.id);
+    const combinedUsers = (profiles || []).map((profile, index) => {
+      const authUser = authUsers[index];
       return {
-        id: user.id,
-        email: user.email,
-        email_confirmed_at: user.email_confirmed_at,
-        last_sign_in_at: user.last_sign_in_at,
-        created_at: user.created_at,
-        updated_at: user.updated_at,
-        banned_until: (user as { banned_until?: string }).banned_until || null,
-        profile: profile || null
+        id: profile.id,
+        email: authUser?.email ?? profile.email ?? null,
+        email_confirmed_at: authUser?.email_confirmed_at ?? null,
+        last_sign_in_at: authUser?.last_sign_in_at ?? null,
+        created_at: authUser?.created_at ?? profile.created_at ?? null,
+        updated_at: authUser?.updated_at ?? profile.updated_at ?? null,
+        banned_until: (authUser as { banned_until?: string })?.banned_until ?? null,
+        profile
       };
     });
 
     return NextResponse.json({
-      users: usersWithProfiles,
-      total: users.length
+      users: combinedUsers,
+      total: count ?? combinedUsers.length,
+      page,
+      pageSize,
+      totals
     });
-
   } catch (error) {
     logger.error('Error in GET /api/users:', { error });
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

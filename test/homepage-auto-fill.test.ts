@@ -1,22 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { computeAutoFill } from '../src/lib/homepage-auto-fill';
-
-type Product = {
-  id: string;
-  title?: string | null;
-  name?: string | null;
-  price: number;
-  offer_price?: number | null;
-  description?: string | null;
-  category?: string | null;
-  image?: string | null;
-  popularity?: number | null;
-  rating?: number | null;
-  reviewCount?: number | null;
-  created_at: string;
-  prioritized?: boolean | null;
-  discount_percentage?: number | null;
-};
+import type { Product } from '../src/lib/types';
 
 const makeProduct = (overrides: Partial<Product> & { id: string }): Product => {
   const { id, ...rest } = overrides;
@@ -28,13 +12,10 @@ const makeProduct = (overrides: Partial<Product> & { id: string }): Product => {
     price: rest.price ?? 100,
     category: rest.category ?? 'cat',
     image: rest.image ?? 'img.jpg',
-    description: rest.description ?? '',
-    popularity: rest.popularity ?? 0,
-    rating: rest.rating ?? 0,
-    reviewCount: rest.reviewCount ?? 0,
+    description: rest.description ?? 'desc',
     created_at: rest.created_at ?? new Date().toISOString(),
-    ...rest,
-  };
+    ...rest
+  } as Product;
 };
 
 describe('computeAutoFill', () => {

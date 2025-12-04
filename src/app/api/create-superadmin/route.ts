@@ -23,6 +23,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Security: Only allow if explicitly enabled in environment
+    if (process.env.ENABLE_SUPERADMIN_CREATION !== 'true') {
+      logger.warn('superadmin.create.disabled_attempt', { ip: request.headers.get('x-forwarded-for') });
+      return NextResponse.json(
+        { error: 'Superadmin creation is disabled.' },
+        { status: 403 }
+      );
+    }
+
     if (!email || !password) {
       logger.warn('superadmin.create.validation_failed', { email });
       return NextResponse.json(

@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { randomUUID } from 'crypto'
+import { createServerClient } from '@supabase/ssr'
 
 export async function middleware(request: NextRequest) {
   // Define public API routes that don't require authentication
@@ -31,6 +32,36 @@ export async function middleware(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname
   let response = NextResponse.next({ request: { headers: requestHeaders } })
+
+  // Supabase Auth & Session Management
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll()
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) => request.cookies.set(name, value))
+          response = NextResponse.next({
+            request,
+          })
+          cookiesToSet.forEach(({ name, value, options }) =>
+            response.cookies.set(name, value, options)
+          )
+        },
+      },
+    }
+  )
+
+  // Refresh session if expired
+  const { data: { user } } = await supabase.auth.getUser()
+
+  // Protect Management Routes
+  if (pathname.startsWith('/management') && !user) {
+    return NextResponse.redirect(new URL('/auth/signin', request.url))
+  }
 
   const applySharedHeaders = () => {
     // Add cache-control headers to prevent caching of auth-related pages

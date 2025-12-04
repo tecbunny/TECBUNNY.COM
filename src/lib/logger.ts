@@ -16,16 +16,34 @@ function serialize(level: LogLevel, msg: string, meta?: LogMeta) {
   return JSON.stringify(base);
 }
 
-// Basic redaction for likely sensitive keys
-const SENSITIVE_KEYS = ['password', 'token', 'authorization', 'auth', 'email'];
+// Basic redaction for likely sensitive keys (case-insensitive and substrings)
+const SENSITIVE_KEYS = [
+  'password', 'passwd', 'pwd', 'token', 'authorization', 'auth', 'email',
+  'secret', 'key', 'api_key', 'access', 'refresh', 'txn', 'transaction', 'client_secret', 'private', 'rsa', 'ssh'
+];
 function redacted(obj: unknown): unknown {
   if (!obj || typeof obj !== 'object') return obj;
   if (Array.isArray(obj)) return obj.map(redacted);
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(obj)) {
-    if (SENSITIVE_KEYS.includes(k.toLowerCase())) {
+    const lowerK = k.toLowerCase();
+    const matchesKey = SENSITIVE_KEYS.some((s) => lowerK.includes(s));
+    if (matchesKey) {
       out[k] = '[REDACTED]';
-    } else if (typeof v === 'object') {
+      continue;
+    }
+    if (v && typeof v === 'string') {
+      // redact long tokens, jwt-like strings, or base64-like strings that look like secrets
+      const jwtLike = v.split('.').length === 3 && v.length > 20;
+      const longToken = v.length > 60; // arbitrary threshold for likely secrets
+      const base64Like = /^(?:[A-Za-z0-9+/]{4}){8,}=?$/.test(v);
+      if (jwtLike || longToken || base64Like) {
+        out[k] = '[REDACTED]';
+        continue;
+      }
+    }
+
+    if (typeof v === 'object') {
       out[k] = redacted(v);
     } else {
       out[k] = v;

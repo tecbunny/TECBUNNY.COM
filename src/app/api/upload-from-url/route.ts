@@ -1,13 +1,24 @@
 import { NextRequest } from 'next/server';
-
+import dns from 'dns/promises';
 import { apiSuccess, apiError } from '../../../lib/errors';
-import { uploadProductImage } from '../../../lib/supabase-storage';
+import { uploadProductImage, uploadToSupabase } from '../../../lib/supabase-storage';
+import { uploadHeroBanner, isS3Configured } from '../../../lib/s3-storage';
 import { logger } from '../../../lib/logger';
+import { createClient } from '../../../lib/supabase/server';
+import { requireAdmin } from '../../../lib/admin-auth';
 
 export async function POST(request: NextRequest) {
   const correlationId = `upload-url-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   
   try {
+    // Security: Admin Only
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    const { isAdmin, error: authError } = await requireAdmin(user, supabase);
+    if (!isAdmin) {
+      return apiError('UNAUTHORIZED', { correlationId, overrideMessage: authError });
+    }
+
     logger.info('upload_from_url_start', { correlationId });
     
     const { url, type = 'product' } = await request.json();
@@ -24,6 +35,28 @@ export async function POST(request: NextRequest) {
     } catch {
       logger.warn('upload_from_url_invalid_url', { correlationId, url });
       return apiError('VALIDATION_ERROR', { overrideMessage: 'Invalid URL format', correlationId });
+    }
+
+    // SSRF Protection: Resolve DNS and check for private IPs
+    try {
+      const hostname = imageUrl.hostname;
+      const addresses = await dns.resolve(hostname);
+      for (const ip of addresses) {
+        // Simple check for private ranges (10.x, 192.168.x, 172.16-31.x, 127.x)
+        if (
+          ip.startsWith('10.') || 
+          ip.startsWith('192.168.') || 
+          ip.startsWith('127.') ||
+          /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(ip)
+        ) {
+           logger.warn('upload_from_url_ssrf_attempt', { correlationId, url, ip });
+           return apiError('VALIDATION_ERROR', { overrideMessage: 'Invalid URL target', correlationId });
+        }
+      }
+    } catch (dnsError) {
+       // If DNS fails, we can't verify, so we block
+       logger.warn('upload_from_url_dns_fail', { correlationId, url });
+       return apiError('VALIDATION_ERROR', { overrideMessage: 'Could not resolve URL', correlationId });
     }
     
     // Check if URL points to an image
@@ -76,6 +109,14 @@ export async function POST(request: NextRequest) {
       case 'product':
         logger.debug('upload_from_url_variant', { correlationId, variant: 'product' });
         result = await uploadProductImage(buffer);
+        break;
+      case 'hero':
+        logger.debug('upload_from_url_variant', { correlationId, variant: 'hero' });
+        if (isS3Configured) {
+          result = await uploadHeroBanner(buffer as any, 'hero-banners');
+        } else {
+          result = await uploadToSupabase(buffer, 'hero-banners', { publicAccess: true });
+        }
         break;
       default:
         logger.debug('upload_from_url_variant', { correlationId, variant: 'general' });

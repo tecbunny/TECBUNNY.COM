@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import crypto from 'crypto';
 
 import { createClient } from '../../../../../lib/supabase/server';
 import { sendWhatsAppNotification } from '../../../../../lib/whatsapp-service';
@@ -8,14 +9,20 @@ import { logger } from '../../../../../lib/logger';
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
-    const body = await request.json();
+    const rawBody = await request.text();
+    let body;
+    try {
+        body = JSON.parse(rawBody);
+    } catch (e) {
+        return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+    }
     
     logger.info('Payment received webhook received:', { body: JSON.stringify(body) });
 
     const signature = request.headers.get('x-webhook-signature');
     const source = request.headers.get('x-webhook-source') || 'unknown';
     
-    if (!validateWebhookSignature(signature, body, source)) {
+    if (!validateWebhookSignature(signature, rawBody, source)) {
       return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
     }
 
@@ -236,7 +243,7 @@ Action: Process order for fulfillment! 📦
   }
 }
 
-function validateWebhookSignature(signature: string | null, body: any, source: string): boolean {
+function validateWebhookSignature(signature: string | null, rawBody: string, source: string): boolean {
   if (process.env.NODE_ENV === 'development') {
     return true;
   }
@@ -244,6 +251,20 @@ function validateWebhookSignature(signature: string | null, body: any, source: s
   if (!signature) {
     logger.warn('No webhook signature provided:', { source });
     return false;
+  }
+
+  // Razorpay Signature Verification
+  if (source === 'razorpay' && process.env.RAZORPAY_WEBHOOK_SECRET) {
+    const expectedSignature = crypto
+      .createHmac('sha256', process.env.RAZORPAY_WEBHOOK_SECRET)
+      .update(rawBody)
+      .digest('hex');
+    
+    if (signature !== expectedSignature) {
+      logger.warn('Invalid Razorpay signature', { signature, expectedSignature });
+      return false;
+    }
+    return true;
   }
 
   return true;

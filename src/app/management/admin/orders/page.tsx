@@ -1,8 +1,7 @@
-import AdminOrders from './admin-orders';
+import { redirect } from 'next/navigation';
 
-// Force dynamic rendering so the order list stays fresh in the dashboard
 export const dynamic = 'force-dynamic';
 
 export default function Page() {
-  return <AdminOrders />;
+  redirect('/management/sales/orders');
 }

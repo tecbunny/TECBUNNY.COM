@@ -12,6 +12,7 @@ export interface ZohoConfig {
   organizationId: string;
   accessToken?: string;
   refreshToken?: string;
+  onTokenRefreshed?: (accessToken: string, expiresIn: number) => Promise<void>;
 }
 
 export interface ZohoProduct {
@@ -128,6 +129,14 @@ export class ZohoInventoryAPI {
 
     const data = await response.json();
     this.config.accessToken = data.access_token;
+    
+    if (this.config.onTokenRefreshed) {
+      try {
+        await this.config.onTokenRefreshed(data.access_token, data.expires_in);
+      } catch (error) {
+        logger.error('Failed to execute token refresh callback', { error });
+      }
+    }
     
     return data.access_token;
   }

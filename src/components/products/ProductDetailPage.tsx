@@ -95,7 +95,7 @@ export function ProductDetailPage({ productId }: ProductDetailPageProps) {
 
     // Sanitize all URLs to avoid SVGs
     return finalized.map(ensurePng);
-  }, [product, displayName]);
+  }, [product]);
 
   const descriptionHtml = useMemo(() => {
     if (!product) {
@@ -111,7 +111,7 @@ export function ProductDetailPage({ productId }: ProductDetailPageProps) {
     return DOMPurify.sanitize(rawDescription, {
       USE_PROFILES: { html: true }
     });
-  }, [product]);
+  }, [product, displayName]);
 
   const pricing = useMemo(() => {
     if (!product) return null;

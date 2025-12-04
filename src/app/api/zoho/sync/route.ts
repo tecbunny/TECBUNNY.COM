@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ZohoInventoryAPI, ZohoInventorySync } from '../../../../lib/zoho-inventory';
 import { createClient } from '../../../../lib/supabase';
 import { logger } from '../../../../lib/logger';
+import { requireAdmin } from '../../../../lib/admin-auth';
 
 const zohoConfig = {
   clientId: process.env.ZOHO_CLIENT_ID!,
@@ -20,6 +21,17 @@ const zohoConfig = {
 export async function GET(_request: NextRequest) {
   try {
     const supabase = createClient();
+    
+    // Security Check: Verify Admin
+    const { data: { user } } = await supabase.auth.getUser();
+    const { isAdmin, error: authError, status: authStatus } = await requireAdmin(user, supabase);
+    
+    if (!isAdmin) {
+      return NextResponse.json(
+        { error: authError || 'Unauthorized' },
+        { status: authStatus || 401 }
+      );
+    }
     
     // Check if access tokens are available
     if (!zohoConfig.accessToken) {
@@ -76,9 +88,21 @@ export async function GET(_request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
+    const supabase = createClient();
+    
+    // Security Check: Verify Admin
+    const { data: { user } } = await supabase.auth.getUser();
+    const { isAdmin, error: authError, status: authStatus } = await requireAdmin(user, supabase);
+    
+    if (!isAdmin) {
+      return NextResponse.json(
+        { error: authError || 'Unauthorized' },
+        { status: authStatus || 401 }
+      );
+    }
+
     const { direction, productIds } = await request.json();
     
-    const supabase = createClient();
     const zohoAPI = new ZohoInventoryAPI(zohoConfig);
     const zohoSync = new ZohoInventorySync(zohoAPI);
     

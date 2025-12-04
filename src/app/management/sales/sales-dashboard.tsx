@@ -6,18 +6,99 @@ import * as React from 'react';
 import { TrendingUp, Users, Package, ShoppingBag } from 'lucide-react';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../../components/ui/card';
+import { Badge } from '../../../components/ui/badge';
+import { Skeleton } from '../../../components/ui/skeleton';
+import { useToast } from '../../../hooks/use-toast';
 import { useAuth } from '../../../lib/hooks';
+import { createClient } from '../../../lib/supabase/client';
+import type { Order, OrderStatus } from '../../../lib/types';
+
+const COMPLETED_STATUSES: OrderStatus[] = ['Completed', 'Delivered', 'Payment Confirmed'];
+const PENDING_DELIVERY_STATUSES: OrderStatus[] = ['Processing', 'Ready to Ship', 'Shipped'];
+const PENDING_PICKUP_STATUS: OrderStatus = 'Ready for Pickup';
 
 export default function SalesDashboard() {
     const { user } = useAuth();
-    
-    // In a real app, this data would be fetched from an API
-    const stats = {
-        todayRevenue: 125075.00,
-        newCustomers: 5,
-        pendingPickups: 8,
-        pendingDeliveries: 3, // Manager only
-    };
+    const { toast } = useToast();
+    const supabase = React.useMemo(() => createClient(), []);
+    const [stats, setStats] = React.useState({
+        todayRevenue: 0,
+        newCustomers: 0,
+        pendingPickups: 0,
+        pendingDeliveries: 0,
+    });
+    const [recentOrders, setRecentOrders] = React.useState<Order[]>([]);
+    const [loading, setLoading] = React.useState(true);
+
+    const fetchStats = React.useCallback(async () => {
+        setLoading(true);
+        try {
+            const startOfDay = new Date();
+            startOfDay.setHours(0, 0, 0, 0);
+            const endOfDay = new Date();
+            endOfDay.setHours(23, 59, 59, 999);
+
+            const [todayOrdersRes, newCustomersRes, pickupRes, deliveryRes, recentOrdersRes] = await Promise.all([
+                supabase
+                    .from('orders')
+                    .select('total,total_amount,status,created_at')
+                    .gte('created_at', startOfDay.toISOString())
+                    .lte('created_at', endOfDay.toISOString())
+                    .in('status', COMPLETED_STATUSES),
+                supabase
+                    .from('profiles')
+                    .select('id', { count: 'exact', head: true })
+                    .eq('role', 'customer')
+                    .gte('created_at', startOfDay.toISOString())
+                    .lte('created_at', endOfDay.toISOString()),
+                supabase
+                    .from('orders')
+                    .select('id', { count: 'exact', head: true })
+                    .eq('status', PENDING_PICKUP_STATUS),
+                supabase
+                    .from('orders')
+                    .select('id', { count: 'exact', head: true })
+                    .in('status', PENDING_DELIVERY_STATUSES),
+                supabase
+                    .from('orders')
+                    .select('id, customer_name, status, total, total_amount, created_at')
+                    .order('created_at', { ascending: false })
+                    .limit(5),
+            ]);
+
+            if (todayOrdersRes.error) throw todayOrdersRes.error;
+            if (newCustomersRes.error) throw newCustomersRes.error;
+            if (pickupRes.error) throw pickupRes.error;
+            if (deliveryRes.error) throw deliveryRes.error;
+            if (recentOrdersRes.error) throw recentOrdersRes.error;
+
+            const todayRevenue = (todayOrdersRes.data || []).reduce((sum, order) => {
+                const total = typeof order.total === 'number' ? order.total : (typeof order.total_amount === 'number' ? order.total_amount : 0);
+                return sum + total;
+            }, 0);
+
+            setStats({
+                todayRevenue,
+                newCustomers: newCustomersRes.count ?? 0,
+                pendingPickups: pickupRes.count ?? 0,
+                pendingDeliveries: deliveryRes.count ?? 0,
+            });
+            setRecentOrders((recentOrdersRes.data as Order[]) || []);
+        } catch (error) {
+            console.error('Failed to load dashboard metrics', error);
+            toast({
+                variant: 'destructive',
+                title: 'Unable to load dashboard data',
+                description: error instanceof Error ? error.message : 'Please try again.',
+            });
+        } finally {
+            setLoading(false);
+        }
+    }, [supabase, toast]);
+
+    React.useEffect(() => {
+        fetchStats();
+    }, [fetchStats]);
 
     return (
         <div className="space-y-8">
@@ -32,8 +113,14 @@ export default function SalesDashboard() {
                         <TrendingUp className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">₹{stats.todayRevenue.toFixed(2)}</div>
-                        <p className="text-xs text-muted-foreground">+15.2% from yesterday</p>
+                        {loading ? (
+                            <Skeleton className="h-7 w-24" />
+                        ) : (
+                            <>
+                                <div className="text-2xl font-bold">₹{stats.todayRevenue.toFixed(2)}</div>
+                                <p className="text-xs text-muted-foreground">Updated for today</p>
+                            </>
+                        )}
                     </CardContent>
                 </Card>
                 <Card>
@@ -42,8 +129,14 @@ export default function SalesDashboard() {
                         <Users className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">+{stats.newCustomers}</div>
-                         <p className="text-xs text-muted-foreground">From walk-ins</p>
+                        {loading ? (
+                            <Skeleton className="h-7 w-16" />
+                        ) : (
+                            <>
+                                <div className="text-2xl font-bold">+{stats.newCustomers}</div>
+                                <p className="text-xs text-muted-foreground">New customer accounts today</p>
+                            </>
+                        )}
                     </CardContent>
                 </Card>
                  <Card>
@@ -52,8 +145,14 @@ export default function SalesDashboard() {
                         <ShoppingBag className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{stats.pendingPickups}</div>
-                         <p className="text-xs text-muted-foreground">Ready for customer</p>
+                        {loading ? (
+                            <Skeleton className="h-7 w-12" />
+                        ) : (
+                            <>
+                                <div className="text-2xl font-bold">{stats.pendingPickups}</div>
+                                <p className="text-xs text-muted-foreground">Ready for customer</p>
+                            </>
+                        )}
                     </CardContent>
                 </Card>
                 {user?.role === 'manager' && (
@@ -63,8 +162,14 @@ export default function SalesDashboard() {
                             <Package className="h-4 w-4 text-muted-foreground" />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-bold">{stats.pendingDeliveries}</div>
-                            <p className="text-xs text-muted-foreground">Needs processing</p>
+                            {loading ? (
+                                <Skeleton className="h-7 w-12" />
+                            ) : (
+                                <>
+                                    <div className="text-2xl font-bold">{stats.pendingDeliveries}</div>
+                                    <p className="text-xs text-muted-foreground">Needs processing</p>
+                                </>
+                            )}
                         </CardContent>
                     </Card>
                 )}
@@ -72,10 +177,35 @@ export default function SalesDashboard() {
             <Card>
                 <CardHeader>
                     <CardTitle>Recent Orders</CardTitle>
-                     <CardDescription>A list of the most recent in-store and pickup orders.</CardDescription>
+                     <CardDescription>Latest store, pickup, and delivery activity.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <p className="text-muted-foreground">A log of recent orders will be displayed here.</p>
+                    {loading ? (
+                        <div className="space-y-3">
+                            <Skeleton className="h-12 w-full" />
+                            <Skeleton className="h-12 w-full" />
+                            <Skeleton className="h-12 w-full" />
+                        </div>
+                    ) : recentOrders.length === 0 ? (
+                        <p className="text-muted-foreground">No recent orders found for your view.</p>
+                    ) : (
+                        <div className="space-y-4">
+                            {recentOrders.map((order) => (
+                                <div key={order.id} className="flex items-center justify-between rounded-md border p-3">
+                                    <div>
+                                        <p className="font-medium">{order.customer_name || 'Walk-in customer'}</p>
+                                        <p className="text-xs text-muted-foreground">
+                                            {new Date(order.created_at).toLocaleString()}
+                                        </p>
+                                    </div>
+                                    <div className="text-right">
+                                        <Badge variant="secondary" className="mb-1">{order.status}</Badge>
+                                        <div className="font-semibold">₹{Number(order.total ?? order.total_amount ?? 0).toFixed(2)}</div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </CardContent>
             </Card>
         </div>

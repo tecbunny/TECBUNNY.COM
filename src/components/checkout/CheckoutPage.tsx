@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 
-import { ShoppingCart, CreditCard, MapPin, User, Wallet, Banknote, QrCode } from 'lucide-react';
+import { ShoppingCart, CreditCard, MapPin, User, Wallet, Banknote, QrCode, Tag, Sparkles } from 'lucide-react';
 
 import { useCart, useAuth } from '../../lib/hooks';
 import { useOrder } from '../../context/OrderProvider';
@@ -17,6 +17,7 @@ import { Textarea } from '../../components/ui/textarea';
 import { Separator } from '../../components/ui/separator';
 import { RadioGroup, RadioGroupItem } from '../../components/ui/radio-group';
 import { LoginDialog } from '../../components/auth/LoginDialog';
+import { Badge } from '../ui/badge';
 import type { OrderStatus, OrderType } from '../../lib/types';
 
 const PICKUP_STORES = [
@@ -28,7 +29,15 @@ const PICKUP_STORES = [
 ] as const;
 
 export default function CheckoutPage() {
-  const { cartItems, cartCount } = useCart();
+  const {
+    cartItems,
+    cartCount,
+    cartSubtotal,
+    cartGst,
+    pricing,
+    refreshPricing,
+    removeCoupon,
+  } = useCart();
   const { createOrder, isProcessingOrder } = useOrder();
   const { getEnabledPaymentMethods, loading: paymentLoading } = usePaymentMethods();
   const { user, loading: authLoading } = useAuth();
@@ -55,6 +64,10 @@ export default function CheckoutPage() {
     if (!cartItems.length) return false;
     return cartItems.every(item => item.product_type === 'service' || item.id.startsWith('service-'));
   }, [cartItems]);
+
+  useEffect(() => {
+    void refreshPricing();
+  }, [refreshPricing]);
 
   // Pre-fill user information when user data is available
   useEffect(() => {
@@ -116,30 +129,63 @@ export default function CheckoutPage() {
     }));
   };
 
-  const calculateTotals = () => {
-    const subtotal = cartItems.reduce((total, item) => {
+  const fallbackTotals = React.useMemo(() => {
+    if (!cartItems.length) {
+      return { subtotal: 0, gstAmount: 0, total: 0 };
+    }
+
+    const subtotalValue = cartItems.reduce((totalValue, item) => {
       const price = item.price;
       const gstRate = item.gstRate || 18;
       const basePrice = price / (1 + (gstRate / 100));
-      return total + basePrice * item.quantity;
+      return totalValue + basePrice * item.quantity;
     }, 0);
 
-    const gstAmount = cartItems.reduce((total, item) => {
+    const gstAmountValue = cartItems.reduce((totalValue, item) => {
       const price = item.price;
       const gstRate = item.gstRate || 18;
       const basePrice = price / (1 + (gstRate / 100));
       const gst = basePrice * (gstRate / 100);
-      return total + gst * item.quantity;
+      return totalValue + gst * item.quantity;
     }, 0);
 
     return {
-      subtotal: Math.round(subtotal * 100) / 100,
-      gstAmount: Math.round(gstAmount * 100) / 100,
-      total: Math.round((subtotal + gstAmount) * 100) / 100
+      subtotal: Math.round(subtotalValue * 100) / 100,
+      gstAmount: Math.round(gstAmountValue * 100) / 100,
+      total: Math.round((subtotalValue + gstAmountValue) * 100) / 100,
     };
-  };
+  }, [cartItems]);
 
-  const { subtotal, gstAmount, total } = calculateTotals();
+  const {
+    subtotal: pricingSubtotal,
+    gstAmount: pricingGstAmount,
+    finalTotal: pricingFinalTotal,
+    autoOffer,
+    autoOfferDiscount,
+    appliedCoupon,
+    couponDiscount,
+    totalDiscount,
+    canCombineDiscounts,
+  } = pricing;
+
+  const displaySubtotal = cartItems.length
+    ? (pricingSubtotal || cartSubtotal || fallbackTotals.subtotal)
+    : 0;
+
+  const displayGstAmount = cartItems.length
+    ? (typeof pricingGstAmount === 'number' && pricingGstAmount > 0
+        ? pricingGstAmount
+        : cartGst || fallbackTotals.gstAmount)
+    : 0;
+
+  const displayTotalBeforeDiscounts = displaySubtotal + displayGstAmount;
+  const displayTotal = cartItems.length
+    ? (
+        typeof pricingFinalTotal === 'number' && pricingFinalTotal >= 0
+          ? pricingFinalTotal
+          : Math.max(0, displayTotalBeforeDiscounts - (totalDiscount || 0))
+      )
+    : 0;
 
   const handlePlaceOrder = async () => {
     try {
@@ -209,9 +255,10 @@ export default function CheckoutPage() {
         status: initialStatus,
         payment_method: paymentMethod,
         payment_status: initialPaymentStatus,
-        subtotal,
-        gst_amount: gstAmount,
-        total,
+        subtotal: displaySubtotal,
+        gst_amount: displayGstAmount,
+        total: displayTotal,
+        discount_amount: totalDiscount,
         items: orderItems
       };
 
@@ -254,7 +301,7 @@ export default function CheckoutPage() {
         } else if (selectedPaymentMethod === 'paytm') {
           const params = new URLSearchParams({
             orderId: order.id,
-            amount: total.toFixed(2),
+            amount: displayTotal.toFixed(2),
           });
           window.location.href = `/payment/paytm?${params.toString()}`;
         } else if (selectedPaymentMethod === 'payu') {
@@ -652,12 +699,55 @@ export default function CheckoutPage() {
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span>Subtotal ({cartCount} items)</span>
-                    <span>₹{subtotal.toFixed(2)}</span>
+                    <span>₹{displaySubtotal.toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span>GST Amount</span>
-                    <span>₹{gstAmount.toFixed(2)}</span>
+                    <span>₹{displayGstAmount.toFixed(2)}</span>
                   </div>
+                  {autoOffer && autoOfferDiscount > 0 && (
+                    <div className="rounded-md border border-green-200 bg-green-50 p-3 text-xs text-green-700">
+                      <div className="flex items-center justify-between text-sm font-semibold">
+                        <span className="flex items-center gap-1">
+                          <Sparkles className="h-4 w-4" />
+                          {autoOffer.title}
+                        </span>
+                        <Badge variant="secondary" className="bg-green-100 text-green-700">
+                          -₹{autoOfferDiscount.toFixed(2)}
+                        </Badge>
+                      </div>
+                      {autoOffer.description && (
+                        <p className="mt-1 text-green-700">{autoOffer.description}</p>
+                      )}
+                    </div>
+                  )}
+                  {appliedCoupon && couponDiscount > 0 && (
+                    <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-xs text-blue-700">
+                      <div className="flex items-center justify-between text-sm font-semibold">
+                        <span className="flex items-center gap-2">
+                          <Tag className="h-4 w-4" />
+                          {appliedCoupon.code}
+                        </span>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 px-2 text-blue-700"
+                          onClick={removeCoupon}
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                      <p className="mt-1 text-sm">Coupon savings: ₹{couponDiscount.toFixed(2)}</p>
+                    </div>
+                  )}
+                  {totalDiscount > 0 && (
+                    <div className="rounded-md bg-muted/40 p-2 text-xs text-muted-foreground">
+                      <p>
+                        Total savings: ₹{totalDiscount.toFixed(2)}
+                        {canCombineDiscounts ? ' (offer + coupon)' : ''}
+                      </p>
+                    </div>
+                  )}
                   {orderType === 'Delivery' && (
                     <div className="flex justify-between">
                       <span>Delivery Charges</span>
@@ -678,7 +768,7 @@ export default function CheckoutPage() {
 
                 <div className="flex justify-between text-lg font-bold">
                   <span>Total Amount</span>
-                  <span>₹{total.toFixed(2)}</span>
+                  <span>₹{displayTotal.toFixed(2)}</span>
                 </div>
 
                 {orderError && (
@@ -698,9 +788,9 @@ export default function CheckoutPage() {
                       Processing Order...
                     </div>
                   ) : !selectedPaymentMethod ? 'Select Payment Method' :
-                   selectedPaymentMethod === 'cod' ? `Place Order - ₹${total.toFixed(2)} (COD)` :
-                   selectedPaymentMethod === 'upi' ? `Pay ₹${total.toFixed(2)} via UPI` :
-                   `Pay ₹${total.toFixed(2)} Online`}
+                   selectedPaymentMethod === 'cod' ? `Place Order - ₹${displayTotal.toFixed(2)} (COD)` :
+                   selectedPaymentMethod === 'upi' ? `Pay ₹${displayTotal.toFixed(2)} via UPI` :
+                   `Pay ₹${displayTotal.toFixed(2)} Online`}
                 </Button>
 
                 <p className="text-xs text-gray-500 text-center">

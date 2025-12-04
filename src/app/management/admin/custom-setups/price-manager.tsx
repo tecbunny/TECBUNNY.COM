@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Parser } from 'expr-eval';
 
 import { RefreshCw, Save, Settings2 } from 'lucide-react';
 
@@ -227,22 +228,33 @@ function evaluateFormula(expression: string | null | undefined, context: Record<
 
   try {
     const keys = Object.keys(context);
-    const values = keys.map((key) => context[key]);
-    // Security: prevent access to global objects (process, globalThis, window, document, constructor)
+
+    // Use a safe expression parser instead of new Function
+    // Disable functions and complex operators to avoid risky constructs
+    const parser = new Parser({
+      operators: {
+        add: true,
+        subtract: true,
+        multiply: true,
+        divide: true,
+        power: false,
+        factorial: false,
+        comparison: false,
+        logical: false,
+        conditional: false,
+      },
+    });
+    // Make sure all built-in functions are removed
+    // (this prevents calling e.g. `constructor()` or `Math.*`)
+    parser.functions = {} as any;
+    const expr = parser.parse(expression);
+    const usedVars = expr.variables();
     const blacklist = ['constructor', 'process', 'globalThis', 'window', 'document', '__proto__'];
-    const tokens = (expression.match(/[A-Za-z_$][\w$]*/g) || []).map(t => t.trim());
-    for (const token of tokens) {
-      if (blacklist.includes(token)) {
-        return 0;
-      }
-      // If token is an identifier and not in keys, disallow it
-      if (/^[A-Za-z_$][\w$]*$/.test(token) && !keys.includes(token) && !/^\d+$/.test(token)) {
-        return 0;
-      }
+    for (const token of usedVars) {
+      if (blacklist.includes(token)) return 0;
+      if (!keys.includes(token)) return 0;
     }
-    // eslint-disable-next-line no-new-func
-    const fn = new Function(...keys, `return ${expression};`);
-    const result = fn(...values);
+    const result = expr.evaluate(context);
     return Number.isFinite(result) ? Number(result) : 0;
   } catch (_error) {
     return 0;

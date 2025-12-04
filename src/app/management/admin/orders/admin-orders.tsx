@@ -11,9 +11,7 @@ import { Button } from '../../../../components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../../components/ui/select';
 import { Skeleton } from '../../../../components/ui/skeleton';
 import type { Order, OrderType, OrderStatus } from '../../../../lib/types';
-import { deserializeOrder } from '../../../../lib/orders/normalizers';
 import { useToast } from '../../../../hooks/use-toast';
-import { createClient } from '../../../../lib/supabase/client';
 import { OrderActions } from '../../../../components/sales/OrderActions';
 import { formatOrderNumber } from '../../../../lib/order-utils';
 
@@ -44,39 +42,73 @@ export default function AdminOrders() {
   const [orders, setOrders] = React.useState<Order[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [typeFilter, setTypeFilter] = React.useState<TypeFilter>('all');
+  const [page, setPage] = React.useState(1);
+  const [limit, setLimit] = React.useState(20);
+  const [totalPages, setTotalPages] = React.useState(1);
+  const [totalOrders, setTotalOrders] = React.useState(0);
   const { toast } = useToast();
-  const supabase = createClient();
+  const fetchControllerRef = React.useRef<AbortController | null>(null);
 
   const fetchOrders = React.useCallback(async () => {
+    fetchControllerRef.current?.abort();
+    const controller = new AbortController();
+    fetchControllerRef.current = controller;
     setLoading(true);
-    try {
-      await fetch('/api/orders/auto-cancel', { method: 'POST', cache: 'no-store' });
-    } catch (error) {
-      console.error('Error triggering auto-cancel:', error);
-    }
-    const { data, error } = await supabase
-      .from('orders')
-      .select('*')
-      .order('created_at', { ascending: false });
 
-    if (error) {
+    try {
+      const params = new URLSearchParams({
+        page: String(page),
+        limit: String(limit),
+      });
+
+      if (typeFilter !== 'all') {
+        params.set('type', typeFilter);
+      }
+
+      const response = await fetch(`/api/admin/orders?${params.toString()}`, {
+        signal: controller.signal,
+        cache: 'no-store',
+      });
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload?.error || 'Unable to load orders. Please try again.');
+      }
+
+      setOrders(Array.isArray(payload?.orders) ? payload.orders : []);
+      const pagination = payload?.pagination;
+      setTotalOrders(pagination?.total ?? (payload?.orders?.length ?? 0));
+      setTotalPages(Math.max(1, pagination?.pages ?? 1));
+    } catch (error) {
+      if ((error as DOMException)?.name === 'AbortError') {
+        return;
+      }
       console.error('Error fetching admin orders:', error);
       toast({
         variant: 'destructive',
         title: 'Order fetch failed',
-        description: 'Unable to load orders. Please try again.',
+        description: error instanceof Error ? error.message : 'Unable to load orders. Please try again.',
       });
-    } else {
-      const normalizedOrders = (data ?? []).map(deserializeOrder);
-      setOrders(normalizedOrders);
+      setOrders([]);
+      setTotalOrders(0);
+      setTotalPages(1);
+    } finally {
+      if (fetchControllerRef.current === controller) {
+        fetchControllerRef.current = null;
+        setLoading(false);
+      }
     }
-
-    setLoading(false);
-  }, [supabase, toast]);
+  }, [limit, page, toast, typeFilter]);
 
   React.useEffect(() => {
     fetchOrders();
   }, [fetchOrders]);
+
+  React.useEffect(() => {
+    return () => {
+      fetchControllerRef.current?.abort();
+    };
+  }, []);
 
   const filteredOrders = React.useMemo(() => {
     if (typeFilter === 'all') return orders;
@@ -129,7 +161,13 @@ export default function AdminOrders() {
           <p className="text-muted-foreground">Monitor and control every order across the storefront.</p>
         </div>
         <div className="flex flex-col sm:flex-row gap-3">
-          <Select value={typeFilter} onValueChange={(value) => setTypeFilter(value as TypeFilter)}>
+          <Select
+            value={typeFilter}
+            onValueChange={(value) => {
+              setPage(1);
+              setTypeFilter(value as TypeFilter);
+            }}
+          >
             <SelectTrigger className="min-w-[160px]">
               <SelectValue placeholder="Filter by type" />
             </SelectTrigger>
@@ -265,6 +303,51 @@ export default function AdminOrders() {
               )}
             </TableBody>
           </Table>
+          {!loading && (
+            <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <p className="text-sm text-muted-foreground">
+                Page {page} of {totalPages} • {totalOrders} orders
+              </p>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                <Select
+                  value={String(limit)}
+                  onValueChange={(value) => {
+                    setPage(1);
+                    setLimit(Number(value));
+                  }}
+                >
+                  <SelectTrigger className="w-[140px]">
+                    <SelectValue placeholder="Rows per page" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[10, 20, 50, 100].map((size) => (
+                      <SelectItem key={size} value={String(size)}>
+                        {size} per page
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                    disabled={page <= 1 || loading}
+                  >
+                    Prev
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+                    disabled={page >= totalPages || loading}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

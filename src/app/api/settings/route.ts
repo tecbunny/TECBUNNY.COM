@@ -47,11 +47,15 @@ export async function GET(request: NextRequest) {
     if (!isSupabaseServiceConfigured) {
       logger.error('settings.get.missing_supabase_config');
       return NextResponse.json(
-        {
-          error: 'Supabase configuration missing. Please set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.'
-        },
+        { error: 'Service unavailable' },
         { status: 503 }
       );
+    }
+
+    // Security: Only allow authenticated users to read settings
+    const { session } = await getSessionAndRole(request);
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const supabaseAdmin = getSupabaseAdmin();

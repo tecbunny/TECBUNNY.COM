@@ -208,11 +208,17 @@ export default function QuickBillingPage() {
         }
 
         for (const cartItem of cart) {
-            const { data: invItem } = await supabase.from('inventory').select('stock, serial_numbers').eq('product_id', cartItem.id).single();
-            if (invItem) {
-                const newStock = invItem.stock - cartItem.quantity;
-                const newSerials = invItem.serial_numbers.filter((sn: string) => !cartItem.serialNumbers?.includes(sn));
-                await supabase.from('inventory').update({ stock: newStock, serial_numbers: newSerials }).eq('product_id', cartItem.id);
+            const { error: rpcError } = await supabase.rpc('decrement_stock_with_serials', {
+                p_product_id: cartItem.id,
+                p_quantity: cartItem.quantity,
+                p_serials: cartItem.serialNumbers || []
+            });
+
+            if (rpcError) {
+                console.error('Failed to update inventory for', cartItem.name, rpcError);
+                // Note: Order is already created. In a real transaction, we would roll back.
+                // For now, we just alert.
+                toast({ variant: 'destructive', title: 'Inventory Error', description: `Failed to update stock for ${cartItem.name}. Please check inventory.` });
             }
         }
         
@@ -290,7 +296,7 @@ export default function QuickBillingPage() {
                                 {products.map(product => (
                                     <div key={product.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-muted">
                                         <div className="flex items-center gap-4">
-                                            {product.image ? (
+                                                                                        {product.image ? (
                                               <Image 
                                                 src={product.image}
                                                 alt={product.name}
@@ -301,7 +307,7 @@ export default function QuickBillingPage() {
                                               />
                                             ) : (
                                               <div className="w-10 h-10 rounded-md bg-gray-200 flex items-center justify-center text-gray-600 font-semibold text-sm">
-                                                {product.name.charAt(0).toUpperCase()}
+                                                                                                {(product.name?.charAt(0) ?? '?').toUpperCase()}
                                               </div>
                                             )}
                                             <div>

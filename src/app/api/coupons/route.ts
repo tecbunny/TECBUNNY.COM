@@ -25,6 +25,8 @@ function rateLimit(key: string) {
   return true
 }
 
+const ADMIN_ROLES = new Set(['admin', 'manager', 'superadmin']);
+
 async function requireRole(_request: NextRequest) {
   if (!isSupabasePublicConfigured) {
     logger.error('coupons.require-role.missing_supabase_config');
@@ -42,7 +44,7 @@ async function requireRole(_request: NextRequest) {
     .select('role')
     .eq('id', user.id)
     .single()
-  if (!profile || !['admin', 'manager'].includes(profile.role)) return { error: 'Forbidden', status: 403 }
+  if (!profile || !ADMIN_ROLES.has(profile.role)) return { error: 'Forbidden', status: 403 }
   return { user, role: profile.role }
 }
 
@@ -82,7 +84,8 @@ export async function GET(request: NextRequest) {
       }
 
       // Check usage limit
-      if (data.usage_limit && data.used_count >= data.usage_limit) {
+      const totalUsage = data.usage_count ?? data.used_count ?? 0;
+      if (data.usage_limit && totalUsage >= data.usage_limit) {
         return NextResponse.json({ error: 'Coupon usage limit exceeded' }, { status: 400 })
       }
 
@@ -139,46 +142,54 @@ export async function POST(request: NextRequest) {
     if ('error' in auth) return NextResponse.json({ error: auth.error }, { status: auth.status })
     if (!rateLimit(auth.user.id)) return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429 })
     const body = await request.json()
-    const { 
-      code, 
-      title, 
-      description, 
-      discount_type, 
-      discount_value, 
-      minimum_order_amount,
-      maximum_discount_amount,
+    const {
+      code,
+      title,
+      description,
+      type,
+      value,
+      min_purchase,
       usage_limit,
+      usage_count,
+      per_user_limit,
+      applicable_category,
+      applicable_product_id,
       start_date,
       expiry_date,
       status = 'active'
     } = body
 
-    if (!code || !title || !discount_type || !discount_value) {
+    if (!code || !type || !value) {
       return NextResponse.json(
-        { error: 'Code, title, discount type, and discount value are required' },
+        { error: 'Code, type, and value are required' },
         { status: 400 }
       )
     }
 
     const supabaseAdmin = getSupabaseAdmin();
+    const now = new Date().toISOString();
+    const record = {
+      code: code.toUpperCase(),
+      title: title ?? code.toUpperCase(),
+      description: description ?? null,
+      type,
+      value: Number(value),
+      min_purchase: min_purchase != null ? Number(min_purchase) : null,
+      usage_limit: usage_limit != null ? Number(usage_limit) : null,
+      usage_count: usage_count != null ? Number(usage_count) : 0,
+      per_user_limit: per_user_limit != null ? Number(per_user_limit) : null,
+      applicable_category: applicable_category ?? null,
+      applicable_product_id: applicable_product_id ?? null,
+      status,
+      start_date: start_date || now,
+      expiry_date: expiry_date || null,
+      created_at: now,
+      updated_at: now,
+    };
+
     const { data, error } = await supabaseAdmin
       .from('coupons')
-      .insert({
-        code: code.toUpperCase(),
-        title,
-        description,
-        discount_type,
-        discount_value: parseFloat(discount_value),
-        minimum_order_amount: minimum_order_amount ? parseFloat(minimum_order_amount) : 0,
-        maximum_discount_amount: maximum_discount_amount ? parseFloat(maximum_discount_amount) : null,
-        usage_limit: usage_limit ? parseInt(usage_limit) : null,
-        used_count: 0,
-        status,
-        start_date: start_date || new Date().toISOString(),
-        expiry_date: expiry_date || null,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      })
+      .insert(record)
       .select()
       .single()
 
@@ -186,7 +197,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json(data)
+    return NextResponse.json({ coupon: data, message: 'Coupon created successfully' }, { status: 201 })
   } catch (error) {
     logger.error('coupons_post_error', { error })
     return NextResponse.json(
@@ -212,17 +223,19 @@ export async function PUT(request: NextRequest) {
     if ('error' in auth) return NextResponse.json({ error: auth.error }, { status: auth.status })
     if (!rateLimit(auth.user.id)) return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429 })
     const body = await request.json()
-    const { 
-      id, 
-      code, 
-      title, 
-      description, 
-      discount_type, 
-      discount_value, 
-      minimum_order_amount,
-      maximum_discount_amount,
+    const {
+      id,
+      code,
+      title,
+      description,
+      type,
+      value,
+      min_purchase,
       usage_limit,
-      used_count,
+      usage_count,
+      per_user_limit,
+      applicable_category,
+      applicable_product_id,
       status,
       start_date,
       expiry_date
@@ -242,12 +255,14 @@ export async function PUT(request: NextRequest) {
     if (code !== undefined) updateData.code = code.toUpperCase()
     if (title !== undefined) updateData.title = title
     if (description !== undefined) updateData.description = description
-    if (discount_type !== undefined) updateData.discount_type = discount_type
-    if (discount_value !== undefined) updateData.discount_value = parseFloat(discount_value)
-    if (minimum_order_amount !== undefined) updateData.minimum_order_amount = parseFloat(minimum_order_amount)
-    if (maximum_discount_amount !== undefined) updateData.maximum_discount_amount = maximum_discount_amount ? parseFloat(maximum_discount_amount) : null
-    if (usage_limit !== undefined) updateData.usage_limit = usage_limit ? parseInt(usage_limit) : null
-    if (used_count !== undefined) updateData.used_count = parseInt(used_count)
+    if (type !== undefined) updateData.type = type
+    if (value !== undefined) updateData.value = Number(value)
+    if (min_purchase !== undefined) updateData.min_purchase = min_purchase != null ? Number(min_purchase) : null
+    if (usage_limit !== undefined) updateData.usage_limit = usage_limit != null ? Number(usage_limit) : null
+    if (usage_count !== undefined) updateData.usage_count = usage_count != null ? Number(usage_count) : null
+    if (per_user_limit !== undefined) updateData.per_user_limit = per_user_limit != null ? Number(per_user_limit) : null
+    if (applicable_category !== undefined) updateData.applicable_category = applicable_category ?? null
+    if (applicable_product_id !== undefined) updateData.applicable_product_id = applicable_product_id ?? null
     if (status !== undefined) updateData.status = status
     if (start_date !== undefined) updateData.start_date = start_date
     if (expiry_date !== undefined) updateData.expiry_date = expiry_date
@@ -264,7 +279,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json(data)
+    return NextResponse.json({ coupon: data, message: 'Coupon updated successfully' })
   } catch (error) {
     logger.error('coupons_put_error', { error })
     return NextResponse.json(
@@ -309,7 +324,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ message: 'Coupon deleted successfully' })
   } catch (error) {
     logger.error('coupons_delete_error', { error })
     return NextResponse.json(

@@ -1,79 +1,108 @@
-import type { Service } from '../lib/types';
+import type { Service } from './types';
+
+const now = new Date().toISOString();
 
 export const servicesData: Service[] = [
   {
-    id: 'tech-support',
-    icon: 'Wrench',
-    title: 'Technical Support',
-    description: 'Expert technical assistance for all your devices and software needs.',
-    features: ['Device Setup', 'Software Installation', 'Troubleshooting', 'Performance Optimization'],
+    id: 'cctv-installation',
+    icon: 'Cctv',
+    title: 'CCTV New Installation',
+    description: 'Professional site survey, cabling, device mounting, and DVR/NVR configuration for fresh deployments.',
+    features: [
+      'Up to 4 camera starter kits',
+      'Mid-size setup up to 8 cameras',
+      'Custom enterprise rollouts for 8+ cameras'
+    ],
     badge: 'Popular',
     is_active: true,
-    category: 'Support',
+    category: 'CCTV',
     display_order: 1,
-    created_at: '',
-    updated_at: ''
+    created_at: now,
+    updated_at: now
   },
   {
-    id: 'extended-warranty',
-    icon: 'Shield',
-    title: 'Extended Warranty',
-    description: 'Comprehensive protection plans for your valuable electronics.',
-    features: ['Accidental Damage', 'Hardware Failures', 'Software Issues', 'Priority Support'],
+    id: 'cctv-repair',
+    icon: 'Wrench',
+    title: 'CCTV Repair Services',
+    description: 'On-site and remote diagnostics for camera feeds, storage devices, and connectivity faults.',
+    features: [
+      'Camera realignment & lens swaps',
+      'DVR/NVR reboot and firmware fixes',
+      'Power supply & cabling replacements'
+    ],
     badge: 'Recommended',
     is_active: true,
-    category: 'Support',
+    category: 'CCTV',
     display_order: 2,
-    created_at: '',
-    updated_at: ''
+    created_at: now,
+    updated_at: now
   },
   {
-    id: 'delivery-installation',
-    icon: 'Truck',
-    title: 'Delivery & Installation',
-    description: 'Professional delivery and setup for your new equipment.',
-    features: ['Same-Day Delivery', 'Professional Installation', 'Old Device Removal'],
+    id: 'cctv-amc',
+    icon: 'Shield',
+    title: 'CCTV AMC Services',
+    description: 'Comprehensive annual maintenance for surveillance infrastructure with proactive health checks.',
+    features: [
+      'Quarterly preventive maintenance visits',
+      'Camera cleaning and uptime audits',
+      'Unlimited priority break-fix support'
+    ],
     badge: 'New',
     is_active: true,
-    category: 'Installation',
+    category: 'CCTV',
     display_order: 3,
-    created_at: '',
-    updated_at: ''
+    created_at: now,
+    updated_at: now
   },
   {
-    id: 'priority-support',
-    icon: 'HeadphonesIcon',
-    title: 'Priority Support',
-    description: 'Get immediate access to our top-tier support specialists.',
-    features: ['24/7 Availability', 'Dedicated Support Line', 'Remote Assistance'],
+    id: 'computer-custom-setup',
+    icon: 'Cpu',
+    title: 'Computer – Customised Setup',
+    description: 'Built-to-order desktops and workstations tuned for gaming, creatives, or office productivity.',
+    features: [
+      'Requirement capture & configuration design',
+      'Component sourcing with warranty tracking',
+      'Burn-in testing and ready-to-use delivery'
+    ],
+    badge: 'Popular',
     is_active: true,
-    category: 'Support',
+    category: 'Computer',
     display_order: 4,
-    created_at: '',
-    updated_at: ''
+    created_at: now,
+    updated_at: now
   },
   {
-    id: 'trade-in',
+    id: 'computer-repair',
     icon: 'RefreshCw',
-    title: 'Trade-In Program',
-    description: 'Trade in your old devices for credit towards new purchases.',
-    features: ['Instant Credit', 'All Major Brands Accepted', 'Data Wiping Included'],
+    title: 'Computer Repair Services',
+    description: 'Fast turnaround for hardware faults, OS corruption, and performance drops.',
+    features: [
+      'Chip-level diagnostics and replacements',
+      'Windows/Mac OS reinstallation with data safety',
+      'Thermal service and performance tuning'
+    ],
+    badge: null,
     is_active: true,
-    category: 'Trade',
+    category: 'Computer',
     display_order: 5,
-    created_at: '',
-    updated_at: ''
+    created_at: now,
+    updated_at: now
   },
   {
-    id: 'certified-refurbished',
+    id: 'computer-upgrade',
     icon: 'Award',
-    title: 'Certified Refurbished',
-    description: 'High-quality refurbished products at a fraction of the price.',
-    features: ['1-Year Warranty', 'Thoroughly Inspected', 'Like-New Condition'],
+    title: 'Computer Upgrade Services',
+    description: 'Extend the life of existing systems with targeted performance upgrades.',
+    features: [
+      'RAM & SSD expansion bundles',
+      'GPU/PSU upgrades with compatibility checks',
+      'Firmware, BIOS, and driver optimization'
+    ],
+    badge: 'Recommended',
     is_active: true,
-    category: 'Trade',
+    category: 'Computer',
     display_order: 6,
-    created_at: '',
-    updated_at: ''
+    created_at: now,
+    updated_at: now
   }
 ];
