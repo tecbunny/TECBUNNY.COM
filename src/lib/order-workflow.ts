@@ -1,27 +1,8 @@
 // Order workflow toolkit: seed data, admin ship flow, invoice math, print helpers, and customer visibility.
 // All DOM touches are guarded for SSR safety.
-
-export type OrderStatus = 'Processing' | 'Shipped' | 'Delivered';
-
-export interface OrderItem {
-  name: string;
-  quantity: number;
-  price: number;
-  serials: string[]; // captured on ship; can remain empty
-}
-
-export interface InvoiceData {
-  invoiceId: string | null;
-  taxAmount: number;
-  totalAmount: number;
-  generatedDate: string | null;
-}
-
-export interface CustomerInfo {
-  name: string;
-  address: string;
-  phone: string;
-}
+// Note: This file contains logic for client-side calculations and print styling.
+// Persistent order management should be done via Supabase services (e.g. src/lib/orders/).
+// The in-memory store in versions prior to go-live has been removed to prevent state loss.
 
 export interface Order {
   id: string;
@@ -30,29 +11,6 @@ export interface Order {
   invoice: InvoiceData;
   customer: CustomerInfo;
 }
-
-// Simple in-memory store for demo purposes.
-export const orders: Order[] = [
-  {
-    id: 'ORDER-001',
-    status: 'Processing',
-    items: [
-      { name: 'Camera', quantity: 2, price: 5000, serials: [] },
-      { name: 'NVR', quantity: 1, price: 8000, serials: [] },
-    ],
-    invoice: {
-      invoiceId: null,
-      taxAmount: 0,
-      totalAmount: 0,
-      generatedDate: null,
-    },
-    customer: {
-      name: 'Jane Doe',
-      address: '123 Street, City, State, ZIP',
-      phone: '+91 96041 36010',
-    },
-  },
-];
 
 // Admin modal helper: returns descriptors for rendering per-quantity serial inputs.
 export function buildSerialInputDescriptors(order: Order) {

@@ -95,10 +95,11 @@ export async function getServerAuthState(): Promise<ServerAuthState> {
   }
 
   const metadataRole = extractRoleFromMetadata(session.user.app_metadata as Record<string, unknown> | undefined);
-  const userMetadataRole = extractRoleFromMetadata(session.user.user_metadata as Record<string, unknown> | undefined);
+  // Security fix: Do NOT trust user_metadata for roles as it can be user-editable.
+  // const userMetadataRole = extractRoleFromMetadata(session.user.user_metadata as Record<string, unknown> | undefined);
   const profileRole = await fetchProfileRole(supabase, session.user.id);
 
-  const resolvedRole = pickHighestRole(metadataRole, userMetadataRole, profileRole);
+  const resolvedRole = pickHighestRole(metadataRole, profileRole);
 
   return { supabase, session, role: resolvedRole };
 }

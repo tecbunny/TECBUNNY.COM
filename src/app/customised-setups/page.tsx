@@ -34,7 +34,7 @@ export default async function CustomisedSetupsPage({
   try {
     blueprint = await getCustomSetupBlueprintSummary(DEFAULT_CUSTOM_SETUP_TEMPLATE_SLUG);
     // Debug log for blueprint fetch - can be removed in production
-    // console.log('Public page blueprint fetch result:', {
+
     //   success: !!blueprint,
     //   systemCount: blueprint?.systems?.length || 0,
     //   slug: DEFAULT_CUSTOM_SETUP_TEMPLATE_SLUG,

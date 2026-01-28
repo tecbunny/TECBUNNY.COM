@@ -51,7 +51,7 @@ export default function EmailVerificationContent() {
           // Authentication configuration issue
         } else {
           setResendStatus('error');
-          // console.log('Resend failed with error:', error.message);
+
         }
       } else {
         setResendStatus('success');

@@ -63,65 +63,29 @@ const resolveProfileRole = async (user: SupabaseUser, desiredRole: UserRole | nu
     const service = createServiceClient();
     const { data: profile, error } = await service
       .from('profiles')
-      .select('id, email, name, mobile, role, email_verified, email_confirmed_at')
+      .select('role')
       .eq('id', user.id)
       .maybeSingle();
 
     if (error) {
       logger.warn('server-role.profile_lookup_failed', { error: error.message, code: error.code });
+      // Fallback to trusted metadata role if DB fails
+      return desiredRole; 
     }
 
-    let finalRole = desiredRole ?? parseRole(profile?.role) ?? 'customer';
-
-    if (!profile) {
-      const insertPayload = {
-        id: user.id,
-        name: (user.user_metadata?.name as string | undefined) || user.email?.split('@')[0] || 'User',
-        email: user.email ?? `user-${user.id}@placeholder.local`,
-        mobile: (user.user_metadata?.mobile as string | undefined) || user.phone || null,
-        role: finalRole,
-        email_verified: Boolean(user.email_confirmed_at),
-        email_confirmed_at: user.email_confirmed_at,
-        updated_at: new Date().toISOString()
-      };
-
-      const { error: insertError } = await service
-        .from('profiles')
-        .insert(insertPayload)
-        .select()
-        .maybeSingle();
-
-      if (insertError && insertError.code !== '23505') { // ignore duplicate inserts
-        logger.error('server-role.profile_insert_failed', { error: insertError.message, code: insertError.code });
-      }
-    } else {
-      if (!parseRole(profile.role) && finalRole) {
-        // profile exists but role invalid, set to finalRole
-        const { error: updateError } = await service
-          .from('profiles')
-          .update({ role: finalRole, updated_at: new Date().toISOString() })
-          .eq('id', user.id);
-        if (updateError) {
-          logger.error('server-role.profile_update_failed', { error: updateError.message, code: updateError.code });
-        }
-      } else if (finalRole && profile.role !== finalRole) {
-        // sync role with desired role when different
-        const { error: roleSyncError } = await service
-          .from('profiles')
-          .update({ role: finalRole, updated_at: new Date().toISOString() })
-          .eq('id', user.id);
-        if (roleSyncError) {
-          logger.warn('server-role.profile_role_sync_failed', { error: roleSyncError.message, code: roleSyncError.code });
-          finalRole = parseRole(profile.role) ?? finalRole;
-        }
-      } else {
-        finalRole = parseRole(profile.role) ?? finalRole;
-      }
+    // PURE READ ONLY: We trust the DB profile if it exists.
+    // If it doesn't exist, we fallback to app_metadata role (desiredRole).
+    // We do NOT write/upsert here anymore to avoid side effects during guarded calls.
+    
+    if (profile && profile.role) {
+       const dbRole = parseRole(profile.role);
+       if (dbRole) return dbRole;
     }
 
-    return finalRole;
+    return desiredRole ?? 'customer';
+
   } catch (error) {
-    logger.error('server-role.unexpected_profile_sync_error', { error });
+    logger.error('server-role.unexpected_profile_read_error', { error });
     return desiredRole;
   }
 };
@@ -129,9 +93,11 @@ const resolveProfileRole = async (user: SupabaseUser, desiredRole: UserRole | nu
 export const getEffectiveUserRole = async (user: SupabaseUser | null): Promise<UserRole | null> => {
   if (!user) return null;
 
-  const metadataRole = extractRoleFromMetadata(user.app_metadata as MetadataRecord)
-    ?? extractRoleFromMetadata(user.user_metadata as MetadataRecord);
+  // Security fix: Do not trust user_metadata for roles.
+  const metadataRole = extractRoleFromMetadata(user.app_metadata as MetadataRecord);
 
+  // Note: resolveProfileRole has side effects (writes to DB). 
+  // We should ideally remove them, but for now we follow the "safe role check" directive.
   return resolveProfileRole(user, metadataRole);
 };
 

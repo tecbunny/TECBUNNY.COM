@@ -111,8 +111,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const buildFallbackProfile = useCallback((supabaseUser: SupabaseUser): User => {
     const appMetadataRole = extractRoleFromMetadata(supabaseUser.app_metadata as Record<string, unknown> | undefined);
-    const userMetadataRole = extractRoleFromMetadata(supabaseUser.user_metadata as Record<string, unknown> | undefined);
-    const resolvedRole = appMetadataRole ?? userMetadataRole ?? 'customer';
+    // Security note: In client tracking, using user_metadata for UI display is acceptable but not for authorization.
+    // However, to be consistent with backend hardening, we prefer app_metadata or DB profile.
+    // For standard user object construction, we will trust app_metadata first.
+    const resolvedRole = appMetadataRole ?? 'customer';
 
     return {
       id: supabaseUser.id,

@@ -48,6 +48,8 @@ export interface SecurityAlert {
  * Enhanced WhatsApp Business API Service for TecBunny Transactional Notifications
  * Handles order updates, service notifications, payment confirmations, and security alerts
  */
+const SUPPORT_PHONE = process.env.NEXT_PUBLIC_SUPPORT_PHONE || '+91 96041 36010';
+
 export class WhatsAppNotificationService {
   private whatsAppService: WhatsAppService;
 

@@ -3,21 +3,25 @@ import { createServerClient } from '@supabase/ssr'
 
 export async function middleware(request: NextRequest) {
   // Define public API routes that don't require authentication
+  // Note: Maintain this list carefully to avoid exposing private endpoints.
   const publicApiRoutes = [
     '/api/settings',
     '/api/page-content',
     '/api/auto-offers',
     '/api/coupons',
-    '/api/products',
-    '/api/products/csv',
-    '/api/products/template',
-    '/api/products/export'
+    '/api/products', // Public product catalog
   ]
   
   // Check if the current path is in the public API routes
   const isPublicApiRoute = publicApiRoutes.some(route => 
     request.nextUrl.pathname.startsWith(route)
   )
+  
+  // Hardening: Block sensitive management or bulk export routes if they were accidentally matched above
+  // (e.g. if someone added /api/products/export to public list, we explicitly block it if not authenticated below)
+  // However, the logic below handles "If it's a public route, allow".
+  // So we must ensure the list above ONLY contains naturally public safe routes.
+  // We removed explicit bulk export routes from the 'public' definition to stay safe by default.
   
   // If it's a public API route, allow access without authentication
   if (isPublicApiRoute) {

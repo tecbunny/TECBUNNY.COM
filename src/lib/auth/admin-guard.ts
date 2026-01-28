@@ -102,14 +102,19 @@ export async function requireAdminContext(): Promise<AdminContext> {
     if (!isSupabaseServiceConfigured) {
       // Continue with metadata role if service key is unavailable
       logger.warn('admin_auth_profile_fallback_metadata');
+      // HARDENING: If profile lookup fails and we don't have service key, 
+      // relying solely on metadata might be acceptable ONLY if we trust app_metadata.
+      // But for high security, if we can't verify against DB, we generally should FAIL or rely ONLY on app_metadata (JWT).
     } else {
+      // If service IS configured but lookup failed, this is an error state -> deny access
       throw new AdminAuthError(500, 'Failed to verify admin profile');
     }
   }
 
+  // Security fix: Do not trust user_metadata for admin roles.
   const metadataRole =
-    extractRoleFromMetadata(user.app_metadata as Record<string, unknown> | undefined) ??
-    extractRoleFromMetadata(user.user_metadata as Record<string, unknown> | undefined);
+    extractRoleFromMetadata(user.app_metadata as Record<string, unknown> | undefined);
+    
   const profileRole = normalizeRole(profile?.role);
   const resolvedRole = pickHighestRole(metadataRole, profileRole);
 

@@ -712,7 +712,7 @@ export function CustomSetupFlow({ blueprint, variant = 'default' }: CustomSetupF
   const selectableHddOptions = hddOptions.length ? hddOptions : FALLBACK_HDD_OPTIONS;
 
   // Debug: Log pricing source - disabled for production
-  // console.log('CustomSetupFlow pricing source:', {
+
   //   hasBlueprintData: !!blueprint,
   //   blueprintSystems: blueprint?.systems?.length || 0,
   //   usingFallback: !blueprint,
