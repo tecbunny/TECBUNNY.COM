@@ -12,6 +12,8 @@ import {
 import { otpService } from '../../../lib/otp-service';
 import { enhancedCommissionService } from '../../../lib/enhanced-commission-service';
 import { emailHelpers } from '../../../lib/email';
+import { GST_RATE } from '../../../lib/constants';
+
 const RATE_LIMIT = 5; // 5 orders
 const RATE_WINDOW_MS = 60 * 1000; // per minute
 
@@ -85,9 +87,15 @@ export async function POST(request: NextRequest) {
     }
 
     const subtotal = calculatedSubtotal;
-    const gst_amount = orderData.gst_amount || (subtotal * 0.18); // You might want to recalculate GST too if logic permits
-    const discount_amount = orderData.discount_amount || 0; // Discounts should also be validated against coupons if applicable
-    const shipping_amount = orderData.shipping_amount || 0;
+    // Security Fix: Enforce server-side GST calculation.
+    const gst_amount = subtotal * GST_RATE; 
+    
+    // Note: Discounts are currently trusted from client if coupon logic is client-side.
+    // Ideally this should be validated against a coupon code lookup. 
+    // For now, ensuring gst logic is secure.
+    const discount_amount = Math.max(0, orderData.discount_amount || 0); 
+    const shipping_amount = Math.max(0, orderData.shipping_amount || 0);
+    
     const total = subtotal + gst_amount + shipping_amount - discount_amount;
     
     const normalizeOrderType = (value: unknown): string => {
