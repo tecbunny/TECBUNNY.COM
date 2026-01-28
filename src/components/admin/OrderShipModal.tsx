@@ -2,22 +2,21 @@
 
 import React from 'react';
 
-import { orders, buildSerialInputDescriptors, shipAndGenerate, printInvoice, canDownloadInvoice, type Order } from '@/lib/order-workflow';
+import { buildSerialInputDescriptors, shipAndGenerate, printInvoice, canDownloadInvoice, type Order } from '@/lib/order-workflow';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { injectPrintStyles } from '@/lib/order-workflow';
 
 interface OrderShipModalProps {
-  orderId: string | null;
+  order: Order | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onOrderUpdated?: (order: Order) => void;
 }
 
 // Minimal admin modal to capture serials per quantity and ship the order.
-export function OrderShipModal({ orderId, open, onOpenChange, onOrderUpdated }: OrderShipModalProps) {
-  const order = orders.find(o => o.id === orderId) || null;
+export function OrderShipModal({ order, open, onOpenChange, onOrderUpdated }: OrderShipModalProps) {
   const serialsRef = React.useRef<Record<number, Record<number, string>>>({});
   const [submitting, setSubmitting] = React.useState(false);
 
@@ -29,11 +28,11 @@ export function OrderShipModal({ orderId, open, onOpenChange, onOrderUpdated }: 
   };
 
   const handleShip = () => {
-    if (!orderId) return;
+    if (!order) return;
     injectPrintStyles(typeof document !== 'undefined' ? document : undefined);
     try {
       setSubmitting(true);
-      const updated = shipAndGenerate(orderId, serialsRef.current);
+      const updated = shipAndGenerate(order, serialsRef.current);
       onOrderUpdated?.(updated);
       onOpenChange(false);
     } catch (err) {

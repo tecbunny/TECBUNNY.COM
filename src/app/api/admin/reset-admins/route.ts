@@ -78,22 +78,14 @@ export async function POST(request: NextRequest) {
         });
     }
 
-    // 2) Remove all other admins (auth user and profile)
-    const { data: adminProfiles } = await supabaseAdmin
-      .from('profiles')
-      .select('id, email')
-      .eq('role', 'admin');
-
-    const toDelete = (adminProfiles || []).filter((p) => p.id !== newAdminUserId);
-    for (const p of toDelete) {
-      try {
-        await supabaseAdmin.auth.admin.deleteUser(p.id);
-      } catch (error) {
-        logger.error('admin_reset_delete_user_failed', { userId: p.id, error });
-      }
-      await supabaseAdmin.from('profiles').delete().eq('id', p.id);
-    }
-
+    /* 
+    Security Fix: Removed the destructive logic that deleted all other admins. 
+    This route now only creates or updates the target admin account. 
+    Manual removal of other admins should be done via the Supabase dashboard if necessary.
+    */
+    const toDelete: { id: string }[] = []; 
+    // Logic for bulk deletion has been disabled for safety.
+    
     return NextResponse.json({ ok: true, adminUserId: newAdminUserId, removed: toDelete.length });
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Unknown error';

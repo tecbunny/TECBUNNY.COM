@@ -4,6 +4,7 @@ import { createServerClient } from '@supabase/ssr'
 export async function middleware(request: NextRequest) {
   // Define public API routes that don't require authentication
   // Note: Maintain this list carefully to avoid exposing private endpoints.
+  // TODO: Consider migrating to a route handling convention (e.g. /api/public/*) to automate this.
   const publicApiRoutes = [
     '/api/settings',
     '/api/page-content',

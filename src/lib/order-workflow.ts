@@ -4,6 +4,29 @@
 // Persistent order management should be done via Supabase services (e.g. src/lib/orders/).
 // The in-memory store in versions prior to go-live has been removed to prevent state loss.
 
+import { type OrderStatus } from './types';
+import { GST_RATE } from './constants';
+
+export interface InvoiceData {
+  invoiceId: string;
+  taxAmount: number;
+  totalAmount: number;
+  generatedDate?: string;
+}
+
+export interface CustomerInfo {
+  name: string;
+  address: string;
+  phone: string;
+}
+
+export interface OrderItem {
+  name: string;
+  quantity: number;
+  price: number;
+  serials: string[];
+}
+
 export interface Order {
   id: string;
   status: OrderStatus;
@@ -26,13 +49,10 @@ export function buildSerialInputDescriptors(order: Order) {
 
 // Ship + persist serials, then generate invoice. Serial numbers are optional; pass blanks as needed.
 export function shipAndGenerate(
-  orderId: string,
+  order: Order,
   serialsByItem: Record<number, Record<number, string | undefined>>
 ): Order {
-  const order = orders.find(o => o.id === orderId);
-  if (!order) throw new Error('Order not found');
-
-  order.items = order.items.map((item, itemIdx) => {
+  const updatedItems = order.items.map((item, itemIdx) => {
     const serials: string[] = [];
     for (let i = 0; i < item.quantity; i += 1) {
       const value = serialsByItem[itemIdx]?.[i];
@@ -41,28 +61,28 @@ export function shipAndGenerate(
     return { ...item, serials };
   });
 
-  order.status = 'Shipped';
-  order.invoice = generateInvoice(order.id);
-  return order;
+  const invoice = generateInvoice(order.id, updatedItems);
+  
+  return {
+    ...order,
+    status: 'Shipped',
+    items: updatedItems,
+    invoice
+  };
 }
 
-// Invoice math: subtotal, 18% GST, grand total, persisted onto the order.
-export function generateInvoice(orderId: string): InvoiceData {
-  const order = orders.find(o => o.id === orderId);
-  if (!order) throw new Error('Order not found');
-
-  const subtotal = order.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const taxAmount = +(subtotal * 0.18).toFixed(2);
+// Invoice math: subtotal, GST, grand total, persisted onto the order.
+export function generateInvoice(orderId: string, items: OrderItem[]): InvoiceData {
+  const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const taxAmount = +(subtotal * GST_RATE).toFixed(2);
   const totalAmount = +(subtotal + taxAmount).toFixed(2);
 
-  order.invoice = {
-    invoiceId: `INV-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+  return {
+    invoiceId: `INV-${new Date().getFullYear()}-${typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID().split('-')[0].toUpperCase() : Math.floor(1000 + Math.random() * 9000)}`,
     taxAmount,
     totalAmount,
     generatedDate: new Date().toISOString(),
   };
-
-  return order.invoice;
 }
 
 // Print helpers --------------------------------------------------------------
