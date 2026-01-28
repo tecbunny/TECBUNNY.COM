@@ -2,6 +2,18 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { createClient as createServerClient, createServiceClient } from '../../../../lib/supabase/server';
 import { logger } from '../../../../lib/logger';
+import { 
+  sendWhatsAppNotification, 
+  sendOutForDeliveryNotification, 
+  sendPaymentConfirmationNotification,
+  sendOrderCancelled,
+  sendOrderDelayed,
+  sendOrderActionNeeded,
+  sendOrderPickupReady,
+  sendPaymentActionRequired,
+  sendDeliveryConfirmation
+} from '../../../../lib/whatsapp-service';
+import { otpService } from '../../../../lib/otp-service';
 import { isAtLeast } from '../../../../lib/roles';
 import type { OrderStatus, UserRole } from '../../../../lib/types';
 
@@ -14,11 +26,67 @@ const STATUS_NORMALIZATION: Record<string, OrderStatus> = {
   'ready to ship': 'Ready to Ship',
   shipped: 'Shipped',
   'ready for pickup': 'Ready for Pickup',
-  completed: 'Completed',
+  'ready for delivery': 'Ready for Delivery',
   delivered: 'Delivered',
+  'delivered/picked up': 'Delivered/Picked Up',
+  completed: 'Completed',
   cancelled: 'Cancelled',
   rejected: 'Rejected',
+  'on hold': 'On Hold',
+  'visit scheduled': 'Visit Scheduled',
+  'visit complete': 'Visit Completed',
+  'visit completed': 'Visit Completed',
+  'diagnosis done': 'Diagnosis Done',
+  'quote sent': 'Quote Sent',
+  'awaiting customer approval': 'Awaiting Customer Approval',
+  approved: 'Approved',
+  'parts ordered': 'Parts Ordered',
+  'work in progress': 'Work In Progress',
+  wip: 'Work In Progress',
+  'quality check': 'Quality Check',
+  qc: 'Quality Check',
+  'warranty/support active': 'Warranty/Support Active',
 };
+
+const GENERAL_ORDER_STATUS_SET = new Set<OrderStatus>([
+  'Pending',
+  'Awaiting Payment',
+  'Payment Confirmed',
+  'Confirmed',
+  'Processing',
+  'Ready to Ship',
+  'Shipped',
+  'Ready for Pickup',
+  'Completed',
+  'Delivered',
+  'Cancelled',
+  'Rejected',
+]);
+
+const SERVICE_ORDER_STATUS_SET = new Set<OrderStatus>([
+  'Pending',
+  'Awaiting Payment',
+  'Payment Confirmed',
+  'Visit Scheduled',
+  'Visit Completed',
+  'Diagnosis Done',
+  'Quote Sent',
+  'Awaiting Customer Approval',
+  'Approved',
+  'Rejected',
+  'On Hold',
+  'Parts Ordered',
+  'Work In Progress',
+  'Quality Check',
+  'Ready for Pickup',
+  'Ready for Delivery',
+  'Delivered/Picked Up',
+  'Completed',
+  'Warranty/Support Active',
+  'Cancelled',
+]);
+
+const SERVICE_TYPE_SET = new Set(['service', 'repair', 'installation', 'setup']);
 
 const PICKUP_TYPE_SET = new Set(['pickup', 'walk-in', 'walkin', 'walk in', 'walk_in']);
 
@@ -138,7 +206,7 @@ export async function POST(request: NextRequest) {
     const serviceClient = createServiceClient();
     const { data: orderRecord, error: fetchError } = await serviceClient
       .from('orders')
-      .select('id, type, payment_status, payment_method, status')
+      .select('id, type, payment_status, payment_method, status, customer_phone, customer_name, total, currency')
       .eq('id', orderId)
       .maybeSingle();
 
@@ -152,8 +220,14 @@ export async function POST(request: NextRequest) {
     }
 
     const typeKey = (orderRecord.type ?? '').toString().trim().toLowerCase();
+    const isServiceOrder = SERVICE_TYPE_SET.has(typeKey);
     const needsPickupRole = PICKUP_TYPE_SET.has(typeKey);
     const requiredRole: UserRole = needsPickupRole ? 'sales' : 'manager';
+
+    const allowedStatuses = isServiceOrder ? SERVICE_ORDER_STATUS_SET : GENERAL_ORDER_STATUS_SET;
+    if (!allowedStatuses.has(normalizedStatus)) {
+      return NextResponse.json({ error: 'Status not allowed for this order type' }, { status: 400 });
+    }
 
     if (!isAtLeast(role, requiredRole)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -193,9 +267,143 @@ export async function POST(request: NextRequest) {
       by: user.id,
     });
 
+    // Send WhatsApp notification
+    if (orderRecord.customer_phone) {
+      await sendOrderStatusUpdateWhatsApp(orderRecord.customer_phone, {
+        orderId: orderRecord.id,
+        status: normalizedStatus,
+        customerName: orderRecord.customer_name,
+        amount: orderRecord.total,
+        currency: orderRecord.currency,
+        cancelReason: updatePayload.cancellation_reason as string
+      });
+    }
+
     return NextResponse.json({ success: true, orderId, status: normalizedStatus });
   } catch (error) {
     logger.error('order_update_status_unhandled', { error });
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}
+
+async function sendOrderStatusUpdateWhatsApp(phoneNumber: string, data: any) {
+  const supabase = createServiceClient();
+  try {
+    let message = '';
+    const { orderId, status, customerName, amount, currency, cancelReason } = data;
+    const namePrefix = customerName ? `Hi ${customerName}! ` : '';
+    const priceDisplay = amount ? `(${currency || 'INR'} ${amount})` : '';
+
+    switch (status) {
+      case 'Awaiting Payment':
+        await sendPaymentActionRequired(phoneNumber, {
+          customerName,
+          amount: `${currency || 'INR'} ${amount}`,
+          orderNumber: orderId,
+          paymentLink: `https://tecbunny.com/orders/${orderId}`
+        });
+        logger.info('Payment action WhatsApp sent:', { phoneNumber, orderId });
+        return;
+
+      case 'Cancelled':
+      case 'Rejected':
+        await sendOrderCancelled(phoneNumber, {
+          customerName,
+          orderNumber: orderId,
+          reason: cancelReason || 'Order cancelled'
+        });
+        logger.info('Order cancelled WhatsApp sent:', { phoneNumber, orderId });
+        return; // Exit as template handles it
+
+      case 'On Hold':
+        await sendOrderDelayed(phoneNumber, {
+          customerName,
+          orderNumber: orderId
+        });
+        logger.info('Order delayed WhatsApp sent:', { phoneNumber, orderId });
+        return;
+
+      case 'Awaiting Customer Approval':
+        await sendOrderActionNeeded(phoneNumber, {
+          customerName,
+          orderNumber: orderId,
+          actionLink: `https://tecbunny.com/account/orders/${orderId}`
+        });
+        logger.info('Order action needed WhatsApp sent:', { phoneNumber, orderId });
+        return;
+        
+      case 'Ready for Pickup':
+         // Generate OTP/Code
+         const otpResult = await otpService.generateOtp({
+           order_id: orderId,
+           customer_phone: phoneNumber,
+           otp_type: 'pickup', // Ensure 'pickup' is a valid OtpType or just string if typed loosely
+           created_by: 'system'
+         } as any, true); // true = skip SMS
+
+         const pickupCode = otpResult.otp_code || 'CODE-PENDING';
+
+         // Update order record with pickup_code immediately so frontend sees it
+         await supabase.from('orders').update({
+             pickup_code: pickupCode
+         }).eq('id', orderId);
+
+         await sendOrderPickupReady(phoneNumber, {
+           customerName,
+           orderNumber: orderId,
+           pickupCode: pickupCode
+         });
+         logger.info('Order pickup ready WhatsApp sent:', { phoneNumber, orderId });
+         return;
+
+      case 'Ready for Delivery':
+        await sendOutForDeliveryNotification(phoneNumber, {
+          orderNumber: orderId,
+          customerName: customerName
+        });
+        logger.info('Out for delivery WhatsApp sent:', { phoneNumber, orderId });
+        break;
+
+      case 'Payment Confirmed':
+        await sendPaymentConfirmationNotification(phoneNumber, {
+          customerName: customerName,
+          amount: `${currency || 'INR'} ${amount}`,
+          orderNumber: orderId
+        });
+        logger.info('Payment confirmed WhatsApp sent:', { phoneNumber, orderId });
+        break;
+      case 'Delivered':
+      case 'Delivered/Picked Up':
+      case 'Completed':
+        await sendDeliveryConfirmation(phoneNumber, {
+          customerName,
+          orderNumber: orderId
+        });
+        logger.info('Delivery confirmation WhatsApp sent:', { phoneNumber, orderId });
+        return;
+      // Default generic update
+      default:
+        message = `
+🔔 Order Status Update - TecBunny Store
+
+${namePrefix}Your order status has been updated.
+
+📦 Order: ${orderId}
+🔄 New Status: ${status}
+
+Track full details here: https://tecbunny.com/orders/${orderId}
+
+Need help? Reply to this message.
+Thank you! 🚀
+        `.trim();
+        break;
+    }
+
+    if (message) {
+      await sendWhatsAppNotification(phoneNumber, message);
+      logger.info('Order status WhatsApp sent:', { phoneNumber, orderId, status });
+    }
+  } catch (error: any) {
+    logger.error('Failed to send order status WhatsApp:', { error: error.message });
   }
 }

@@ -374,8 +374,8 @@ export class EmailOTPService {
 
             <div class="footer">
                 <p><strong>Need Help?</strong></p>
-                <p>Contact us at <a href="mailto:support@tecbunnysolutions.com">support@tecbunnysolutions.com</a></p>
-                <p>or call us at <a href="tel:+919429694995">+91 94296 94995</a></p>
+              <p>Contact us at <a href="mailto:support@tecbunny.com">support@tecbunny.com</a></p>
+              <p>or call us at <a href="tel:+919604136010">+91 96041 36010</a></p>
                 <hr style="margin: 20px 0;">
                 <p style="font-size: 12px;">
                     This is an automated message from Tecbunny Solutions.<br>
@@ -411,7 +411,7 @@ Security Tips:
 If you didn't request this verification code, please ignore this email.
 
 Need Help?
-Contact us at support@tecbunnysolutions.com or call +91 94296 94995
+Contact us at support@tecbunny.com or call +91 96041 36010
 
 ---
 Tecbunny Solutions
@@ -508,8 +508,8 @@ This is an automated message. Please do not reply to this email.
             <div style="text-align: center; margin: 30px 0;">
                 <p><strong>Need Help Getting Started?</strong></p>
                 <p>Our team is here to help you every step of the way!</p>
-                <p>📧 <a href="mailto:support@tecbunnysolutions.com">support@tecbunnysolutions.com</a></p>
-                <p>📱 <a href="tel:+919429694995">+91 94296 94995</a></p>
+                <p>📧 <a href="mailto:support@tecbunny.com">support@tecbunny.com</a></p>
+                <p>📱 <a href="tel:+919604136010">+91 96041 36010</a></p>
             </div>
         </div>
     </body>
@@ -537,7 +537,7 @@ What's Next?
 🎯 Enjoy exclusive member benefits
 
 Need Help?
-Contact us at support@tecbunnysolutions.com or call +91 94296 94995
+Contact us at support@tecbunny.com or call +91 96041 36010
 
 ---
 Welcome aboard!
@@ -625,8 +625,8 @@ Tecbunny Solutions Team
             <div style="text-align: center; margin: 30px 0; padding: 20px; background-color: #f8f9fa; border-radius: 8px;">
                 <p><strong>Need Help?</strong></p>
                 <p>Contact our support team</p>
-                <p>📧 <a href="mailto:support@tecbunnysolutions.com">support@tecbunnysolutions.com</a></p>
-                <p>📱 <a href="tel:+919429694995">+91 94296 94995</a></p>
+                <p>📧 <a href="mailto:support@tecbunny.com">support@tecbunny.com</a></p>
+                <p>📱 <a href="tel:+919604136010">+91 96041 36010</a></p>
             </div>
         </div>
     </body>
@@ -657,7 +657,7 @@ What to do next:
 SECURITY NOTICE: If you didn't request a password reset, please ignore this email and consider securing your account.
 
 Need Help?
-Contact us at support@tecbunnysolutions.com or call +91 94296 94995
+Contact us at support@tecbunny.com or call +91 96041 36010
 
 ---
 Tecbunny Solutions Security Team

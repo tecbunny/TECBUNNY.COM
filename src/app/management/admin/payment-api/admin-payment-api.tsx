@@ -17,48 +17,20 @@ import { Textarea } from '../../../../components/ui/textarea';
 import { Switch } from '../../../../components/ui/switch';
 import { useToast } from '../../../../hooks/use-toast';
 import { usePaymentMethods } from '../../../../hooks/use-payment-methods';
+import { Alert, AlertDescription, AlertTitle } from '../../../../components/ui/alert';
+import { InfoIcon } from 'lucide-react';
 
 export default function PaymentApiPage() {
   const { toast } = useToast();
   const { paymentMethods, loading, updatePaymentMethod } = usePaymentMethods();
 
   const [formData, setFormData] = React.useState({
-    razorpay: {
-      enabled: false,
-      keyId: '',
-      secretKey: ''
-    },
-    stripe: {
-      enabled: false,
-      publishableKey: '',
-      secretKey: ''
-    },
-    phonepe: {
-      enabled: false,
-      merchantId: '',
-      saltKey: '',
-      saltIndex: ''
-    },
-    paytm: {
-      enabled: false,
-      merchantId: '',
-      merchantKey: '',
-      websiteName: '',
-      industryType: '',
-      channelId: '',
-      environment: 'staging'
-    },
     payu: {
       enabled: false,
       merchantKey: '',
       merchantSalt: '',
       merchantId: '',
       environment: 'test'
-    },
-    cashfree: {
-      enabled: false,
-      appId: '',
-      secretKey: ''
     },
     cod: {
       enabled: true,
@@ -75,12 +47,7 @@ export default function PaymentApiPage() {
   });
 
   const [savingStates, setSavingStates] = React.useState({
-    razorpay: false,
-    stripe: false,
-    phonepe: false,
-    paytm: false,
     payu: false,
-    cashfree: false,
     cod: false,
     upi: false
   });
@@ -89,42 +56,12 @@ export default function PaymentApiPage() {
   React.useEffect(() => {
     if (!loading && paymentMethods) {
       setFormData({
-        razorpay: {
-          enabled: paymentMethods.razorpay?.enabled || false,
-          keyId: paymentMethods.razorpay?.config?.keyId || '',
-          secretKey: paymentMethods.razorpay?.config?.secretKey || ''
-        },
-        stripe: {
-          enabled: paymentMethods.stripe?.enabled || false,
-          publishableKey: paymentMethods.stripe?.config?.publishableKey || '',
-          secretKey: paymentMethods.stripe?.config?.secretKey || ''
-        },
-        phonepe: {
-          enabled: paymentMethods.phonepe?.enabled || false,
-          merchantId: paymentMethods.phonepe?.config?.merchantId || '',
-          saltKey: paymentMethods.phonepe?.config?.saltKey || '',
-          saltIndex: paymentMethods.phonepe?.config?.saltIndex || ''
-        },
-        paytm: {
-          enabled: paymentMethods.paytm?.enabled || false,
-          merchantId: paymentMethods.paytm?.config?.merchantId || '',
-          merchantKey: paymentMethods.paytm?.config?.merchantKey || '',
-          websiteName: paymentMethods.paytm?.config?.websiteName || '',
-          industryType: paymentMethods.paytm?.config?.industryType || '',
-          channelId: paymentMethods.paytm?.config?.channelId || '',
-          environment: paymentMethods.paytm?.config?.environment || 'staging'
-        },
         payu: {
           enabled: paymentMethods.payu?.enabled || false,
           merchantKey: paymentMethods.payu?.config?.merchantKey || '',
           merchantSalt: paymentMethods.payu?.config?.merchantSalt || '',
           merchantId: paymentMethods.payu?.config?.merchantId || '',
           environment: paymentMethods.payu?.config?.environment || 'test'
-        },
-        cashfree: {
-          enabled: paymentMethods.cashfree?.enabled || false,
-          appId: paymentMethods.cashfree?.config?.appId || '',
-          secretKey: paymentMethods.cashfree?.config?.secretKey || ''
         },
         cod: {
           enabled: paymentMethods.cod?.enabled || true,
@@ -142,147 +79,6 @@ export default function PaymentApiPage() {
     }
   }, [loading, paymentMethods]);
 
-  const handleSaveRazorpay = async () => {
-    setSavingStates(prev => ({ ...prev, razorpay: true }));
-    try {
-      const result = await updatePaymentMethod('razorpay', {
-        enabled: formData.razorpay.enabled,
-        config: {
-          keyId: formData.razorpay.keyId,
-          secretKey: formData.razorpay.secretKey
-        }
-      });
-
-      if (result.success) {
-        toast({
-          title: 'Success',
-          description: 'Razorpay settings saved successfully'
-        });
-      } else {
-        toast({
-          title: 'Error',
-          description: result.error || 'Failed to save Razorpay settings',
-          variant: 'destructive'
-        });
-      }
-    } catch {
-      toast({
-        title: 'Error',
-        description: 'An unexpected error occurred',
-        variant: 'destructive'
-      });
-    } finally {
-      setSavingStates(prev => ({ ...prev, razorpay: false }));
-    }
-  };
-
-  const handleSaveStripe = async () => {
-    setSavingStates(prev => ({ ...prev, stripe: true }));
-    try {
-      const result = await updatePaymentMethod('stripe', {
-        enabled: formData.stripe.enabled,
-        config: {
-          publishableKey: formData.stripe.publishableKey,
-          secretKey: formData.stripe.secretKey
-        }
-      });
-
-      if (result.success) {
-        toast({
-          title: 'Success',
-          description: 'Stripe settings saved successfully'
-        });
-      } else {
-        toast({
-          title: 'Error',
-          description: result.error || 'Failed to save Stripe settings',
-          variant: 'destructive'
-        });
-      }
-    } catch {
-      toast({
-        title: 'Error',
-        description: 'An unexpected error occurred',
-        variant: 'destructive'
-      });
-    } finally {
-      setSavingStates(prev => ({ ...prev, stripe: false }));
-    }
-  };
-
-  const handleSavePhonePe = async () => {
-    setSavingStates(prev => ({ ...prev, phonepe: true }));
-    try {
-      const result = await updatePaymentMethod('phonepe', {
-        enabled: formData.phonepe.enabled,
-        config: {
-          merchantId: formData.phonepe.merchantId,
-          saltKey: formData.phonepe.saltKey,
-          saltIndex: formData.phonepe.saltIndex
-        }
-      });
-
-      if (result.success) {
-        toast({
-          title: 'Success',
-          description: 'PhonePe settings saved successfully'
-        });
-      } else {
-        toast({
-          title: 'Error',
-          description: result.error || 'Failed to save PhonePe settings',
-          variant: 'destructive'
-        });
-      }
-    } catch {
-      toast({
-        title: 'Error',
-        description: 'An unexpected error occurred',
-        variant: 'destructive'
-      });
-    } finally {
-      setSavingStates(prev => ({ ...prev, phonepe: false }));
-    }
-  };
-
-  const handleSavePaytm = async () => {
-    setSavingStates(prev => ({ ...prev, paytm: true }));
-    try {
-      const result = await updatePaymentMethod('paytm', {
-        enabled: formData.paytm.enabled,
-        config: {
-          merchantId: formData.paytm.merchantId,
-          merchantKey: formData.paytm.merchantKey,
-          websiteName: formData.paytm.websiteName,
-          industryType: formData.paytm.industryType,
-          channelId: formData.paytm.channelId,
-          environment: formData.paytm.environment
-        }
-      });
-
-      if (result.success) {
-        toast({
-          title: 'Success',
-          description: 'Paytm settings saved successfully'
-        });
-      } else {
-        toast({
-          title: 'Error',
-          description: result.error || 'Failed to save Paytm settings',
-          variant: 'destructive'
-        });
-      }
-    } catch {
-      toast({
-        title: 'Error',
-        description: 'An unexpected error occurred',
-        variant: 'destructive'
-      });
-    } finally {
-      setSavingStates(prev => ({ ...prev, paytm: false }));
-    }
-  };
-
   const handleSavePayu = async () => {
     setSavingStates(prev => ({ ...prev, payu: true }));
     try {
@@ -296,16 +92,16 @@ export default function PaymentApiPage() {
         }
       });
 
-      if (result.success) {
+      if (result && result.success) {
         toast({
           title: 'Success',
           description: 'PayU settings saved successfully'
         });
       } else {
         toast({
-          title: 'Error',
-          description: result.error || 'Failed to save PayU settings',
-          variant: 'destructive'
+          title: 'Notice',
+          description: 'Settings are managed via code. UI updates are disabled.',
+          variant: 'default'
         });
       }
     } catch {
@@ -316,40 +112,6 @@ export default function PaymentApiPage() {
       });
     } finally {
       setSavingStates(prev => ({ ...prev, payu: false }));
-    }
-  };
-
-  const handleSaveCashfree = async () => {
-    setSavingStates(prev => ({ ...prev, cashfree: true }));
-    try {
-      const result = await updatePaymentMethod('cashfree', {
-        enabled: formData.cashfree.enabled,
-        config: {
-          appId: formData.cashfree.appId,
-          secretKey: formData.cashfree.secretKey
-        }
-      });
-
-      if (result.success) {
-        toast({
-          title: 'Success',
-          description: 'Cashfree settings saved successfully'
-        });
-      } else {
-        toast({
-          title: 'Error',
-          description: result.error || 'Failed to save Cashfree settings',
-          variant: 'destructive'
-        });
-      }
-    } catch {
-      toast({
-        title: 'Error',
-        description: 'An unexpected error occurred',
-        variant: 'destructive'
-      });
-    } finally {
-      setSavingStates(prev => ({ ...prev, cashfree: false }));
     }
   };
 
@@ -365,16 +127,16 @@ export default function PaymentApiPage() {
         }
       });
 
-      if (result.success) {
+      if (result && result.success) {
         toast({
           title: 'Success',
           description: 'Cash on Delivery settings saved successfully'
         });
       } else {
         toast({
-          title: 'Error',
-          description: result.error || 'Failed to save COD settings',
-          variant: 'destructive'
+          title: 'Notice',
+          description: 'Settings are managed via code. UI updates are disabled.',
+          variant: 'default'
         });
       }
     } catch {
@@ -400,16 +162,16 @@ export default function PaymentApiPage() {
         }
       });
 
-      if (result.success) {
+      if (result && result.success) {
         toast({
           title: 'Success',
           description: 'UPI settings saved successfully'
         });
       } else {
         toast({
-          title: 'Error',
-          description: result.error || 'Failed to save UPI settings',
-          variant: 'destructive'
+          title: 'Notice',
+          description: 'Settings are managed via code. UI updates are disabled.',
+          variant: 'default'
         });
       }
     } catch {
@@ -441,183 +203,15 @@ export default function PaymentApiPage() {
           Connect and configure your payment gateways.
         </p>
       </div>
-      <Card>
-        <CardHeader>
-          <CardTitle>Razorpay</CardTitle>
-          <CardDescription>
-            Configure your Razorpay integration.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-            <div className="flex items-center justify-between rounded-lg border p-4">
-                <div className="space-y-0.5">
-                    <Label>Enable Razorpay</Label>
-                    <p className="text-xs text-muted-foreground">Allow customers to pay using Razorpay.</p>
-                </div>
-                <Switch 
-                  checked={formData.razorpay.enabled}
-                  onCheckedChange={(checked) => 
-                    setFormData(prev => ({ ...prev, razorpay: { ...prev.razorpay, enabled: checked } }))
-                  }
-                />
-            </div>
-            <div className="space-y-2">
-                <Label htmlFor="razorpay-key-id">Key ID</Label>
-                <Input 
-                  id="razorpay-key-id" 
-                  type="text" 
-                  value={formData.razorpay.keyId}
-                  onChange={(e) => 
-                    setFormData(prev => ({ ...prev, razorpay: { ...prev.razorpay, keyId: e.target.value } }))
-                  }
-                  placeholder="rzp_test_..." 
-                />
-            </div>
-            <div className="space-y-2">
-                <Label htmlFor="razorpay-key-secret">Key Secret</Label>
-                <Input 
-                  id="razorpay-key-secret" 
-                  type="password" 
-                  value={formData.razorpay.secretKey}
-                  onChange={(e) => 
-                    setFormData(prev => ({ ...prev, razorpay: { ...prev.razorpay, secretKey: e.target.value } }))
-                  }
-                  placeholder="Enter your secret key" 
-                />
-            </div>
-            <Button onClick={handleSaveRazorpay} disabled={savingStates.razorpay}>
-              {savingStates.razorpay ? 'Saving...' : 'Save Razorpay Settings'}
-            </Button>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle>Stripe</CardTitle>
-           <CardDescription>
-            Configure your Stripe integration.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-           <div className="flex items-center justify-between rounded-lg border p-4">
-                <div className="space-y-0.5">
-                    <Label>Enable Stripe</Label>
-                     <p className="text-xs text-muted-foreground">Allow customers to pay using Stripe.</p>
-                </div>
-                <Switch 
-                  checked={formData.stripe.enabled}
-                  onCheckedChange={(checked) => 
-                    setFormData(prev => ({
-                      ...prev,
-                      stripe: { ...prev.stripe, enabled: checked }
-                    }))
-                  }
-                />
-            </div>
-             <div className="space-y-2">
-                <Label htmlFor="stripe-pk">Publishable Key</Label>
-                <Input 
-                  id="stripe-pk" 
-                  placeholder="pk_test_..."
-                  value={formData.stripe.publishableKey}
-                  onChange={(e) => 
-                    setFormData(prev => ({
-                      ...prev,
-                      stripe: { ...prev.stripe, publishableKey: e.target.value }
-                    }))
-                  }
-                />
-            </div>
-             <div className="space-y-2">
-                <Label htmlFor="stripe-sk">Secret Key</Label>
-                <Input 
-                  id="stripe-sk" 
-                  type="password" 
-                  placeholder="sk_test_..."
-                  value={formData.stripe.secretKey}
-                  onChange={(e) => 
-                    setFormData(prev => ({
-                      ...prev,
-                      stripe: { ...prev.stripe, secretKey: e.target.value }
-                    }))
-                  }
-                />
-            </div>
-            <Button onClick={handleSaveStripe} disabled={savingStates.stripe}>
-              {savingStates.stripe ? 'Saving...' : 'Save Stripe Settings'}
-            </Button>
-        </CardContent>
-      </Card>
-       <Card>
-        <CardHeader>
-          <CardTitle>PhonePe</CardTitle>
-           <CardDescription>
-            Configure your PhonePe integration.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-           <div className="flex items-center justify-between rounded-lg border p-4">
-                <div className="space-y-0.5">
-                    <Label>Enable PhonePe</Label>
-                     <p className="text-xs text-muted-foreground">Allow customers to pay using PhonePe.</p>
-                </div>
-                <Switch 
-                  checked={formData.phonepe.enabled}
-                  onCheckedChange={(checked) => 
-                    setFormData(prev => ({
-                      ...prev,
-                      phonepe: { ...prev.phonepe, enabled: checked }
-                    }))
-                  }
-                />
-            </div>
-             <div className="space-y-2">
-                <Label htmlFor="phonepe-merchant-id">Merchant ID</Label>
-                <Input 
-                  id="phonepe-merchant-id" 
-                  placeholder="e.g., PGTESTPAYUAT"
-                  value={formData.phonepe.merchantId}
-                  onChange={(e) => 
-                    setFormData(prev => ({
-                      ...prev,
-                      phonepe: { ...prev.phonepe, merchantId: e.target.value }
-                    }))
-                  }
-                />
-            </div>
-             <div className="space-y-2">
-                <Label htmlFor="phonepe-salt-key">Salt Key</Label>
-                <Input 
-                  id="phonepe-salt-key" 
-                  type="password" 
-                  placeholder="e.g., 099eb0cd-029e-4b..."
-                  value={formData.phonepe.saltKey}
-                  onChange={(e) => 
-                    setFormData(prev => ({
-                      ...prev,
-                      phonepe: { ...prev.phonepe, saltKey: e.target.value }
-                    }))
-                  }
-                />
-            </div>
-             <div className="space-y-2">
-                <Label htmlFor="phonepe-salt-index">Salt Index</Label>
-                <Input 
-                  id="phonepe-salt-index" 
-                  placeholder="e.g., 1"
-                  value={formData.phonepe.saltIndex}
-                  onChange={(e) => 
-                    setFormData(prev => ({
-                      ...prev,
-                      phonepe: { ...prev.phonepe, saltIndex: e.target.value }
-                    }))
-                  }
-                />
-            </div>
-            <Button onClick={handleSavePhonePe} disabled={savingStates.phonepe}>
-              {savingStates.phonepe ? 'Saving...' : 'Save PhonePe Settings'}
-            </Button>
-        </CardContent>
-      </Card>
+
+      <Alert>
+        <InfoIcon className="h-4 w-4" />
+        <AlertTitle>Configuration Mode</AlertTitle>
+        <AlertDescription>
+          Payment settings are currently managed via code/environment variables. Changes made here will not persist.
+        </AlertDescription>
+      </Alert>
+
       <Card>
         <CardHeader>
           <CardTitle>PayU</CardTitle>
@@ -707,182 +301,6 @@ export default function PaymentApiPage() {
           <Button onClick={handleSavePayu} disabled={savingStates.payu}>
             {savingStates.payu ? 'Saving...' : 'Save PayU Settings'}
           </Button>
-        </CardContent>
-      </Card>
-       <Card>
-        <CardHeader>
-          <CardTitle>Paytm</CardTitle>
-           <CardDescription>
-            Configure your Paytm integration for Indian payment processing.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-           <div className="flex items-center justify-between rounded-lg border p-4">
-                <div className="space-y-0.5">
-                    <Label>Enable Paytm</Label>
-                     <p className="text-xs text-muted-foreground">Allow customers to pay using Paytm.</p>
-                </div>
-                <Switch 
-                  checked={formData.paytm.enabled}
-                  onCheckedChange={(checked) => 
-                    setFormData(prev => ({
-                      ...prev,
-                      paytm: { ...prev.paytm, enabled: checked }
-                    }))
-                  }
-                />
-            </div>
-             <div className="space-y-2">
-                <Label htmlFor="paytm-merchant-id">Merchant ID</Label>
-                <Input 
-                  id="paytm-merchant-id" 
-                  placeholder="e.g., PAYTM12345678901234"
-                  value={formData.paytm.merchantId}
-                  onChange={(e) => 
-                    setFormData(prev => ({
-                      ...prev,
-                      paytm: { ...prev.paytm, merchantId: e.target.value }
-                    }))
-                  }
-                />
-            </div>
-             <div className="space-y-2">
-                <Label htmlFor="paytm-merchant-key">Merchant Key</Label>
-                <Input 
-                  id="paytm-merchant-key" 
-                  type="password" 
-                  placeholder="Enter your merchant key"
-                  value={formData.paytm.merchantKey}
-                  onChange={(e) => 
-                    setFormData(prev => ({
-                      ...prev,
-                      paytm: { ...prev.paytm, merchantKey: e.target.value }
-                    }))
-                  }
-                />
-            </div>
-             <div className="space-y-2">
-                <Label htmlFor="paytm-website-name">Website Name</Label>
-                <Input 
-                  id="paytm-website-name" 
-                  placeholder="e.g., WEBSTAGING (staging) or DEFAULT (production)"
-                  value={formData.paytm.websiteName}
-                  onChange={(e) => 
-                    setFormData(prev => ({
-                      ...prev,
-                      paytm: { ...prev.paytm, websiteName: e.target.value }
-                    }))
-                  }
-                />
-            </div>
-             <div className="space-y-2">
-                <Label htmlFor="paytm-industry-type">Industry Type</Label>
-                <Input 
-                  id="paytm-industry-type" 
-                  placeholder="e.g., Retail"
-                  value={formData.paytm.industryType}
-                  onChange={(e) => 
-                    setFormData(prev => ({
-                      ...prev,
-                      paytm: { ...prev.paytm, industryType: e.target.value }
-                    }))
-                  }
-                />
-            </div>
-             <div className="space-y-2">
-                <Label htmlFor="paytm-channel-id">Channel ID</Label>
-                <Input 
-                  id="paytm-channel-id" 
-                  placeholder="e.g., WEB"
-                  value={formData.paytm.channelId}
-                  onChange={(e) => 
-                    setFormData(prev => ({
-                      ...prev,
-                      paytm: { ...prev.paytm, channelId: e.target.value }
-                    }))
-                  }
-                />
-            </div>
-             <div className="space-y-2">
-                <Label htmlFor="paytm-environment">Environment</Label>
-                <select
-                  id="paytm-environment"
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  value={formData.paytm.environment}
-                  onChange={(e) => 
-                    setFormData(prev => ({
-                      ...prev,
-                      paytm: { ...prev.paytm, environment: e.target.value }
-                    }))
-                  }
-                >
-                  <option value="staging">Staging (Test)</option>
-                  <option value="production">Production (Live)</option>
-                </select>
-                <p className="text-xs text-muted-foreground">
-                  Use Staging for testing, Production for live transactions
-                </p>
-            </div>
-            <Button onClick={handleSavePaytm} disabled={savingStates.paytm}>
-              {savingStates.paytm ? 'Saving...' : 'Save Paytm Settings'}
-            </Button>
-        </CardContent>
-      </Card>
-       <Card>
-        <CardHeader>
-          <CardTitle>Cashfree</CardTitle>
-           <CardDescription>
-            Configure your Cashfree integration.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-           <div className="flex items-center justify-between rounded-lg border p-4">
-                <div className="space-y-0.5">
-                    <Label>Enable Cashfree</Label>
-                     <p className="text-xs text-muted-foreground">Allow customers to pay using Cashfree.</p>
-                </div>
-                <Switch 
-                  checked={formData.cashfree.enabled}
-                  onCheckedChange={(checked) => 
-                    setFormData(prev => ({
-                      ...prev,
-                      cashfree: { ...prev.cashfree, enabled: checked }
-                    }))
-                  }
-                />
-            </div>
-             <div className="space-y-2">
-                <Label htmlFor="cashfree-app-id">App ID</Label>
-                <Input 
-                  id="cashfree-app-id" 
-                  placeholder="e.g., 1234567890abcdef"
-                  value={formData.cashfree.appId}
-                  onChange={(e) => 
-                    setFormData(prev => ({
-                      ...prev,
-                      cashfree: { ...prev.cashfree, appId: e.target.value }
-                    }))
-                  }
-                />
-            </div>
-             <div className="space-y-2">
-                <Label htmlFor="cashfree-secret-key">Secret Key</Label>
-                <Input 
-                  id="cashfree-secret-key" 
-                  type="password" 
-                  placeholder="e.g., cf_sk_123..."
-                  value={formData.cashfree.secretKey}
-                  onChange={(e) => 
-                    setFormData(prev => ({
-                      ...prev,
-                      cashfree: { ...prev.cashfree, secretKey: e.target.value }
-                    }))
-                  }
-                />
-            </div>
-            <Button onClick={handleSaveCashfree} disabled={savingStates.cashfree}>
-              {savingStates.cashfree ? 'Saving...' : 'Save Cashfree Settings'}
-            </Button>
         </CardContent>
       </Card>
 

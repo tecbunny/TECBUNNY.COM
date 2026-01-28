@@ -154,7 +154,7 @@ ${orderData.paymentUrl ? `💳 Complete payment: ${orderData.paymentUrl}` :
 
 ⚡ Limited time offer - confirm within 24 hours to avoid cancellation.
 
-Need help? Reply to this message or call +91 9429694995
+Need help? Reply to this message or call +91 96041 36010
 
 Complete your TecBunny purchase today! 🚀
     `.trim();

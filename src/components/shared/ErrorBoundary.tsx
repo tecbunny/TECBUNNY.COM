@@ -62,23 +62,23 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
 
       // Default error UI
       return (
-        <Card className="max-w-md mx-auto mt-8">
+        <Card className="max-w-md mx-auto mt-8 border-white/10 bg-slate-950/60 text-slate-100">
           <CardHeader className="text-center">
             <div className="flex justify-center mb-4">
-              <div className="p-3 bg-red-100 rounded-full">
-                <AlertTriangle className="h-6 w-6 text-red-600" />
+              <div className="p-3 bg-red-500/10 rounded-full">
+                <AlertTriangle className="h-6 w-6 text-red-300" />
               </div>
             </div>
-            <CardTitle className="text-xl text-red-600">Something went wrong</CardTitle>
-            <CardDescription>
+            <CardTitle className="text-xl text-red-300">Something went wrong</CardTitle>
+            <CardDescription className="text-slate-300">
               An unexpected error occurred. Please try again or contact support if the problem persists.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {process.env.NODE_ENV === 'development' && this.state.error && (
-              <div className="p-3 bg-gray-100 rounded border">
-                <p className="text-sm font-medium text-gray-800 mb-2">Error Details:</p>
-                <pre className="text-xs text-gray-600 overflow-auto max-h-32">
+              <div className="p-3 bg-white/5 rounded border border-white/10">
+                <p className="text-sm font-medium text-slate-200 mb-2">Error Details:</p>
+                <pre className="text-xs text-slate-400 overflow-auto max-h-32">
                   {this.state.error.message}
                   {this.state.errorInfo?.componentStack && (
                     `\n\nComponent Stack:${  this.state.errorInfo.componentStack}`
@@ -102,21 +102,21 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
 // Communication-specific error fallback
 export function CommunicationErrorFallback({ error, retry }: { error: Error; retry: () => void }) {
   return (
-    <Card className="max-w-md mx-auto mt-8">
+    <Card className="max-w-md mx-auto mt-8 border-white/10 bg-slate-950/60 text-slate-100">
       <CardHeader className="text-center">
         <div className="flex justify-center mb-4">
-          <div className="p-3 bg-orange-100 rounded-full">
-            <AlertTriangle className="h-6 w-6 text-orange-600" />
+          <div className="p-3 bg-orange-500/10 rounded-full">
+            <AlertTriangle className="h-6 w-6 text-orange-300" />
           </div>
         </div>
-        <CardTitle className="text-xl text-orange-600">Communication Error</CardTitle>
-        <CardDescription>
+        <CardTitle className="text-xl text-orange-300">Communication Error</CardTitle>
+        <CardDescription className="text-slate-300">
           There was an issue with the communication system. This could be due to network connectivity or service availability.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="p-3 bg-orange-50 rounded border border-orange-200">
-          <p className="text-sm text-orange-800">
+        <div className="p-3 bg-orange-500/10 rounded border border-orange-500/20">
+          <p className="text-sm text-orange-200">
             <strong>Possible causes:</strong>
           </p>
           <ul className="text-sm text-orange-700 mt-1 ml-4 list-disc">

@@ -147,8 +147,8 @@ export const useOTP = (options: UseOTPOptions): [OTPState, OTPActions] => {
   const verifyOTP = useCallback(async (code?: string): Promise<boolean> => {
     const otpCode = code || state.code;
     
-    if (!otpCode || otpCode.length !== 6) {
-      const errorMessage = 'Please enter a valid 6-digit code';
+    if (!otpCode || otpCode.length !== 4) {
+      const errorMessage = 'Please enter a valid 4-digit code';
       setState(prev => ({ ...prev, error: errorMessage }));
       options.onError?.(errorMessage);
       return false;

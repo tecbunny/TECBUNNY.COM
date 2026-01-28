@@ -4,10 +4,19 @@ import { createClient } from '@supabase/supabase-js';
 import { logger } from '../../../lib/logger';
 
 function getSupabaseClient() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   // Use service role if available, else anon for read operations (GET)
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!supabaseUrl || !supabaseServiceKey) {
+    return null;
+  }
   return createClient(supabaseUrl, supabaseServiceKey);
+}
+
+function isFetchFailure(err: any) {
+  if (!err) return false;
+  const message = String(err.message || '').toLowerCase();
+  return message.includes('fetch failed');
 }
 
 function isUndefinedColumn(err: any) {
@@ -196,10 +205,19 @@ export async function GET(request: NextRequest) {
     if (!pageKey) {
       return NextResponse.json({ error: 'Page key is required' }, { status: 400 });
     }
+
+    if (!supabase) {
+      logger.warn('page_content_supabase_not_configured', { pageKey });
+      return NextResponse.json({ success: true, data: null, warning: 'Supabase not configured' });
+    }
     const { data: pageContent, error } = await getPageByKey(pageKey, supabase);
 
     if (error) {
-  logger.error('page_content_fetch_failed', { error });
+      if (isFetchFailure(error)) {
+        logger.warn('page_content_fetch_failed', { error, pageKey });
+        return NextResponse.json({ success: true, data: null, warning: 'Content service unavailable' });
+      }
+      logger.error('page_content_fetch_failed', { error, pageKey });
       return NextResponse.json({ error: 'Failed to fetch page content' }, { status: 500 });
     }
 
@@ -216,6 +234,9 @@ export async function GET(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const supabase = getSupabaseClient();
+    if (!supabase) {
+      return NextResponse.json({ error: 'Supabase not configured' }, { status: 503 });
+    }
     const body = await request.json();
     let payload: ContentPayload;
     try {
@@ -250,6 +271,9 @@ export async function PUT(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const supabase = getSupabaseClient();
+    if (!supabase) {
+      return NextResponse.json({ error: 'Supabase not configured' }, { status: 503 });
+    }
     const body = await request.json();
 
     if (body?.action === 'list_all') {
@@ -320,6 +344,9 @@ export async function POST(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     const supabase = getSupabaseClient();
+    if (!supabase) {
+      return NextResponse.json({ error: 'Supabase not configured' }, { status: 503 });
+    }
     const url = new URL(request.url);
     let pageKey = url.searchParams.get('key') || url.searchParams.get('pageKey');
 

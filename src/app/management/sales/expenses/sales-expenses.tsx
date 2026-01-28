@@ -33,7 +33,8 @@ const expenseSchema = z.object({
   description: z.string().min(5, { message: "Description must be at least 5 characters." }),
 });
 
-type ExpenseFormValues = z.infer<typeof expenseSchema>;
+type ExpenseFormInput = z.input<typeof expenseSchema>;
+type ExpenseFormValues = z.output<typeof expenseSchema>;
 
 export default function ExpenseEntryPage() {
     const { toast } = useToast();
@@ -61,7 +62,7 @@ export default function ExpenseEntryPage() {
         fetchExpenses();
     }, [fetchExpenses]);
 
-    const form = useForm<ExpenseFormValues>({
+    const form = useForm<ExpenseFormInput, any, ExpenseFormValues>({
         resolver: zodResolver(expenseSchema),
         defaultValues: {
             date: new Date().toISOString().split('T')[0],
@@ -173,7 +174,15 @@ export default function ExpenseEntryPage() {
                                 <FormItem>
                                     <FormLabel>Amount (₹)</FormLabel>
                                     <FormControl>
-                                        <Input type="number" placeholder="e.g., 500.00" {...field} />
+                                        <Input
+                                            type="number"
+                                            placeholder="e.g., 500.00"
+                                            value={typeof field.value === 'number' || typeof field.value === 'string' ? field.value : ''}
+                                            onChange={(event) => field.onChange(event.target.value)}
+                                            onBlur={field.onBlur}
+                                            name={field.name}
+                                            ref={field.ref}
+                                        />
                                     </FormControl>
                                     <FormMessage />
                                 </FormItem>

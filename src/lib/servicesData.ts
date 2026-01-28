@@ -89,6 +89,23 @@ export const servicesData: Service[] = [
     updated_at: now
   },
   {
+    id: 'web-development',
+    icon: 'Code',
+    title: 'Web Development Services',
+    description: 'Professional website building with WhatsApp integration, admin dashboards, and custom designs.',
+    features: [
+      'Responsive Mobile-First Design',
+      'SEO Optimization & Analytics',
+      'Secure & Reliable Hosting Setup'
+    ],
+    badge: 'Featured',
+    is_active: true,
+    category: 'Web Services',
+    display_order: 6,
+    created_at: now,
+    updated_at: now
+  },
+  {
     id: 'computer-upgrade',
     icon: 'Award',
     title: 'Computer Upgrade Services',

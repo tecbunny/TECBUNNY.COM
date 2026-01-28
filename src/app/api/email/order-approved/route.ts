@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { emailHelpers } from '../../../../lib/email';
+import { sendWhatsAppNotification } from '../../../../lib/whatsapp-service';
+import { logger } from '../../../../lib/logger';
 import { rateLimit } from '../../../../lib/rate-limit';
 
 const LIMIT = 5;
@@ -8,20 +9,16 @@ const WINDOW_MS = 10 * 60 * 1000;
 
 export async function POST(request: NextRequest) {
   try {
-    const { to, orderId, orderTotal, orderType, customerName } = await request.json();
+    const { orderId, orderTotal, orderType, customerName } = await request.json();
+    
+    // Send to TEAM numbers defined in ENV
+    const teamNumbers = [
+      process.env.TEAM_WHATSAPP_1,
+      process.env.TEAM_WHATSAPP_2
+    ].filter(Boolean) as string[];
 
-    if (!to || (typeof to !== 'string' && !Array.isArray(to))) {
-      return NextResponse.json({ error: 'Invalid recipient email' }, { status: 400 });
-    }
-
-    const recipients = Array.isArray(to) ? to : [to];
-    const validRecipients = recipients
-      .filter((email) => typeof email === 'string')
-      .map((email) => email.trim())
-      .filter((email) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email));
-
-    if (validRecipients.length === 0) {
-      return NextResponse.json({ error: 'No valid recipient emails provided' }, { status: 400 });
+    if (teamNumbers.length === 0) {
+       return NextResponse.json({ success: true, message: 'No team numbers configured' });
     }
 
     if (!orderId || typeof orderId !== 'string') {
@@ -30,30 +27,28 @@ export async function POST(request: NextRequest) {
 
     const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
     const rateKey = `order-approved:${ip}`;
-    if (!rateLimit(rateKey, 'email_order_approved', { limit: LIMIT, windowMs: WINDOW_MS })) {
+    if (!rateLimit(rateKey, 'whatsapp_order_approved', { limit: LIMIT, windowMs: WINDOW_MS })) {
       return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429 });
     }
 
-    const normalizedOrderType = typeof orderType === 'string'
-      ? (['pickup', 'delivery'].includes(orderType.toLowerCase())
-          ? (orderType.toLowerCase() as 'pickup' | 'delivery')
-          : undefined)
-      : undefined;
+    const message = `
+✅ Order Approved - Admin Notification
 
-    const success = await emailHelpers.notifyAdminOrderApproved(validRecipients, {
-      orderId,
-      orderTotal: typeof orderTotal === 'number' ? orderTotal : undefined,
-      orderType: normalizedOrderType,
-      userName: typeof customerName === 'string' && customerName.trim() ? customerName.trim() : undefined,
-    });
+🆔 Order: ${orderId}
+👤 Customer: ${customerName || 'N/A'}
+💰 Total: ${orderTotal}
+🚚 Type: ${orderType || 'Standard'}
 
-    if (!success) {
-      return NextResponse.json({ error: 'Failed to send approval email' }, { status: 500 });
+The order has been approved and is ready for processing.
+    `.trim();
+
+    for (const number of teamNumbers) {
+       await sendWhatsAppNotification(number, message);
     }
 
-    return NextResponse.json({ success: true, message: 'Approval email sent' });
-  } catch (error) {
-    console.error('Order approval email API error:', error);
+    return NextResponse.json({ success: true, message: 'Approval WhatsApp sent' });
+  } catch (error: any) {
+    logger.error('Order approval WhatsApp API error:', { error: error.message });
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

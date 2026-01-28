@@ -7,7 +7,7 @@ import { toast } from 'react-hot-toast';
 
 import { logger } from '../../../lib/logger';
 
-type OTPChannel = 'email' | 'sms' | 'whatsapp';
+type OTPChannel = 'whatsapp';
 type ChannelOption = {
   id: OTPChannel;
   label: string;
@@ -21,7 +21,7 @@ export function OTPVerificationContent() {
   const [email, setEmail] = useState('');
   const [mobile, setMobile] = useState('');
   const [otpId, setOtpId] = useState<string | null>(null);
-  const [channel, setChannel] = useState<OTPChannel>('email');
+  const [channel, setChannel] = useState<OTPChannel>('whatsapp');
   const [channelOptions, setChannelOptions] = useState<ChannelOption[]>([]);
   const [fallbackAvailable, setFallbackAvailable] = useState(false);
   const [resendCount, setResendCount] = useState(0);
@@ -34,21 +34,12 @@ export function OTPVerificationContent() {
 
   const channelDisplayName = useMemo(() => {
     return {
-      email: 'Email',
-      sms: 'OTP on Call',
       whatsapp: 'WhatsApp'
     } as const;
   }, []);
 
-  const verificationPrompt = (targetChannel?: OTPChannel | null) => {
-    switch (targetChannel) {
-      case 'sms':
-        return 'Answer the automated call to hear your code.';
-      case 'whatsapp':
-        return 'Enter the code we sent via WhatsApp.';
-      default:
-        return 'Enter the code we emailed to you.';
-    }
+  const verificationPrompt = () => {
+    return 'Enter the code we sent via WhatsApp.';
   };
 
   useEffect(() => {
@@ -91,19 +82,7 @@ export function OTPVerificationContent() {
     setMobile(sanitizedMobile);
     setFallbackAvailable(Boolean(storedData?.fallbackAvailable));
 
-    const preferredChannel = ((): OTPChannel => {
-      const candidate = (urlChannel || storedData?.channel) as OTPChannel | undefined;
-      if (candidate) {
-        if (candidate === 'sms' || candidate === 'whatsapp') {
-          return hasMobile ? candidate : 'email';
-        }
-        if (candidate === 'email') return resolvedEmail ? 'email' : hasMobile ? 'sms' : 'email';
-      }
-      if (hasMobile) {
-        return 'sms';
-      }
-      return 'email';
-    })();
+    const preferredChannel = 'whatsapp';
 
     const candidateOtpId = [urlOtpId, storedData?.otpId]
       .map(value => (typeof value === 'string' ? value.trim() : ''))
@@ -120,18 +99,6 @@ export function OTPVerificationContent() {
     setOtpId(candidateOtpId);
 
     const options: ChannelOption[] = [
-      {
-        id: 'email',
-        label: 'Email',
-        helper: resolvedEmail ? `Send to ${resolvedEmail}` : 'Email delivery unavailable',
-        enabled: Boolean(resolvedEmail)
-      },
-      {
-        id: 'sms',
-        label: 'OTP on Call',
-        helper: hasMobile ? `Receive a call at +${sanitizedMobile}` : 'Add a mobile number to enable OTP on Call',
-        enabled: hasMobile
-      },
       {
         id: 'whatsapp',
         label: 'WhatsApp',
@@ -172,17 +139,9 @@ export function OTPVerificationContent() {
     });
   }, [isLoading, otp, verified]);
 
-  const handleChannelSelection = (nextChannel: OTPChannel) => {
+  const handleChannelSelection = () => {
     if (verified) return;
-    if (nextChannel === channel) return;
-    const option = channelOptions.find(opt => opt.id === nextChannel);
-    if (!option || !option.enabled) {
-      toast.error('This verification method is not available.');
-      return;
-    }
-    setChannel(nextChannel);
-    setOtp('');
-    toast(`Switched to ${channelDisplayName[nextChannel]} verification. Use Resend to get a new code.`);
+    toast('WhatsApp is the only verification method for signup.');
   };
 
   const handleVerifyOTP = async (e: React.FormEvent) => {
@@ -203,9 +162,9 @@ export function OTPVerificationContent() {
       return;
     }
 
-    if (!email) {
-      logger.warn('No email found');
-      toast.error('Email not found. Please start signup process again.');
+    if (!email && !mobile) {
+      logger.warn('No contact info found');
+      toast.error('Mobile number not found. Please start signup process again.');
       router.push('/');
       return;
     }
@@ -232,7 +191,7 @@ export function OTPVerificationContent() {
     headers['x-bypass-captcha'] = '1';
 
     const requestBody = {
-      email,
+      email: email || undefined,
       mobile: storedMobile || mobile || undefined,
       otp,
       otpId,
@@ -396,8 +355,8 @@ export function OTPVerificationContent() {
   const handleResendOTP = async () => {
     logger.debug('Resend requested', { email, otpId, channel, resendCount, resendCooldown });
 
-    if (!email) {
-      toast.error('Email not found. Please restart the signup process.');
+    if (!mobile) {
+      toast.error('Mobile number not found. Please restart the signup process.');
       return;
     }
 
@@ -408,7 +367,7 @@ export function OTPVerificationContent() {
 
     const selectedChannel = channelOptions.find(option => option.id === channel);
     if (!selectedChannel || !selectedChannel.enabled) {
-      toast.error('Selected channel is unavailable. Please choose a different option.');
+      toast.error('WhatsApp verification is unavailable. Please try again later.');
       return;
     }
 
@@ -441,9 +400,7 @@ export function OTPVerificationContent() {
         setLastResendTime(Date.now());
         setOtp(''); // Clear current OTP input
 
-        const resolvedChannel = (result?.channel && ['email', 'sms', 'whatsapp'].includes(result.channel))
-          ? (result.channel as OTPChannel)
-          : channel;
+        const resolvedChannel = 'whatsapp';
 
         if (resolvedChannel !== channel) {
           setChannel(resolvedChannel);
@@ -478,10 +435,10 @@ export function OTPVerificationContent() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen flex items-center justify-center bg-slate-950 py-12 px-4 sm:px-6 lg:px-8 text-slate-100">
       <div className="max-w-md w-full space-y-8">
         {verified && (
-          <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-md flex items-center space-x-3">
+          <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-200 px-4 py-3 rounded-md flex items-center space-x-3">
             <span className="text-2xl">✅</span>
             <div>
               <div className="font-medium">Verification complete</div>
@@ -490,41 +447,35 @@ export function OTPVerificationContent() {
           </div>
         )}
         <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+          <h2 className="mt-6 text-center text-3xl font-extrabold text-white">
             Verify Your Account
           </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
-            {verificationPrompt(channel)}
-            {channel === 'email' && email && (
-              <span className="font-medium text-gray-900 block">{email}</span>
-            )}
-            {channel !== 'email' && mobile && (
-              <span className="font-medium text-gray-900 block">+{mobile}</span>
+          <p className="mt-2 text-center text-sm text-slate-300">
+            {verificationPrompt()}
+            {mobile && (
+              <span className="font-medium text-white block">+{mobile}</span>
             )}
           </p>
           {fallbackAvailable && (
-            <p className="mt-1 text-center text-xs text-gray-500">
-              Having trouble? Try a different verification method below.
+            <p className="mt-1 text-center text-xs text-slate-400">
+              Having trouble? Request a new WhatsApp code below.
             </p>
           )}
         </div>
         <form className="mt-8 space-y-6" onSubmit={handleVerifyOTP}>
           <div className="space-y-2">
-            <span className="text-sm font-medium text-gray-700">Verification method</span>
+            <span className="text-sm font-medium text-slate-300">Verification method</span>
             <div className="grid gap-2">
               {channelOptions.map(option => (
-                <button
+                <div
                   key={option.id}
-                  type="button"
-                  disabled={!option.enabled || verified}
-                  onClick={() => handleChannelSelection(option.id)}
-                  className={`flex w-full flex-col rounded-lg border p-3 text-left transition ${
-                    channel === option.id ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 bg-white'
-                  } ${!option.enabled ? 'opacity-60 cursor-not-allowed' : 'hover:border-blue-300 hover:bg-blue-50'}`}
+                  className={`flex w-full flex-col rounded-lg border p-3 text-left ${
+                    channel === option.id ? 'border-cyan-400/60 bg-cyan-500/10 text-cyan-200' : 'border-white/10 bg-white/5 text-slate-200'
+                  } ${!option.enabled ? 'opacity-60' : ''}`}
                 >
                   <span className="text-sm font-medium">{option.label}</span>
-                  <span className="text-xs text-gray-500">{option.helper}</span>
-                </button>
+                  <span className="text-xs text-slate-400">{option.helper}</span>
+                </div>
               ))}
             </div>
           </div>
@@ -540,7 +491,7 @@ export function OTPVerificationContent() {
               pattern="[0-9]*"
               maxLength={4}
               required
-              className="appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm text-center text-lg tracking-widest"
+              className="appearance-none relative block w-full px-3 py-2 border border-white/10 bg-white/5 placeholder:text-slate-500 text-slate-100 rounded-md focus:outline-none focus:ring-cyan-400 focus:border-cyan-400 focus:z-10 sm:text-sm text-center text-lg tracking-widest"
               placeholder="0000"
               value={otp}
               onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 4))}
@@ -593,7 +544,7 @@ export function OTPVerificationContent() {
               )}
             </button>
             {resendCount > 0 && resendCooldown === 0 && (
-              <div className="text-xs text-gray-500 mt-1">
+              <div className="text-xs text-slate-400 mt-1">
                 {resendCount}/3 resend attempts used
               </div>
             )}
@@ -602,7 +553,7 @@ export function OTPVerificationContent() {
             <button
               type="button"
               onClick={() => router.push('/')}
-              className="text-sm text-gray-600 hover:text-gray-500"
+              className="text-sm text-slate-300 hover:text-white"
             >
               ← Back to Home
             </button>

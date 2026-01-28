@@ -2,19 +2,21 @@
 import { createClient } from '@supabase/supabase-js';
 
 import { logger } from './logger';
+import { isSupabaseServiceConfigured, requireSupabaseServiceEnv } from './supabase/env';
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 'service-role-placeholder';
+let supabase: ReturnType<typeof createClient> | null = null;
 
-export const isSupabaseStorageConfigured = Boolean(
-  process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY
-);
-
-// Create admin client for file uploads (uses placeholders when not configured)
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+function getSupabaseClient(operation: string) {
+  ensureSupabaseConfigured(operation);
+  if (!supabase) {
+    const { url, serviceKey } = requireSupabaseServiceEnv();
+    supabase = createClient(url, serviceKey);
+  }
+  return supabase;
+}
 
 function ensureSupabaseConfigured(operation: string) {
-  if (!isSupabaseStorageConfigured) {
+  if (!isSupabaseServiceConfigured) {
     logger.warn('supabase_storage_not_configured', { operation });
     throw new Error('Supabase storage is not configured');
   }
@@ -75,7 +77,9 @@ export async function uploadToSupabase(
     }
 
     // Upload to Supabase Storage
-    const { error } = await supabase.storage
+    const client = getSupabaseClient('upload');
+
+    const { error } = await client.storage
       .from('images')
       .upload(filePath, fileBuffer, {
         contentType,
@@ -88,7 +92,7 @@ export async function uploadToSupabase(
     }
 
     // Get public URL
-    const { data: publicUrlData } = supabase.storage
+    const { data: publicUrlData } = client.storage
       .from('images')
       .getPublicUrl(filePath);
 
@@ -135,7 +139,9 @@ export async function deleteFromSupabase(filePath: string): Promise<boolean> {
   try {
     ensureSupabaseConfigured('delete');
 
-    const { error } = await supabase.storage
+    const client = getSupabaseClient('delete');
+
+    const { error } = await client.storage
       .from('images')
       .remove([filePath]);
 
@@ -158,7 +164,9 @@ export async function getSupabaseSignedUrl(filePath: string, expiresIn: number =
   try {
     ensureSupabaseConfigured('signed_url');
 
-    const { data, error } = await supabase.storage
+    const client = getSupabaseClient('signed_url');
+
+    const { data, error } = await client.storage
       .from('images')
       .createSignedUrl(filePath, expiresIn);
 

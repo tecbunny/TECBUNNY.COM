@@ -444,40 +444,40 @@ export default function WalkInOrderManagement() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'Completed': return 'bg-green-100 text-green-800';
-      case 'Processing': return 'bg-blue-100 text-blue-800';
-      case 'Cancelled': return 'bg-red-100 text-red-800';
-      case 'Payment Confirmed': return 'bg-green-100 text-green-800';
-      case 'Awaiting Payment': return 'bg-yellow-100 text-yellow-800';
-      case 'Payment Failed': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case 'Completed': return 'bg-emerald-500/15 text-emerald-200 border border-emerald-500/30';
+      case 'Processing': return 'bg-blue-500/15 text-blue-200 border border-blue-500/30';
+      case 'Cancelled': return 'bg-red-500/15 text-red-200 border border-red-500/30';
+      case 'Payment Confirmed': return 'bg-emerald-500/15 text-emerald-200 border border-emerald-500/30';
+      case 'Awaiting Payment': return 'bg-amber-500/15 text-amber-200 border border-amber-500/30';
+      case 'Payment Failed': return 'bg-red-500/15 text-red-200 border border-red-500/30';
+      default: return 'bg-slate-700/40 text-slate-200 border border-white/10';
     }
   };
 
   const getPaymentStatusColor = (status: 'Paid' | 'Pending' | 'Failed') => {
     switch (status) {
-      case 'Paid': return 'bg-green-100 text-green-800';
-      case 'Pending': return 'bg-yellow-100 text-yellow-800';
-      case 'Failed': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case 'Paid': return 'bg-emerald-500/15 text-emerald-200 border border-emerald-500/30';
+      case 'Pending': return 'bg-amber-500/15 text-amber-200 border border-amber-500/30';
+      case 'Failed': return 'bg-red-500/15 text-red-200 border border-red-500/30';
+      default: return 'bg-slate-700/40 text-slate-200 border border-white/10';
     }
   };
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-3xl font-bold">Walk-in Order Management</h1>
-        <p className="text-gray-600">Manage in-store customer orders and transactions</p>
+        <h1 className="text-3xl font-bold text-white">Walk-in Order Management</h1>
+        <p className="text-slate-300">Manage in-store customer orders and transactions</p>
       </div>
 
       {/* Tab Navigation */}
-      <div className="flex space-x-1 bg-gray-100 p-1 rounded-lg mb-6">
+      <div className="flex space-x-1 bg-white/5 border border-white/10 p-1 rounded-lg mb-6">
         <button
           onClick={() => setActiveTab('create')}
           className={`px-4 py-2 rounded-md font-medium transition-colors ${
             activeTab === 'create'
-              ? 'bg-white text-blue-600 shadow-sm'
-              : 'text-gray-600 hover:text-gray-900'
+              ? 'bg-white/10 text-cyan-200 shadow-sm'
+              : 'text-slate-400 hover:text-white'
           }`}
         >
           <ShoppingCart className="inline-block w-4 h-4 mr-2" />
@@ -487,8 +487,8 @@ export default function WalkInOrderManagement() {
           onClick={() => setActiveTab('orders')}
           className={`px-4 py-2 rounded-md font-medium transition-colors ${
             activeTab === 'orders'
-              ? 'bg-white text-blue-600 shadow-sm'
-              : 'text-gray-600 hover:text-gray-900'
+              ? 'bg-white/10 text-cyan-200 shadow-sm'
+              : 'text-slate-400 hover:text-white'
           }`}
         >
           <Package className="inline-block w-4 h-4 mr-2" />
@@ -498,8 +498,8 @@ export default function WalkInOrderManagement() {
           onClick={() => setActiveTab('stats')}
           className={`px-4 py-2 rounded-md font-medium transition-colors ${
             activeTab === 'stats'
-              ? 'bg-white text-blue-600 shadow-sm'
-              : 'text-gray-600 hover:text-gray-900'
+              ? 'bg-white/10 text-cyan-200 shadow-sm'
+              : 'text-slate-400 hover:text-white'
           }`}
         >
           <IndianRupee className="inline-block w-4 h-4 mr-2" />
@@ -516,7 +516,7 @@ export default function WalkInOrderManagement() {
               <CardHeader>
                 <CardTitle>Select Products</CardTitle>
                 <div className="relative">
-                  <Search className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
+                  <Search className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
                   <Input
                     placeholder="Search products..."
                     value={searchTerm}
@@ -575,15 +575,15 @@ export default function WalkInOrderManagement() {
                     className="pl-10"
                   />
                   {searchedCustomers.length > 0 && (
-                    <div className="absolute top-full left-0 right-0 bg-white border rounded-md shadow-lg z-10 mt-1">
+                    <div className="absolute top-full left-0 right-0 bg-slate-900 border border-white/10 rounded-md shadow-lg z-10 mt-1">
                       {searchedCustomers.map((customer) => (
                         <div
                           key={customer.id}
-                          className="p-3 hover:bg-gray-50 cursor-pointer border-b last:border-b-0"
+                          className="p-3 hover:bg-white/5 cursor-pointer border-b border-white/10 last:border-b-0 text-slate-200"
                           onClick={() => selectCustomer(customer)}
                         >
                           <div className="font-medium">{customer.first_name} {customer.last_name}</div>
-                          <div className="text-sm text-gray-500">{customer.phone} • {customer.customer_category}</div>
+                          <div className="text-sm text-slate-400">{customer.phone} • {customer.customer_category}</div>
                         </div>
                       ))}
                     </div>
@@ -592,10 +592,10 @@ export default function WalkInOrderManagement() {
               </CardHeader>
               <CardContent className="space-y-4">
                 {selectedCustomer && (
-                  <div className="p-3 bg-blue-50 rounded-lg">
+                  <div className="p-3 bg-cyan-500/10 border border-cyan-500/20 rounded-lg">
                     <div className="flex items-center gap-2 mb-2">
-                      <User className="w-4 h-4 text-blue-600" />
-                      <span className="font-medium">Selected Customer</span>
+                      <User className="w-4 h-4 text-cyan-300" />
+                      <span className="font-medium text-slate-100">Selected Customer</span>
                       <Badge variant="outline">{selectedCustomer.customer_category}</Badge>
                     </div>
                     <div className="text-sm space-y-1">

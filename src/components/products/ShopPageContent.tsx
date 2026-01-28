@@ -3,36 +3,19 @@
 
 import * as React from 'react';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
+import Link from 'next/link';
 
 import { 
-  Filter, 
-  X, 
-  Search,
-  Grid3X3,
-  List,
-  SlidersHorizontal
+  Search
 } from 'lucide-react';
 
 import { logger } from '../../lib/logger';
 import { getProductDisplayImage } from '../../lib/image-utils';
 
-import { ProductCard } from '../../components/products/ProductCard';
-import { ProductSort } from '../../components/products/ProductSort';
 import type { Product, AutoOffer } from '../../lib/types';
 import { Skeleton } from '../../components/ui/skeleton';
-import { createClient } from '../../lib/supabase/client';
-import { Button } from '../../components/ui/button';
-import { Badge } from '../../components/ui/badge';
-import { Card, CardContent } from '../../components/ui/card';
-import { 
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '../../components/ui/select';
 import { Input } from '../../components/ui/input';
-import { Slider } from '../../components/ui/slider';
+import { useCart } from '../../lib/hooks';
 
 const DEFAULT_CUSTOMER_CATEGORY = 'Normal';
 
@@ -199,15 +182,11 @@ export function ShopPageContent() {
   const [filteredProducts, setFilteredProducts] = React.useState<Product[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [categories, setCategories] = React.useState<string[]>([]);
-  const [brands, setBrands] = React.useState<string[]>([]);
   const [priceRange, setPriceRange] = React.useState<[number, number]>([0, 100000]);
   const [maxPrice, setMaxPrice] = React.useState(100000);
-  const [showFilters, setShowFilters] = React.useState(false);
-  const [viewMode, setViewMode] = React.useState<'grid' | 'list'>('grid');
   const [localSearchQuery, setLocalSearchQuery] = React.useState(searchQuery);
+  const { addToCart } = useCart();
   
-  const supabase = createClient();
-
   // Update URL parameters
   const updateUrlParams = React.useCallback((params: Record<string, string>) => {
     const currentParams = new URLSearchParams(searchParams.toString());
@@ -232,35 +211,24 @@ export function ShopPageContent() {
       
       try {
         logger.info('ShopPage: Fetching products...');
-        
-        // Fetch products with prioritized products first, then by creation date
-        // Added pagination limit to prevent DoS/Crash on large inventory
-        const { data, error } = await supabase
-          .from('products')
-          .select('*')
-          .order('prioritized', { ascending: false, nullsFirst: false })
-          .order('prioritized_at', { ascending: false, nullsFirst: false })
-          .order('created_at', { ascending: false })
-          .range(0, 49);
-        
-        logger.info('ShopPage: Products fetched', { 
-          count: data?.length || 0, 
-          error: error?.message,
-          hasData: !!data 
-        });
-        
-        if (error) {
-          logger.warn("Unable to fetch products:", { error: error.message });
-          setProducts([]);
-          setLoading(false); // Ensure we stop loading even on error
-          return; // Exit early
+        const response = await fetch('/api/products?status=active&limit=200', { cache: 'no-store' });
+        if (!response.ok) {
+          const body = await response.text().catch(() => '');
+          throw new Error(`Products fetch failed (${response.status}): ${body}`);
         }
-        
+
+        const payload = await response.json();
+        const data = Array.isArray(payload?.data) ? payload.data : Array.isArray(payload) ? payload : [];
+
+        logger.info('ShopPage: Products fetched', {
+          count: data?.length || 0,
+          hasData: !!data
+        });
+
         if (!data || data.length === 0) {
-          logger.warn("No products found in database");
+          logger.warn('No products found in database');
           setProducts([]);
           setCategories([]);
-          setBrands([]);
           setLoading(false);
           return;
         }
@@ -334,15 +302,9 @@ export function ShopPageContent() {
         setProducts(enrichedProducts);
         
         // Extract unique categories and brands
-        const uniqueCategories = [...new Set(enrichedProducts.map(p => p.category).filter(Boolean))];
-        const uniqueBrands = [...new Set(
-          enrichedProducts
-            .map(p => p.brand)
-            .filter((b): b is string => typeof b === 'string' && b.length > 0)
-        )];
-        
+        const uniqueCategories = [...new Set(enrichedProducts.map(p => p.category).filter(Boolean))]
+          .sort((a, b) => a.localeCompare(b));
         setCategories(uniqueCategories);
-        setBrands(uniqueBrands);
         
         // Set price range based on actual product prices
         if (enrichedProducts.length === 0) {
@@ -366,7 +328,7 @@ export function ShopPageContent() {
     };
 
     fetchProducts();
-  }, [supabase, refresh]);
+  }, [refresh]);
 
   // Filter and sort products
   React.useEffect(() => {
@@ -435,281 +397,168 @@ export function ShopPageContent() {
     setLocalSearchQuery('');
   };
 
-  const activeFiltersCount = [categoryFilter, brandFilter, searchQuery].filter(Boolean).length;
+  const hasActiveCategory = Boolean(categoryFilter);
+  const resolvedResultsLabel = loading ? 'Loading...' : `${filteredProducts.length} items`;
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      {/* Header with Search and View Controls */}
-      <div className="mb-6">
-        <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between mb-6">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-primary mb-2">
-              {searchQuery ? `Search Results for "${searchQuery}"` : 'All Products'}
-            </h1>
-            <p className="text-muted-foreground">
-              {loading ? 'Loading...' : `${filteredProducts.length} products found`}
-            </p>
-          </div>
-          
-          <div className="flex flex-col sm:flex-row gap-4 w-full lg:w-auto">
-            {/* Search Bar */}
-            <form onSubmit={handleSearch} className="flex gap-2 min-w-0 flex-1 lg:flex-initial lg:w-80">
-              <Input
-                type="text"
-                placeholder="Search products..."
-                value={localSearchQuery}
-                onChange={(e) => setLocalSearchQuery(e.target.value)}
-                className="flex-1"
-              />
-              <Button type="submit" size="icon" variant="outline">
-                <Search className="h-4 w-4" />
-              </Button>
-            </form>
-            
-            {/* View Mode Toggle */}
-            <div className="flex gap-2">
-              <Button
-                variant={viewMode === 'grid' ? 'default' : 'outline'}
-                size="icon"
-                onClick={() => setViewMode('grid')}
-              >
-                <Grid3X3 className="h-4 w-4" />
-              </Button>
-              <Button
-                variant={viewMode === 'list' ? 'default' : 'outline'}
-                size="icon"
-                onClick={() => setViewMode('list')}
-              >
-                <List className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        </div>
+    <section className="relative overflow-hidden bg-slate-950 text-slate-200">
+      <div className="pointer-events-none absolute inset-0 bg-[url('/noise.svg')] opacity-20" />
+      <div className="pointer-events-none absolute right-0 top-0 h-[500px] w-[500px] rounded-full bg-cyan-500/10 blur-[120px]" />
 
-        {/* Filters and Sort Bar */}
-        <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between p-4 bg-muted/50 rounded-lg">
-          <div className="flex flex-wrap gap-4 items-center w-full lg:w-auto">
-            {/* Filter Toggle */}
-            <Button
-              variant="outline"
-              onClick={() => setShowFilters(!showFilters)}
-              className="flex items-center gap-2"
-            >
-              <SlidersHorizontal className="h-4 w-4" />
-              Filters
-              {activeFiltersCount > 0 && (
-                <Badge variant="destructive" className="ml-1 px-1.5 py-0.5 text-xs">
-                  {activeFiltersCount}
-                </Badge>
-              )}
-            </Button>
-
-            {/* Quick Filters */}
-            <div className="flex flex-wrap gap-2">
-              {/* Category Filter */}
-              <Select
-                value={categoryFilter || 'all'}
-                onValueChange={(value) => updateUrlParams({ category: value === 'all' ? '' : value })}
-              >
-                <SelectTrigger className="w-40">
-                  <SelectValue placeholder="Category" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Categories</SelectItem>
-                  {categories.map((category) => (
-                    <SelectItem key={category} value={category}>
-                      {category}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              {/* Brand Filter */}
-              <Select
-                value={brandFilter || 'all'}
-                onValueChange={(value) => updateUrlParams({ brand: value === 'all' ? '' : value })}
-              >
-                <SelectTrigger className="w-40">
-                  <SelectValue placeholder="Brand" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Brands</SelectItem>
-                  {brands.map((brand) => (
-                    <SelectItem key={brand} value={brand}>
-                      {brand}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              {/* Clear Filters */}
-              {activeFiltersCount > 0 && (
-                <Button variant="ghost" onClick={clearFilters} className="flex items-center gap-2">
-                  <X className="h-4 w-4" />
-                  Clear Filters
-                </Button>
-              )}
-            </div>
-          </div>
-
-          {/* Sort */}
-          <ProductSort />
-        </div>
-
-        {/* Advanced Filters Panel */}
-        {showFilters && (
-          <Card className="mt-4">
-            <CardContent className="p-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {/* Price Range */}
-                <div>
-                  <label className="text-sm font-medium mb-3 block">
-                    Price Range: ₹{priceRange[0].toLocaleString()} - ₹{priceRange[1].toLocaleString()}
-                  </label>
-                  <Slider
-                    value={priceRange}
-                    onValueChange={(value) => setPriceRange(value as [number, number])}
-                    max={maxPrice}
-                    min={0}
-                    step={1000}
-                    className="w-full"
-                  />
-                  <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                    <span>₹0</span>
-                    <span>₹{maxPrice.toLocaleString()}</span>
-                  </div>
-                </div>
-
-                {/* Category Checkboxes */}
-                <div>
-                  <label className="text-sm font-medium mb-3 block">Categories</label>
-                  <div className="space-y-2 max-h-32 overflow-y-auto">
-                    {categories.map((category) => (
-                      <div key={category} className="flex items-center space-x-2">
-                        <input
-                          type="radio"
-                          id={`category-${category}`}
-                          name="category"
-                          checked={categoryFilter === category}
-                          onChange={() => updateUrlParams({ category })}
-                          className="rounded"
-                        />
-                        <label htmlFor={`category-${category}`} className="text-sm">
-                          {category}
-                        </label>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Brand Checkboxes */}
-                <div>
-                  <label className="text-sm font-medium mb-3 block">Brands</label>
-                  <div className="space-y-2 max-h-32 overflow-y-auto">
-                    {brands.map((brand) => (
-                      <div key={brand} className="flex items-center space-x-2">
-                        <input
-                          type="radio"
-                          id={`brand-${brand}`}
-                          name="brand"
-                          checked={brandFilter === brand}
-                          onChange={() => updateUrlParams({ brand })}
-                          className="rounded"
-                        />
-                        <label htmlFor={`brand-${brand}`} className="text-sm">
-                          {brand}
-                        </label>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+      <div className="relative mx-auto max-w-7xl px-4 pb-16 pt-0 sm:px-6 lg:px-8 sm:pt-0">
+        <div className="flex flex-col gap-10">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/30 bg-cyan-500/5 px-3 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-cyan-300">
+                Catalog
               </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Active Filters Display */}
-        {(categoryFilter || brandFilter || searchQuery) && (
-          <div className="flex flex-wrap gap-2 mt-4">
-            <span className="text-sm font-medium">Active filters:</span>
-            {searchQuery && (
-              <Badge variant="secondary" className="flex items-center gap-1">
-                Search: {searchQuery}
-                <button 
-                  onClick={() => updateUrlParams({ q: '' })}
-                  className="ml-1 hover:bg-muted rounded-full p-0.5"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </Badge>
-            )}
-            {categoryFilter && (
-              <Badge variant="secondary" className="flex items-center gap-1">
-                Category: {categoryFilter}
-                <button 
-                  onClick={() => updateUrlParams({ category: '' })}
-                  className="ml-1 hover:bg-muted rounded-full p-0.5"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </Badge>
-            )}
-            {brandFilter && (
-              <Badge variant="secondary" className="flex items-center gap-1">
-                Brand: {brandFilter}
-                <button 
-                  onClick={() => updateUrlParams({ brand: '' })}
-                  className="ml-1 hover:bg-muted rounded-full p-0.5"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </Badge>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Products Grid/List */}
-      {loading ? (
-        <div className={`grid gap-6 ${viewMode === 'grid' 
-          ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4' 
-          : 'grid-cols-1'
-        }`}>
-          {Array.from({ length: 8 }).map((_, i) => (
-            <div key={i} className="space-y-2">
-              <Skeleton className="h-64 w-full" />
-              <Skeleton className="h-6 w-3/4" />
-              <Skeleton className="h-6 w-1/4" />
+              <h1 className="mt-4 text-4xl font-semibold text-white sm:text-5xl">
+                Hardware <span className="bg-gradient-to-r from-cyan-300 via-blue-400 to-violet-400 bg-clip-text text-transparent">Inventory</span>
+              </h1>
+              <p className="mt-3 max-w-xl text-sm text-slate-400 sm:text-base">
+                {searchQuery ? `Results for "${searchQuery}"` : 'Explore verified equipment across every deployment size.'}
+              </p>
             </div>
-          ))}
-        </div>
-      ) : filteredProducts.length > 0 ? (
-        <div className={`grid gap-6 ${viewMode === 'grid' 
-          ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4' 
-          : 'grid-cols-1'
-        }`}>
-          {filteredProducts.map((product: Product) => (
-            <ProductCard 
-              key={product.id} 
-              product={product} 
-              viewMode={viewMode}
-            />
-          ))}
-        </div>
-      ) : (
-        <div className="text-center py-20 border-2 border-dashed rounded-lg">
-          <Filter className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-          <h2 className="text-2xl font-semibold mb-2">No Products Found</h2>
-          <p className="text-muted-foreground mb-4">
-            Try adjusting your search or filters to find what you're looking for.
-          </p>
-          {activeFiltersCount > 0 && (
-            <Button onClick={clearFilters} variant="outline">
-              Clear All Filters
-            </Button>
+
+            <form onSubmit={handleSearch} className="w-full max-w-md">
+              <div className="relative">
+                <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                <Input
+                  type="text"
+                  placeholder="Search products..."
+                  value={localSearchQuery}
+                  onChange={(e) => setLocalSearchQuery(e.target.value)}
+                  className="h-12 w-full rounded-xl border border-white/10 bg-white/5 pl-11 pr-4 text-sm text-white placeholder:text-slate-500 focus:border-cyan-400/50 focus:bg-white/10"
+                />
+              </div>
+              <p className="mt-2 text-xs text-slate-500">{resolvedResultsLabel}</p>
+            </form>
+          </div>
+
+          {categories.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => updateUrlParams({ category: '' })}
+                className={`rounded-lg border px-4 py-2 text-xs font-semibold uppercase tracking-wider transition-colors ${
+                  hasActiveCategory
+                    ? 'border-white/10 text-slate-400 hover:border-cyan-400/40 hover:text-white'
+                    : 'border-cyan-400/40 bg-cyan-500/10 text-cyan-300'
+                }`}
+              >
+                All Items
+              </button>
+              {categories.map((category) => (
+                <button
+                  key={category}
+                  type="button"
+                  onClick={() => updateUrlParams({ category })}
+                  className={`rounded-lg border px-4 py-2 text-xs font-semibold uppercase tracking-wider transition-colors ${
+                    categoryFilter === category
+                      ? 'border-cyan-400/40 bg-cyan-500/10 text-cyan-300'
+                      : 'border-white/10 text-slate-400 hover:border-cyan-400/40 hover:text-white'
+                  }`}
+                >
+                  {category}
+                </button>
+              ))}
+              {categoryFilter && (
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  className="rounded-lg border border-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-slate-400 transition-colors hover:border-cyan-400/40 hover:text-white"
+                >
+                  Clear Filters
+                </button>
+              )}
+            </div>
           )}
         </div>
-      )}
-    </div>
+
+        <div className="mt-12">
+          {loading ? (
+            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <div key={i} className="space-y-3 rounded-2xl border border-white/5 bg-white/5 p-4">
+                  <Skeleton className="h-48 w-full rounded-xl" />
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-4 w-1/2" />
+                </div>
+              ))}
+            </div>
+          ) : filteredProducts.length > 0 ? (
+            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+              {filteredProducts.map((product) => {
+                const displayName = product.title || product.name || 'Product';
+                const imageUrl = getProductDisplayImage(product, {
+                  fallbackText: displayName,
+                  fallbackSize: '400x400',
+                });
+                const basePrice = typeof product.price === 'number' ? product.price : Number(product.price) || 0;
+                const offerPrice = typeof product.offer_price === 'number' && product.offer_price > 0 && product.offer_price < basePrice
+                  ? product.offer_price
+                  : null;
+
+                return (
+                  <div
+                    key={product.id}
+                    className="group flex h-full flex-col rounded-2xl border border-white/5 bg-slate-900/60 p-4 transition-transform duration-300 hover:-translate-y-1 hover:border-cyan-400/30"
+                  >
+                    <Link href={`/products/${product.id}`} className="block">
+                      <div className="relative mb-4 flex h-48 items-center justify-center overflow-hidden rounded-xl bg-black/40 p-3">
+                        {imageUrl ? (
+                          <img
+                            src={imageUrl}
+                            alt={displayName}
+                            className="h-full w-full object-contain opacity-90 transition-transform duration-500 group-hover:scale-105"
+                            loading="lazy"
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-sm text-slate-500">
+                            No Image
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-start justify-between gap-3">
+                        <h3 className="text-base font-semibold text-white">{displayName}</h3>
+                      </div>
+                      <p className="mt-1 text-xs text-slate-400">
+                        {product.brand ? `${product.brand} • ` : ''}
+                        {product.category || 'General'}
+                      </p>
+                    </Link>
+
+                    <div className="mt-auto flex items-center justify-between pt-4">
+                      <div className="flex flex-col">
+                        <span className="text-lg font-semibold text-cyan-300">₹{(offerPrice ?? basePrice).toLocaleString()}</span>
+                        {offerPrice && (
+                          <span className="text-xs text-slate-500 line-through">₹{basePrice.toLocaleString()}</span>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          addToCart(product);
+                        }}
+                        className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-slate-200 transition-colors hover:border-cyan-400/40 hover:bg-cyan-500/10"
+                        aria-label={`Add ${displayName} to cart`}
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-white/10 bg-white/5 p-10 text-center text-slate-400">
+              No products matched your search.
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
   );
 }

@@ -1,5 +1,7 @@
-import { NextRequest } from 'next/server';
 import dns from 'dns/promises';
+
+import { NextRequest } from 'next/server';
+
 import { apiSuccess, apiError } from '../../../lib/errors';
 import { uploadProductImage, uploadToSupabase } from '../../../lib/supabase-storage';
 import { uploadHeroBanner, isS3Configured } from '../../../lib/s3-storage';

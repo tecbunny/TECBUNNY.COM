@@ -3,6 +3,37 @@
  */
 
 /**
+ * Normalize image URLs, including Supabase Storage paths.
+ */
+export function normalizeImageUrl(url: any): string | null {
+  if (typeof url !== 'string') return null;
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+
+  if (
+    trimmed.startsWith('http') ||
+    trimmed.startsWith('/') ||
+    trimmed.startsWith('./') ||
+    trimmed.startsWith('../')
+  ) {
+    return trimmed;
+  }
+
+  const looksLikeFile = /\.(png|jpe?g|webp|gif|avif|bmp|svg)$/i.test(trimmed) || trimmed.includes('/');
+  if (!looksLikeFile) {
+    return null;
+  }
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (supabaseUrl) {
+    const safePath = trimmed.replace(/^\/+/, '');
+    return `${supabaseUrl.replace(/\/$/, '')}/storage/v1/object/public/images/${safePath}`;
+  }
+
+  return trimmed;
+}
+
+/**
  * Checks if an image URL is valid and not a placeholder/empty string
  */
 export function isValidImageUrl(url: any): url is string {
@@ -34,26 +65,27 @@ export function isValidImageUrl(url: any): url is string {
     return false;
   }
   
-  // Check for valid URL patterns
-  return trimmed.startsWith('http') || 
-         trimmed.startsWith('/') || 
-         trimmed.startsWith('./') || 
-         trimmed.startsWith('../');
+    // Check for valid URL patterns
+    return trimmed.startsWith('http') ||
+      trimmed.startsWith('/') ||
+      trimmed.startsWith('./') ||
+      trimmed.startsWith('../');
 }
 
 /**
  * Gets the first valid image from an array of images
  */
-export function getFirstValidImage(imageArray: any[]): string {
-  if (!Array.isArray(imageArray)) return '/images/placeholder.png';
+export function getFirstValidImage(imageArray: any[]): string | null {
+  if (!Array.isArray(imageArray)) return null;
   
   for (const img of imageArray) {
     const url = typeof img === 'string' ? img : img?.url || '';
-    if (isValidImageUrl(url)) {
-      return url;
+    const normalized = normalizeImageUrl(url);
+    if (normalized && isValidImageUrl(normalized)) {
+      return normalized;
     }
   }
-  return '/images/placeholder.png';
+  return null;
 }
 
 /**
@@ -64,6 +96,8 @@ export function filterValidImages(imageArray: any[]): string[] {
   
   return imageArray
     .map(img => typeof img === 'string' ? img : img?.url || '')
+    .map(normalizeImageUrl)
+    .filter((value): value is string => Boolean(value))
     .filter(isValidImageUrl);
 }
 
@@ -74,23 +108,38 @@ export function getProductDisplayImage(product: any, _options: {
   fallbackText?: string;
   fallbackSize?: string;
 } = {}): string | null {
-  
-  // Check main image field first
-  if (isValidImageUrl(product?.image)) {
-    return product.image;
+  const primaryCandidates = [
+    product?.image,
+    product?.image_url,
+    product?.imageUrl,
+    product?.primary_image,
+  ];
+
+  for (const candidate of primaryCandidates) {
+    const normalized = normalizeImageUrl(candidate);
+    if (normalized && isValidImageUrl(normalized)) {
+      return normalized;
+    }
+  }
+
+  if (typeof product?.image_urls === 'string') {
+    const firstFromCsv = product.image_urls
+      .split(',')
+      .map((value: string) => value.trim())
+      .find(Boolean);
+    const normalized = normalizeImageUrl(firstFromCsv);
+    if (normalized && isValidImageUrl(normalized)) {
+      return normalized;
+    }
   }
   
   // Try to get first valid image from images array
   const firstFromImages = getFirstValidImage(product?.images || []);
-  if (firstFromImages) {
-    return firstFromImages;
-  }
+  if (firstFromImages) return firstFromImages;
   
   // Try to get first valid image from additional_images array
   const firstFromAdditional = getFirstValidImage(product?.additional_images || []);
-  if (firstFromAdditional) {
-    return firstFromAdditional;
-  }
+  if (firstFromAdditional) return firstFromAdditional;
   
   // Return null if no valid images found - let the component handle the fallback
   return null;

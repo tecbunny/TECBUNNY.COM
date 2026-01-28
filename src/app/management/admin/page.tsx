@@ -3,9 +3,8 @@
 
 import * as React from 'react';
 
-import { Users, Package, ShoppingCart, BarChart, TrendingUp, TrendingDown, RefreshCw } from 'lucide-react';
+import { TrendingUp, TrendingDown, RefreshCw } from 'lucide-react';
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../../components/ui/card';
 import { Button } from '../../../components/ui/button';
 
 interface DashboardStats {
@@ -50,11 +49,18 @@ export default function AdminDashboard() {
                 }
             });
             
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+            let data: any = null;
+            try {
+                data = await response.json();
+            } catch {
+                data = null;
             }
-            
-            const data = await response.json();
+
+            if (!response.ok) {
+                const rawMessage = data?.error || `HTTP error! status: ${response.status}`;
+                const message = typeof rawMessage === 'string' ? rawMessage : JSON.stringify(rawMessage);
+                throw new Error(message || `HTTP error! status: ${response.status}`);
+            }
             
             if (data.success && data.stats) {
                 setStats(data.stats);
@@ -63,7 +69,17 @@ export default function AdminDashboard() {
             }
         } catch (error) {
             console.error('Error fetching dashboard stats:', error);
-            setError(error instanceof Error ? error.message : 'Failed to load dashboard');
+            if (error instanceof Error) {
+                setError(error.message);
+            } else if (typeof error === 'string') {
+                setError(error);
+            } else {
+                try {
+                    setError(JSON.stringify(error));
+                } catch {
+                    setError('Failed to load dashboard');
+                }
+            }
         } finally {
             setLoading(false);
         }
@@ -78,140 +94,215 @@ export default function AdminDashboard() {
         ? ((stats.monthlyOrders - stats.lastMonthOrders) / stats.lastMonthOrders * 100).toFixed(1)
         : '0';
     const isGrowthPositive = parseFloat(orderGrowth) >= 0;
+
+    const pendingCount = stats.recentActivity.filter((activity) => activity.status === 'pending').length;
+    const completedCount = stats.recentActivity.filter((activity) => activity.status === 'completed').length;
+
+    const statusBadgeClass = (status: string) => {
+        switch (status) {
+            case 'completed':
+                return 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/30';
+            case 'pending':
+                return 'bg-amber-500/10 text-amber-300 border border-amber-500/30';
+            case 'cancelled':
+                return 'bg-red-500/10 text-red-300 border border-red-500/30';
+            default:
+                return 'bg-white/5 text-slate-300 border border-white/10';
+        }
+    };
     return (
-        <div className="space-y-8">
-             <div className="flex justify-between items-center">
-                <div>
-                    <h1 className="text-3xl font-bold">Admin Dashboard</h1>
-                    <p className="text-muted-foreground">A complete overview of your store's performance and operations.</p>
-                </div>
-                <Button 
-                    onClick={fetchStats} 
-                    disabled={loading}
-                    variant="outline"
-                    className="gap-2"
-                >
-                    <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-                    Refresh
-                </Button>
-            </div>
-            
-            {error && (
-                <Card className="border-red-200 bg-red-50">
-                    <CardContent className="pt-6">
-                        <p className="text-red-600">Error loading dashboard: {error}</p>
-                        <button 
-                            onClick={() => window.location.reload()} 
-                            className="mt-2 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
-                        >
-                            Retry
-                        </button>
-                    </CardContent>
-                </Card>
-            )}
-            
-            {loading ? (
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                    {[1, 2, 3, 4].map((i) => (
-                        <Card key={i} className="animate-pulse">
-                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <div className="h-4 bg-gray-300 rounded w-24"></div>
-                                <div className="h-4 w-4 bg-gray-300 rounded"></div>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="h-8 bg-gray-300 rounded w-16 mb-2"></div>
-                                <div className="h-3 bg-gray-300 rounded w-32"></div>
-                            </CardContent>
-                        </Card>
-                    ))}
-                </div>
-            ) : (
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Total Users</CardTitle>
-                            <Users className="h-4 w-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold">{stats.totalUsers}</div>
-                            <p className="text-xs text-muted-foreground">Registered users</p>
-                        </CardContent>
-                    </Card>
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Total Products</CardTitle>
-                            <Package className="h-4 w-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold">{stats.totalProducts}</div>
-                             <p className="text-xs text-muted-foreground">Products in catalog</p>
-                        </CardContent>
-                    </Card>
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Total Orders</CardTitle>
-                            <ShoppingCart className="h-4 w-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold">{stats.totalOrders}</div>
-                             <p className="text-xs text-muted-foreground flex items-center gap-1">
-                                {stats.monthlyOrders} this month
-                                {isGrowthPositive ? (
-                                    <TrendingUp className="h-3 w-3 text-green-600" />
-                                ) : (
-                                    <TrendingDown className="h-3 w-3 text-red-600" />
-                                )}
-                                <span className={isGrowthPositive ? 'text-green-600' : 'text-red-600'}>
-                                    {orderGrowth}%
-                                </span>
-                            </p>
-                        </CardContent>
-                    </Card>
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Monthly Revenue</CardTitle>
-                            <BarChart className="h-4 w-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold">₹{stats.monthlyRevenue.toLocaleString('en-IN')}</div>
-                            <p className="text-xs text-muted-foreground">This month's total</p>
-                        </CardContent>
-                    </Card>
-                </div>
-            )}
-            
-            <Card>
-                <CardHeader>
-                    <CardTitle>Recent Activity</CardTitle>
-                     <CardDescription>Latest orders and system activities</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    {stats.recentActivity.length > 0 ? (
-                        <div className="space-y-3">
-                            {stats.recentActivity.map((activity) => (
-                                <div key={activity.id} className="flex items-center justify-between p-3 rounded-lg bg-gray-50">
-                                    <div>
-                                        <p className="font-medium text-sm">{activity.description}</p>
-                                        <p className="text-xs text-muted-foreground">
-                                            {new Date(activity.date).toLocaleDateString()} at {new Date(activity.date).toLocaleTimeString()}
-                                        </p>
-                                    </div>
-                                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                        activity.status === 'completed' ? 'bg-green-100 text-green-800' :
-                                        activity.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                                        activity.status === 'cancelled' ? 'bg-red-100 text-red-800' :
-                                        'bg-gray-100 text-gray-800'
-                                    }`}>
-                                        {activity.status}
-                                    </span>
-                                </div>
-                            ))}
+        <div className="min-h-screen bg-[#030712] text-slate-200">
+            <style jsx global>{`
+                ::-webkit-scrollbar { width: 6px; height: 6px; }
+                ::-webkit-scrollbar-track { background: #030712; }
+                ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 3px; }
+                ::-webkit-scrollbar-thumb:hover { background: #06b6d4; }
+            `}</style>
+
+            <div className="relative">
+                <div className="absolute inset-0 bg-[url('/noise.svg')] opacity-5 pointer-events-none" />
+
+                <div className="relative z-10 mx-auto max-w-7xl px-6 py-8 lg:px-10 space-y-8">
+                    <div className="flex flex-wrap items-center justify-between gap-4">
+                        <div>
+                            <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-500">Admin Command</p>
+                            <h1 className="text-3xl font-bold text-white">Admin Dashboard</h1>
+                            <p className="text-slate-400">A complete overview of your store's performance and operations.</p>
                         </div>
-                    ) : (
-                        <p className="text-muted-foreground">No recent activity to display.</p>
+                        <Button
+                            onClick={fetchStats}
+                            disabled={loading}
+                            variant="outline"
+                            className="gap-2 border-white/10 bg-white/5 text-slate-200 hover:bg-white/10"
+                        >
+                            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                            Refresh
+                        </Button>
+                    </div>
+
+                    {error && (
+                        <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-6">
+                            <p className="text-red-200">Error loading dashboard: {error}</p>
+                            <button
+                                onClick={() => window.location.reload()}
+                                className="mt-3 px-4 py-2 rounded-lg bg-red-500 text-white text-sm hover:bg-red-600"
+                            >
+                                Retry
+                            </button>
+                        </div>
                     )}
-                </CardContent>
-            </Card>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        {loading ? (
+                            [1, 2, 3, 4].map((i) => (
+                                <div key={i} className="rounded-2xl border border-white/5 bg-slate-900/60 p-6 animate-pulse">
+                                    <div className="h-4 w-24 rounded bg-white/10 mb-4"></div>
+                                    <div className="h-8 w-20 rounded bg-white/10 mb-2"></div>
+                                    <div className="h-3 w-28 rounded bg-white/10"></div>
+                                </div>
+                            ))
+                        ) : (
+                            <>
+                                <div className="rounded-2xl border border-white/5 bg-slate-900/60 p-6">
+                                    <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Total Revenue</p>
+                                    <div className="mt-2 text-2xl font-bold text-white font-tech">₹{stats.monthlyRevenue.toLocaleString('en-IN')}</div>
+                                    <div className="mt-2 flex items-center gap-2 text-xs">
+                                        <span className={isGrowthPositive ? 'text-emerald-300' : 'text-red-300'}>
+                                            {isGrowthPositive ? '▲' : '▼'} {orderGrowth}%
+                                        </span>
+                                        <span className="text-slate-500">vs last month</span>
+                                    </div>
+                                </div>
+
+                                <div className="rounded-2xl border border-white/5 bg-slate-900/60 p-6">
+                                    <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Pending Quotes</p>
+                                    <div className="mt-2 text-2xl font-bold text-white font-tech">{pendingCount}</div>
+                                    <div className="mt-2 text-xs text-amber-300 font-semibold">Action Required</div>
+                                </div>
+
+                                <div className="rounded-2xl border border-white/5 bg-slate-900/60 p-6">
+                                    <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Active Tasks</p>
+                                    <div className="mt-2 text-2xl font-bold text-white font-tech">{completedCount}</div>
+                                    <div className="mt-2 text-xs text-slate-500">Completed this week</div>
+                                </div>
+
+                                <div className="rounded-2xl border border-white/5 bg-slate-900/60 p-6">
+                                    <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Total Orders</p>
+                                    <div className="mt-2 text-2xl font-bold text-white font-tech">{stats.totalOrders}</div>
+                                    <div className="mt-2 text-xs text-slate-500 flex items-center gap-1">
+                                        {stats.monthlyOrders} this month
+                                        {isGrowthPositive ? (
+                                            <TrendingUp className="h-3 w-3 text-emerald-300" />
+                                        ) : (
+                                            <TrendingDown className="h-3 w-3 text-red-300" />
+                                        )}
+                                    </div>
+                                </div>
+                            </>
+                        )}
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        <div className="lg:col-span-2 rounded-2xl border border-white/5 bg-slate-900/60 overflow-hidden">
+                            <div className="flex items-center justify-between px-6 py-4 border-b border-white/5">
+                                <h3 className="font-semibold text-white tracking-wide">Recent Transmissions</h3>
+                                <button className="text-xs text-cyan-300 hover:text-white">View All</button>
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left text-sm text-slate-400">
+                                    <thead className="bg-white/5 text-xs uppercase font-bold text-slate-500">
+                                        <tr>
+                                            <th className="px-6 py-4">Activity</th>
+                                            <th className="px-6 py-4">Type</th>
+                                            <th className="px-6 py-4">Date</th>
+                                            <th className="px-6 py-4">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-white/5">
+                                        {stats.recentActivity.length > 0 ? (
+                                            stats.recentActivity.map((activity) => (
+                                                <tr key={activity.id} className="hover:bg-white/5 transition-colors">
+                                                    <td className="px-6 py-4">
+                                                        <p className="font-semibold text-white">{activity.description}</p>
+                                                        <p className="text-xs font-mono text-slate-500">#{activity.id}</p>
+                                                    </td>
+                                                    <td className="px-6 py-4">{activity.type}</td>
+                                                    <td className="px-6 py-4">
+                                                        {new Date(activity.date).toLocaleDateString()}
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        <span className={`px-3 py-1 rounded-full text-[11px] font-semibold tracking-wider ${statusBadgeClass(activity.status)}`}>
+                                                            {activity.status.toUpperCase()}
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            ))
+                                        ) : (
+                                            <tr>
+                                                <td colSpan={4} className="px-6 py-6 text-center text-slate-500">
+                                                    No recent activity to display.
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <div className="space-y-6">
+                            <div className="rounded-2xl border border-white/5 bg-slate-900/60 p-6">
+                                <h3 className="font-semibold text-white tracking-wide mb-4">Command Protocols</h3>
+                                <div className="grid grid-cols-2 gap-3">
+                                    {['New Quote', 'Add Client', 'Stock Entry', 'Log Issue'].map((label) => (
+                                        <button
+                                            key={label}
+                                            className="p-3 rounded-xl border border-white/10 hover:border-cyan-400/50 hover:bg-cyan-400/10 transition-all text-xs font-semibold text-white"
+                                        >
+                                            {label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="rounded-2xl border border-white/5 bg-slate-900/60 p-6">
+                                <h3 className="font-semibold text-white tracking-wide mb-4">Inventory Watch</h3>
+                                <div className="space-y-4">
+                                    <div>
+                                        <div className="flex justify-between text-xs mb-1">
+                                            <span className="text-slate-400">Total Products</span>
+                                            <span className="text-white font-semibold">{stats.totalProducts}</span>
+                                        </div>
+                                        <div className="w-full bg-white/10 rounded-full h-1.5">
+                                            <div className="bg-cyan-400 h-1.5 rounded-full" style={{ width: '40%' }}></div>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div className="flex justify-between text-xs mb-1">
+                                            <span className="text-slate-400">Active Users</span>
+                                            <span className="text-amber-300 font-semibold">{stats.totalUsers}</span>
+                                        </div>
+                                        <div className="w-full bg-white/10 rounded-full h-1.5">
+                                            <div className="bg-amber-300 h-1.5 rounded-full" style={{ width: '25%' }}></div>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div className="flex justify-between text-xs mb-1">
+                                            <span className="text-slate-400">Monthly Orders</span>
+                                            <span className="text-white font-semibold">{stats.monthlyOrders}</span>
+                                        </div>
+                                        <div className="w-full bg-white/10 rounded-full h-1.5">
+                                            <div className="bg-purple-400 h-1.5 rounded-full" style={{ width: '55%' }}></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <button className="w-full mt-6 py-2 text-xs font-semibold text-center border border-white/10 rounded-lg hover:bg-white/5 transition-colors text-slate-400 hover:text-white">
+                                    View Full Inventory
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     );
 }

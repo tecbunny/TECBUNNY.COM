@@ -9,10 +9,10 @@ const ADMIN_ROLES = new Set(['admin', 'superadmin', 'manager']);
 // Update individual product (PATCH)
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const productId = params.id;
+    const { id: productId } = await params;
     
     if (!productId) {
       return NextResponse.json(
@@ -102,10 +102,10 @@ export async function PATCH(
 // Get individual product (GET)
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const productId = params.id;
+    const { id: productId } = await params;
     
     if (!productId) {
       return NextResponse.json(

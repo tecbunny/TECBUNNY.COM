@@ -4,18 +4,16 @@ import ServicesPage from '../../components/services-page';
 import { logger } from '../../lib/logger';
 import { servicesData } from '../../lib/servicesData';
 import { createClient, createServiceClient, isSupabaseServiceConfigured } from '../../lib/supabase/server';
+import { createPageMetadata } from '../../lib/metadata';
 
 // Static metadata for better SEO and performance
-export const metadata: Metadata = {
+export const metadata: Metadata = createPageMetadata({
   title: 'Services - TecBunny Store',
   description: 'Explore our comprehensive range of technology services including repairs, consultations, and custom solutions.',
   keywords: ['services', 'tech repair', 'consultation', 'TecBunny', 'technology solutions'],
-  openGraph: {
-    title: 'Services - TecBunny Store',
-    description: 'Explore our comprehensive range of technology services including repairs, consultations, and custom solutions.',
-    type: 'website',
-  },
-};
+  path: '/services',
+  image: '/brand.png',
+});
 
 // Always fetch fresh data so admin updates appear immediately
 export const dynamic = 'force-dynamic';
@@ -91,6 +89,28 @@ export default async function Page() {
   
   if (!services.length) {
     services = servicesData.filter(service => service.is_active !== false);
+  }
+
+  // Ensure Web Development service is present (Integration requirement)
+  if (!services.find((s: any) => s.title.includes('Web Development'))) {
+    const webDevData = servicesData.find(s => s.id === 'web-development');
+    if (webDevData) {
+      services.push(webDevData);
+    } else {
+      services.push({
+        id: 'web-dev-service-static',
+        title: 'Web Development',
+        description: 'Professional website building services featuring custom designs, admin dashboards, and WhatsApp integration.',
+        icon: 'Code',
+        features: ['Custom Design', 'Admin Dashboard', 'WhatsApp Integration', 'SEO Optimized'],
+        is_active: true,
+        category: 'Web Services',
+        display_order: 99,
+        badge: 'Featured',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+    }
   }
 
   services.sort((a: any, b: any) => {

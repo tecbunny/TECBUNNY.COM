@@ -99,8 +99,8 @@ async function handleOrderConfirmation(supabase: any, orderData: any) {
   // Send WhatsApp order confirmation
   await sendOrderNotification(customer_phone, {
     orderNumber: order_number,
-    amount,
-    items
+    // amount, // Not supported by current schema/template
+    // items   // Not supported by current schema/template
   });
 
   // Log the notification
@@ -190,7 +190,7 @@ Thank you for joining our tech community! 🚀
 💬 Stay connected:
 📱 WhatsApp support (this number)
 🌐 Website: https://tecbunny.com
-📞 Call: +91 9429694995
+📞 Call: +91 96041 36010
 
 🎁 First-time buyer? Use code WELCOME10 for 10% off your first order!
 

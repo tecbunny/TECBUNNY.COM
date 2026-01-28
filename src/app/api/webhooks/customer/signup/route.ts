@@ -217,7 +217,7 @@ Thank you for joining our tech community! We're excited to help you find the per
 💬 Stay connected:
 📱 WhatsApp support (this number)
 🌐 Website: https://tecbunny.com
-📞 Call: +91 9429694995
+📞 Call: +91 96041 36010
 
 🎁 New customer special: Use code WELCOME10 for 10% off your first order!
 

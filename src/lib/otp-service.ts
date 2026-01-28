@@ -41,9 +41,10 @@ export class OtpService {
   /**
    * Generate and send OTP for agent order verification
    */
-  async generateOtp(request: OtpRequest): Promise<{
+  async generateOtp(request: OtpRequest, skipSms: boolean = false): Promise<{
     success: boolean;
     otp_id?: string;
+    otp_code?: string;
     expires_at?: string;
     error?: string;
   }> {
@@ -59,12 +60,15 @@ export class OtpService {
         .single();
 
       if (existingOtp) {
-        // Resend existing OTP
-        await this.sendOtpSms(request.customer_phone, existingOtp.otp_code, request.otp_type);
+        if (!skipSms) {
+          // Resend existing OTP
+          await this.sendOtpSms(request.customer_phone, existingOtp.otp_code, request.otp_type);
+        }
         
         return {
           success: true,
           otp_id: existingOtp.id,
+          otp_code: existingOtp.otp_code,
           expires_at: existingOtp.expires_at
         };
       }
@@ -95,25 +99,28 @@ export class OtpService {
         };
       }
 
-      // Send OTP via SMS
-      const smsResult = await this.sendOtpSms(request.customer_phone, otpCode, request.otp_type);
-      
-      if (!smsResult.success) {
-        // Delete the OTP record if SMS failed
-        await this.supabase
-          .from('order_otp_verifications')
-          .delete()
-          .eq('id', otpRecord.id);
+      if (!skipSms) {
+        // Send OTP via SMS
+        const smsResult = await this.sendOtpSms(request.customer_phone, otpCode, request.otp_type);
+        
+        if (!smsResult.success) {
+          // Delete the OTP record if SMS failed
+          await this.supabase
+            .from('order_otp_verifications')
+            .delete()
+            .eq('id', otpRecord.id);
 
-        return {
-          success: false,
-          error: 'Failed to send OTP SMS'
-        };
+          return {
+            success: false,
+            error: 'Failed to send OTP SMS'
+          };
+        }
       }
 
       return {
         success: true,
         otp_id: otpRecord.id,
+        otp_code: otpCode,
         expires_at: expiresAt.toISOString()
       };
 

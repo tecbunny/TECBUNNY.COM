@@ -7,6 +7,7 @@ import {
   Controller,
   FormProvider,
   useFormContext,
+  type Control,
   type ControllerProps,
   type FieldPath,
   type FieldValues,
@@ -28,12 +29,21 @@ const FormFieldContext = React.createContext<FormFieldContextValue>(
   {} as FormFieldContextValue
 )
 
+type FormFieldProps<
+  TFieldValues extends FieldValues = FieldValues,
+  TName extends FieldPath<TFieldValues> = FieldPath<TFieldValues>,
+  TTransformedValues = TFieldValues
+> = Omit<ControllerProps<TFieldValues, TName, TTransformedValues>, "control"> & {
+  control: Control<TFieldValues, any, TTransformedValues>
+}
+
 const FormField = <
   TFieldValues extends FieldValues = FieldValues,
-  TName extends FieldPath<TFieldValues> = FieldPath<TFieldValues>
+  TName extends FieldPath<TFieldValues> = FieldPath<TFieldValues>,
+  TTransformedValues = TFieldValues
 >({
   ...props
-}: ControllerProps<TFieldValues, TName>) => {
+}: FormFieldProps<TFieldValues, TName, TTransformedValues>) => {
   return (
     <FormFieldContext.Provider value={{ name: props.name }}>
       <Controller {...props} />

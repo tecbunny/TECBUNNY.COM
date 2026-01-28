@@ -131,10 +131,10 @@ export function EnhancedCartSheet({ children }: EnhancedCartSheetProps) {
                     <CartItemCard key={item.id} item={item} />
                   ))}
                 </div>
-              </ScrollArea>
+                <Separator className="my-6" />
               
               {/* Offers and Discounts Section */}
-              <div className="px-6 space-y-4">
+              <div className="space-y-4 pb-4">
                 {/* Auto-Applied Offer */}
                 {autoOffer && autoOfferDiscount > 0 && (
                   <div className="bg-green-50 border border-green-200 rounded-lg p-3">
@@ -226,6 +226,7 @@ export function EnhancedCartSheet({ children }: EnhancedCartSheetProps) {
                   </p>
                 )}
               </div>
+              </ScrollArea>
             </div>
             
             {/* Cart Summary */}

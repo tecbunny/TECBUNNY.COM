@@ -42,25 +42,25 @@ export function TwoFactorVerification({
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <Card className="w-full max-w-md shadow-lg">
+    <div className="min-h-screen flex items-center justify-center bg-slate-950 py-12 px-4 sm:px-6 lg:px-8">
+      <Card className="w-full max-w-md border-white/10 bg-slate-900/70 text-slate-100 shadow-lg">
         <CardHeader className="text-center">
-          <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-blue-100 mb-4">
-            <Shield className="h-8 w-8 text-blue-600" />
+          <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-cyan-500/10 mb-4">
+            <Shield className="h-8 w-8 text-cyan-300" />
           </div>
-          <CardTitle className="text-2xl font-bold text-gray-900">
+          <CardTitle className="text-2xl font-bold text-white">
             Two-Factor Authentication
           </CardTitle>
-          <CardDescription className="text-gray-600">
+          <CardDescription className="text-slate-300">
             Enter the 6-digit code from your authenticator app
           </CardDescription>
         </CardHeader>
 
         <CardContent>
-          <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <div className="mb-6 p-4 bg-cyan-500/10 border border-cyan-500/20 rounded-lg">
             <div className="flex items-center space-x-3">
-              <Key className="h-5 w-5 text-blue-600" />
-              <div className="text-sm text-blue-700">
+              <Key className="h-5 w-5 text-cyan-300" />
+              <div className="text-sm text-cyan-200">
                 <strong>Verification Required</strong>
                 <br />
                 Enter the code from your authenticator app for <strong>{email}</strong>
@@ -84,7 +84,7 @@ export function TwoFactorVerification({
                 onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                 autoComplete="one-time-code"
               />
-              <p className="text-xs text-gray-500 text-center">
+              <p className="text-xs text-slate-400 text-center">
                 Enter the 6-digit code from your authenticator app
               </p>
             </div>
@@ -122,11 +122,11 @@ export function TwoFactorVerification({
           </form>
 
           <div className="mt-6 text-center">
-            <div className="text-sm text-gray-600 space-y-2">
+            <div className="text-sm text-slate-300 space-y-2">
               <p>
                 <strong>Don't have access to your authenticator?</strong>
               </p>
-              <p className="text-xs">
+              <p className="text-xs text-slate-400">
                 You can also use one of your backup codes if you have them saved.
               </p>
             </div>

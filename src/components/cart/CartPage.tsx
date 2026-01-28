@@ -2,14 +2,12 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Gift, ShoppingCart, Tag } from "lucide-react";
+import { Gift, ShoppingCart, Tag, ArrowRight, Lock } from "lucide-react";
 
 import { useCart } from "../../lib/hooks";
 import { logger } from "../../lib/logger";
 import type { Coupon } from "../../lib/types";
 import { Button } from "../ui/button";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "../ui/card";
-import { Separator } from "../ui/separator";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { Badge } from "../ui/badge";
 import { Input } from "../ui/input";
@@ -105,6 +103,15 @@ export default function CartPage() {
 
   const subtotal = cartSubtotal;
   const gstAmount = cartGst;
+  const serviceSubtotal = React.useMemo(() => {
+    return cartItems.reduce((sum, item) => {
+      if (item.id?.startsWith("service-")) {
+        return sum + item.price * item.quantity;
+      }
+      return sum;
+    }, 0);
+  }, [cartItems]);
+  const hardwareSubtotal = Math.max(0, subtotal - serviceSubtotal);
 
   const { totalMrp, absoluteMrpDiscount, percentMrpDiscount } = React.useMemo(() => {
     const totals = cartItems.reduce(
@@ -128,180 +135,212 @@ export default function CartPage() {
   }, [cartItems]);
 
   return (
-    <div className="container mx-auto px-4 py-10">
-      <div className="flex flex-col gap-6">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-primary">Your Shopping Cart</h1>
-            <p className="text-sm text-muted-foreground">
-              Review your items and proceed to our secure checkout in a single click.
-            </p>
-          </div>
-          {hasItems && (
-            <Button variant="outline" asChild>
-              <Link href="/products">Continue Shopping</Link>
-            </Button>
-          )}
-        </div>
+    <div className="min-h-screen bg-[#030712] text-slate-200">
+      <style jsx global>{`
+        .glass-panel {
+          background: rgba(15, 23, 42, 0.6);
+          backdrop-filter: blur(12px);
+          border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .magnetic-btn { transition: transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94); }
+        input[type=number]::-webkit-inner-spin-button,
+        input[type=number]::-webkit-outer-spin-button {
+          -webkit-appearance: none;
+          margin: 0;
+        }
+      `}</style>
 
-        {isSessionExpired && (
-          <Alert variant="destructive">
-            <AlertTitle>Session expired</AlertTitle>
-            <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              Guest carts reset after a period of inactivity. Reset the cart to start again.
-              <Button size="sm" onClick={resetGuestSession} variant="outline">
-                Reset Cart
-              </Button>
-            </AlertDescription>
-          </Alert>
-        )}
+      <section className="pt-28 pb-16 relative">
+        <div className="fixed inset-0 bg-[url('/noise.svg')] opacity-5 pointer-events-none"></div>
 
-        {hasItems ? (
-          <div className="grid gap-8 lg:grid-cols-[2fr_1fr]">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <ShoppingCart className="h-5 w-5" />
-                  Cart Items ({cartCount})
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {cartItems.map((item, index) => (
-                  <React.Fragment key={item.id}>
-                    <CartItemCard item={item} />
-                    {index < cartItems.length - 1 && <Separator />}
-                  </React.Fragment>
-                ))}
-              </CardContent>
-            </Card>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+          <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <h1 className="text-3xl md:text-4xl font-bold text-white font-tech">Quote Configuration</h1>
+                <p className="text-sm text-slate-400">
+                  Review your selected hardware and request a formal quote in one step.
+                </p>
+              </div>
+              {hasItems && (
+                <Link
+                  href="/products"
+                  className="magnetic-btn inline-flex items-center gap-2 px-6 py-2.5 rounded-lg border border-white/15 bg-white/5 text-white hover:bg-white/10 hover:border-cyan-300/40 transition-all text-sm font-bold"
+                >
+                  Continue Shopping <ArrowRight className="h-3 w-3" />
+                </Link>
+              )}
+            </div>
 
-            <Card className="h-fit">
-              <CardHeader>
-                <CardTitle>Order Summary</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {absoluteMrpDiscount > 0 && (
-                  <div className="rounded-md border border-orange-200 bg-orange-50 p-4 text-sm text-orange-700">
-                    <div className="flex items-center justify-between text-sm font-semibold">
-                      <span>Total product discount</span>
-                      <span>
-                        ₹{formatCurrency(absoluteMrpDiscount)} ({percentMrpDiscount.toFixed(1)}% OFF)
-                      </span>
-                    </div>
-                    <p className="mt-2 text-xs text-orange-600">
-                      You are saving against an MRP of ₹{formatCurrency(totalMrp)}.
-                    </p>
+            {isSessionExpired && (
+              <Alert variant="destructive" className="border-red-500/40 bg-red-500/10 text-red-200">
+                <AlertTitle>Session expired</AlertTitle>
+                <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  Guest carts reset after a period of inactivity. Reset the cart to start again.
+                  <Button size="sm" onClick={resetGuestSession} variant="outline" className="border-red-400/40 text-red-100">
+                    Reset Cart
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {hasItems ? (
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div className="lg:col-span-2 space-y-6">
+                  <div className="flex items-center gap-3 text-sm text-slate-400">
+                    <ShoppingCart className="h-4 w-4 text-cyan-300" />
+                    <span className="font-semibold text-white">Cart Items ({cartCount})</span>
                   </div>
-                )}
+                  {cartItems.map((item) => (
+                    <CartItemCard key={item.id} item={item} />
+                  ))}
+                </div>
 
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span>Subtotal</span>
-                    <span>₹{formatCurrency(subtotal)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>GST</span>
-                    <span>₹{formatCurrency(gstAmount)}</span>
-                  </div>
-                  {autoOffer && autoOfferDiscount > 0 && (
-                    <div className="rounded-md border border-green-200 bg-green-50 p-3 text-xs text-green-700">
-                      <div className="flex items-center justify-between text-sm">
-                        <span>{autoOffer.title}</span>
-                        <Badge variant="secondary" className="bg-green-100 text-green-700">
-                          -₹{formatCurrency(autoOfferDiscount)}
-                        </Badge>
+                <div className="lg:col-span-1">
+                  <div className="sticky top-24 glass-panel p-6 rounded-2xl">
+                    <h3 className="text-xl font-bold text-white font-tech mb-6 border-b border-white/10 pb-4">Order Summary</h3>
+
+                    {absoluteMrpDiscount > 0 && (
+                      <div className="rounded-lg border border-orange-400/30 bg-orange-500/10 p-4 text-xs text-orange-200 mb-6">
+                        <div className="flex items-center justify-between text-sm font-semibold">
+                          <span>Total product discount</span>
+                          <span>
+                            ₹{formatCurrency(absoluteMrpDiscount)} ({percentMrpDiscount.toFixed(1)}% OFF)
+                          </span>
+                        </div>
+                        <p className="mt-2 text-[11px] text-orange-200/80">
+                          You are saving against an MRP of ₹{formatCurrency(totalMrp)}.
+                        </p>
                       </div>
-                      {autoOffer.description && (
-                        <p className="mt-2 leading-relaxed">{autoOffer.description}</p>
+                    )}
+
+                    <div className="space-y-3 text-sm text-slate-400 mb-6">
+                      <div className="flex justify-between">
+                        <span>Hardware Subtotal</span>
+                        <span className="text-white">₹{formatCurrency(hardwareSubtotal)}</span>
+                      </div>
+                      {serviceSubtotal > 0 && (
+                        <div className="flex justify-between">
+                          <span>Installation Charges</span>
+                          <span className="text-white">₹{formatCurrency(serviceSubtotal)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between">
+                        <span>GST (Estimated)</span>
+                        <span className="text-white">₹{formatCurrency(gstAmount)}</span>
+                      </div>
+                      {autoOffer && autoOfferDiscount > 0 && (
+                        <div className="flex items-center justify-between text-emerald-300 font-semibold">
+                          <span>{autoOffer.title}</span>
+                          <span>-₹{formatCurrency(autoOfferDiscount)}</span>
+                        </div>
+                      )}
+                      {appliedCoupon && couponDiscount > 0 && (
+                        <div className="flex items-center justify-between text-cyan-300 font-semibold">
+                          <span>Coupon ({appliedCoupon.code})</span>
+                          <span>-₹{formatCurrency(couponDiscount)}</span>
+                        </div>
                       )}
                     </div>
-                  )}
-                  {appliedCoupon && (
-                    <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-xs text-blue-700">
-                      <div className="flex items-center justify-between text-sm">
-                        <div className="flex items-center gap-2">
-                          <Tag className="h-4 w-4" />
-                          <span>{appliedCoupon.code}</span>
-                        </div>
-                        <Button size="sm" variant="ghost" onClick={removeCoupon} className="h-7 px-2">
-                          Remove
-                        </Button>
+
+                    <div className="border-t border-white/10 pt-4 mb-8">
+                      <div className="flex justify-between items-end">
+                        <span className="text-slate-300 font-bold">Estimated Total</span>
+                        <span className="text-3xl font-bold text-cyan-300 font-tech">₹{formatCurrency(finalTotal)}</span>
                       </div>
-                      <p className="mt-2 leading-relaxed">
-                        Coupon savings: ₹{formatCurrency(couponDiscount)}
-                      </p>
+                      <p className="text-[10px] text-slate-500 mt-2 text-right">Final invoice generated after site confirmation.</p>
                     </div>
-                  )}
-                </div>
 
-                <div className="rounded-md border border-dashed p-4 space-y-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 text-sm font-medium">
-                      <Tag className="h-4 w-4" />
-                      <span>Apply coupon</span>
+                    <div className="mb-6">
+                      <form
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          void handleApplyCouponCode();
+                        }}
+                      >
+                        <div className="relative">
+                          <Input
+                            placeholder="Promo Code"
+                            value={couponCode}
+                            onChange={(event) => setCouponCode(event.target.value)}
+                            className="w-full bg-white/5 border border-white/10 rounded-lg pl-4 pr-20 py-2 text-sm text-white focus-visible:ring-0 focus-visible:border-cyan-400/50"
+                          />
+                          <button
+                            type="submit"
+                            disabled={!couponCode || applyingCode}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold text-cyan-300 hover:text-white disabled:opacity-50"
+                          >
+                            {applyingCode ? "APPLYING" : "APPLY"}
+                          </button>
+                        </div>
+                      </form>
+                      {appliedCoupon && (
+                        <div className="mt-3 flex items-center justify-between text-xs text-slate-400">
+                          <div className="flex items-center gap-2">
+                            <Tag className="h-3 w-3 text-cyan-300" />
+                            <span>{appliedCoupon.code}</span>
+                          </div>
+                          <Button size="sm" variant="ghost" onClick={removeCoupon} className="h-6 px-2 text-slate-300 hover:text-white">
+                            Remove
+                          </Button>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                  <form
-                    onSubmit={(event) => {
-                      event.preventDefault();
-                      void handleApplyCouponCode();
-                    }}
-                    className="flex flex-col gap-2 sm:flex-row"
-                  >
-                    <Input
-                      placeholder="Enter coupon code"
-                      value={couponCode}
-                      onChange={(event) => setCouponCode(event.target.value)}
-                      className="flex-1"
-                    />
-                    <Button
-                      type="submit"
-                      disabled={!couponCode || applyingCode}
-                    >
-                      {applyingCode ? "Applying..." : "Apply"}
+
+                    {autoOffer && autoOfferDiscount > 0 && autoOffer.description && (
+                      <div className="rounded-md border border-emerald-500/20 bg-emerald-500/10 p-3 text-xs text-emerald-200 mb-5">
+                        <div className="flex items-center justify-between">
+                          <span>{autoOffer.title}</span>
+                          <Badge variant="secondary" className="bg-emerald-500/20 text-emerald-200">
+                            -₹{formatCurrency(autoOfferDiscount)}
+                          </Badge>
+                        </div>
+                        <p className="mt-2 leading-relaxed text-emerald-200/80">{autoOffer.description}</p>
+                      </div>
+                    )}
+
+                    {totalDiscount > 0 && (
+                      <div className="rounded-md bg-white/5 p-3 text-xs text-slate-400 mb-6">
+                        <p>
+                          Total savings: ₹{formatCurrency(totalDiscount)}
+                          {canCombineDiscounts ? " (offers + coupons combined)" : ""}
+                        </p>
+                      </div>
+                    )}
+
+                    <Button className="w-full py-3 bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 hover:to-white hover:text-slate-900 text-white font-bold font-tech rounded-lg transition-colors shadow-lg shadow-cyan-400/20" asChild>
+                      <Link href="/checkout">REQUEST FORMAL QUOTE</Link>
                     </Button>
-                  </form>
-                  <p className="text-xs text-muted-foreground">
-                    Have a discount code? Enter it above to redeem. Eligible coupons remain valid even if they are not listed.
-                  </p>
-                </div>
-
-                {totalDiscount > 0 && (
-                  <div className="rounded-md bg-muted/40 p-3 text-xs text-muted-foreground">
-                    <p>
-                      Total savings: ₹{formatCurrency(totalDiscount)}
-                      {canCombineDiscounts ? " (offers + coupons combined)" : ""}
+                    <p className="text-xs text-center text-slate-500 mt-3">
+                      <Lock className="inline-block h-3.5 w-3.5 mr-1" /> Secure Transmission
                     </p>
+                    <Button
+                      className="w-full mt-4 border border-white/15 bg-white/5 text-white hover:bg-white/10 hover:border-cyan-300/40"
+                      variant="ghost"
+                      asChild
+                    >
+                      <Link href="/products">Keep Shopping</Link>
+                    </Button>
                   </div>
-                )}
-              </CardContent>
-              <CardFooter className="flex flex-col gap-3">
-                <div className="flex w-full items-center justify-between text-lg font-semibold">
-                  <span>Amount Payable</span>
-                  <span>₹{formatCurrency(finalTotal)}</span>
                 </div>
-                <Button className="w-full" size="lg" asChild>
-                  <Link href="/checkout">Proceed to Checkout</Link>
+              </div>
+            ) : (
+              <div className="glass-panel rounded-2xl py-16 px-6 text-center">
+                <div className="mx-auto w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mb-4">
+                  <Gift className="h-8 w-8 text-slate-500" />
+                </div>
+                <h2 className="text-2xl font-semibold text-white">Your cart is empty</h2>
+                <p className="text-sm text-slate-400 mt-2">
+                  Browse our catalogue and add products to start the quote process.
+                </p>
+                <Button className="mt-6" asChild>
+                  <Link href="/products">Explore Products</Link>
                 </Button>
-                <Button className="w-full" variant="outline" asChild>
-                  <Link href="/products">Keep Shopping</Link>
-                </Button>
-              </CardFooter>
-            </Card>
+              </div>
+            )}
           </div>
-        ) : (
-          <Card className="flex flex-col items-center justify-center gap-4 py-16 text-center">
-            <Gift className="h-12 w-12 text-muted-foreground" />
-            <h2 className="text-2xl font-semibold">Your cart is empty</h2>
-            <p className="text-sm text-muted-foreground">
-              Browse our catalogue and add products to start the checkout process.
-            </p>
-            <Button asChild>
-              <Link href="/products">Explore Products</Link>
-            </Button>
-          </Card>
-        )}
-      </div>
+        </div>
+      </section>
     </div>
   );
 }

@@ -112,6 +112,26 @@ export const ORDER_STATUS_FLOW = [
   'Delivered'
 ] as const;
 
+// Service/repair setup lifecycle
+export const SERVICE_ORDER_STATUS_FLOW = [
+  'Pending',
+  'Awaiting Payment',
+  'Visit Scheduled',
+  'Visit Completed',
+  'Diagnosis Done',
+  'Quote Sent',
+  'Awaiting Customer Approval',
+  'Approved',
+  'Parts Ordered',
+  'Work In Progress',
+  'Quality Check',
+  'Ready for Pickup',
+  'Ready for Delivery',
+  'Delivered/Picked Up',
+  'Completed',
+  'Warranty/Support Active'
+] as const;
+
 // Error messages
 export const ERROR_MESSAGES = {
   INVALID_EMAIL: 'Please enter a valid email address',

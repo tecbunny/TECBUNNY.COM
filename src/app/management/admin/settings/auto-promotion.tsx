@@ -369,7 +369,7 @@ export default function AutoPromotionSettingsPage() {
                     </div>
                   </div>
 
-                  <div className="text-sm text-muted-foreground bg-gray-50 p-3 rounded">
+                  <div className="text-sm text-muted-foreground bg-white/5 border border-white/10 p-3 rounded">
                     <strong>Rule:</strong> Promote {rule.fromCategory} customers to {rule.toCategory} when they have 
                     placed at least <strong>{rule.minOrderCount} orders</strong> totaling 
                     <strong> ₹{rule.minOrderAmount.toLocaleString()}</strong> within 
@@ -460,7 +460,7 @@ export default function AutoPromotionSettingsPage() {
               </div>
 
               {lastCheck && (
-                <div className="border rounded-lg p-4 bg-gray-50">
+                <div className="border border-white/10 rounded-lg p-4 bg-white/5">
                   <div className="flex items-center gap-2">
                     <Calendar className="h-4 w-4 text-muted-foreground" />
                     <span className="text-sm font-medium">Last Check:</span>

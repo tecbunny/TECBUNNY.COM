@@ -52,7 +52,8 @@ const serviceSchema = z.object({
   features: z.array(z.string()).min(1, 'At least one feature is required'),
 });
 
-type ServiceFormValues = z.infer<typeof serviceSchema>;
+type ServiceFormInput = z.input<typeof serviceSchema>;
+type ServiceFormValues = z.output<typeof serviceSchema>;
 
 interface CreateServiceDialogProps {
   open: boolean;
@@ -86,7 +87,7 @@ export function CreateServiceDialog({ open, onOpenChange, onServiceCreated }: Cr
   const supabase = createClient();
   const { toast } = useToast();
 
-  const form = useForm<ServiceFormValues>({
+  const form = useForm<ServiceFormInput, any, ServiceFormValues>({
     resolver: zodResolver(serviceSchema),
     defaultValues: {
       title: '',
@@ -273,7 +274,11 @@ export function CreateServiceDialog({ open, onOpenChange, onServiceCreated }: Cr
                         type="number"
                         step="0.01"
                         placeholder="0.00"
-                        {...field}
+                        value={typeof field.value === 'number' || typeof field.value === 'string' ? field.value : ''}
+                        onChange={(event) => field.onChange(event.target.value)}
+                        onBlur={field.onBlur}
+                        name={field.name}
+                        ref={field.ref}
                       />
                     </FormControl>
                     <FormDescription>
@@ -294,7 +299,11 @@ export function CreateServiceDialog({ open, onOpenChange, onServiceCreated }: Cr
                       <Input
                         type="number"
                         placeholder="1"
-                        {...field}
+                        value={typeof field.value === 'number' || typeof field.value === 'string' ? field.value : ''}
+                        onChange={(event) => field.onChange(event.target.value)}
+                        onBlur={field.onBlur}
+                        name={field.name}
+                        ref={field.ref}
                       />
                     </FormControl>
                     <FormDescription>
@@ -315,7 +324,11 @@ export function CreateServiceDialog({ open, onOpenChange, onServiceCreated }: Cr
                       <Input
                         type="number"
                         placeholder="0"
-                        {...field}
+                        value={typeof field.value === 'number' || typeof field.value === 'string' ? field.value : ''}
+                        onChange={(event) => field.onChange(event.target.value)}
+                        onBlur={field.onBlur}
+                        name={field.name}
+                        ref={field.ref}
                       />
                     </FormControl>
                     <FormDescription>

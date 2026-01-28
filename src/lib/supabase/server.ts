@@ -2,24 +2,21 @@ import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'anon-key-placeholder';
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 'service-role-placeholder';
-
-export const isSupabasePublicConfigured = Boolean(
-  process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
-
-export const isSupabaseServiceConfigured = Boolean(
-  process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+import {
+  isSupabasePublicConfigured,
+  isSupabaseServiceConfigured,
+  requireSupabasePublicEnv,
+  requireSupabaseServiceEnv,
+} from './env';
 
 export async function createClient() {
+  const { url, anonKey } = requireSupabasePublicEnv();
+
   const cookieStore = await cookies();
 
   return createServerClient(
-    SUPABASE_URL,
-    SUPABASE_ANON_KEY,
+    url,
+    anonKey,
     {
       cookies: {
         getAll() {
@@ -44,9 +41,11 @@ export { createClient as createServerClient };
 
 // Service role client for admin operations (bypasses RLS)
 export function createServiceClient() {
+  const { url, serviceKey } = requireSupabaseServiceEnv();
+
   return createSupabaseClient(
-    SUPABASE_URL,
-    SUPABASE_SERVICE_ROLE_KEY,
+    url,
+    serviceKey,
     {
       auth: {
         autoRefreshToken: false,
@@ -55,3 +54,11 @@ export function createServiceClient() {
     }
   );
 }
+
+// Re-export env guards for API routes and guards
+export {
+  isSupabasePublicConfigured,
+  isSupabaseServiceConfigured,
+  requireSupabasePublicEnv,
+  requireSupabaseServiceEnv,
+} from './env';

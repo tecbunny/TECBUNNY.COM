@@ -13,8 +13,8 @@ import { logger } from '@/lib/logger';
 export const dynamic = 'force-dynamic';
 
 interface InvoicePageProps {
-  params: { orderId: string };
-  searchParams?: Record<string, string | string[] | undefined>;
+  params: Promise<{ orderId: string }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }
 
 const COMPANY_INFO_PATH = path.join(process.cwd(), 'public', 'company-info.json');
@@ -27,7 +27,7 @@ const FALLBACK_COMPANY_SETTINGS: CompanySettings = {
   tan: 'BLRT25863F',
   cin: 'U80200GA2025PTC017488',
   supportEmail: 'support@tecbunny.com',
-  supportPhone: '+91 94296 94995',
+  supportPhone: '+91 96041 36010',
 };
 
 async function loadOrder(orderId: string): Promise<Order | null> {
@@ -72,7 +72,7 @@ async function loadOrder(orderId: string): Promise<Order | null> {
 
     const { data: products, error: productError } = await supabase
       .from('products')
-      .select('id, hsn_code, hsnCode, hsn, hsn_sac, gst_rate, gstRate, gst_percentage')
+      .select('id, hsn_code, hsn, hsn_sac, gst_rate, gst_percentage')
       .in('id', ids);
 
     if (productError || !products) {
@@ -170,7 +170,8 @@ async function loadCompanySettings(): Promise<CompanySettings> {
 export async function generateMetadata({ params }: InvoicePageProps): Promise<Metadata> {
   // Import the utility function dynamically since this is a server component
   const { formatOrderNumber } = await import('@/lib/order-utils');
-  const shortId = params.orderId ? formatOrderNumber(params.orderId) : 'Invoice';
+  const { orderId } = await params;
+  const shortId = orderId ? formatOrderNumber(orderId) : 'Invoice';
   return {
     title: `Invoice ${shortId} | TecBunny Solutions`,
     description: `Download a professionally formatted invoice for order ${shortId}.`,
@@ -178,14 +179,16 @@ export async function generateMetadata({ params }: InvoicePageProps): Promise<Me
 }
 
 export default async function OrderInvoicePage({ params, searchParams }: InvoicePageProps) {
-  const order = await loadOrder(params.orderId);
+  const { orderId } = await params;
+  const resolvedSearchParams = await searchParams;
+  const order = await loadOrder(orderId);
 
   if (!order) {
     notFound();
   }
 
   const settings = await loadCompanySettings();
-  const printParam = searchParams?.print;
+  const printParam = resolvedSearchParams?.print;
   const shouldAutoPrint = Array.isArray(printParam)
     ? printParam.some(value => value === '1' || value === 'true')
     : printParam === '1' || printParam === 'true';

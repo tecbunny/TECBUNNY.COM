@@ -417,7 +417,7 @@ export default function PageContentAdmin() {
                   className={`p-3 rounded-lg border cursor-pointer transition-colors ${
                     selectedPage?.id === page.id
                       ? 'bg-blue-50 border-blue-200'
-                      : 'hover:bg-gray-50 border-gray-200'
+                      : 'hover:bg-white/5 border-white/10'
                   }`}
                   onClick={() => {
                     setSelectedPage(page);
@@ -588,7 +588,7 @@ export default function PageContentAdmin() {
 
                   <div>
                     <h4 className="font-medium mb-2">Content Preview:</h4>
-                    <div className="bg-gray-50 p-4 rounded-lg">
+                    <div className="bg-white/5 border border-white/10 p-4 rounded-lg">
                       <pre className="text-sm overflow-x-auto">
                         {typeof selectedPage.content === 'string' 
                           ? selectedPage.content 

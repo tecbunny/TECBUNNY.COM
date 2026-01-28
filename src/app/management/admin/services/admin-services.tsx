@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import Link from 'next/link';
 
 import { 
   PlusCircle, 
@@ -68,6 +69,7 @@ export default function AdminServicesPage() {
   const [serviceRequests, setServiceRequests] = React.useState<ServiceRequest[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [requestsLoading, setRequestsLoading] = React.useState(true);
+  const [activeTab, setActiveTab] = React.useState<'services' | 'requests'>('services');
   const [createDialogOpen, setCreateDialogOpen] = React.useState(false);
   const [editDialogOpen, setEditDialogOpen] = React.useState(false);
   const [selectedService, setSelectedService] = React.useState<Service | null>(null);
@@ -86,13 +88,13 @@ export default function AdminServicesPage() {
   const fetchServices = React.useCallback(async () => {
     try {
       setLoading(true);
-      let query = supabase.from('services').select('*');
-      try {
-        query = query.order('display_order', { ascending: true });
-      } catch {}
-      const { data, error } = await query;
-      if (error) throw error;
-      const safe = (data || []).map((s: any) => ({
+      const response = await fetch('/api/admin/services');
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload?.error || 'Failed to fetch services');
+      }
+      const data = Array.isArray(payload?.services) ? payload.services : [];
+      const safe = data.map((s: any) => ({
         ...s,
         icon: iconMap[String(s.icon)] || Wrench,
         features: Array.isArray(s.features) ? s.features : [],
@@ -110,7 +112,7 @@ export default function AdminServicesPage() {
     } finally {
       setLoading(false);
     }
-  }, [supabase, iconMap, toast]);
+  }, [iconMap, toast]);
 
   const fetchServiceRequests = React.useCallback(async () => {
     try {
@@ -257,8 +259,12 @@ export default function AdminServicesPage() {
 
   React.useEffect(() => {
     fetchServices();
+  }, [fetchServices]);
+
+  React.useEffect(() => {
+    if (activeTab !== 'requests') return;
     fetchServiceRequests();
-  }, [fetchServices, fetchServiceRequests]);
+  }, [activeTab, fetchServiceRequests]);
 
   const handleServiceCreated = () => {
     fetchServices();
@@ -283,17 +289,25 @@ export default function AdminServicesPage() {
 
   return (
     <div className="space-y-8">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold">Service Management</h1>
           <p className="text-muted-foreground">
             Manage services and service requests
           </p>
         </div>
-        <Button onClick={() => setCreateDialogOpen(true)}>
-          <PlusCircle className="mr-2 h-4 w-4" />
-          Add Service
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" asChild>
+            <Link href="/services" target="_blank" rel="noopener noreferrer">
+              <Eye className="mr-2 h-4 w-4" />
+              View Services Page
+            </Link>
+          </Button>
+          <Button onClick={() => setCreateDialogOpen(true)}>
+            <PlusCircle className="mr-2 h-4 w-4" />
+            Add Service
+          </Button>
+        </div>
       </div>
 
       {/* Statistics Cards */}
@@ -355,7 +369,7 @@ export default function AdminServicesPage() {
         </Card>
       </div>
 
-      <Tabs defaultValue="services" className="w-full">
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'services' | 'requests')} className="w-full">
         <TabsList>
           <TabsTrigger value="services">Services</TabsTrigger>
           <TabsTrigger value="requests">Service Requests</TabsTrigger>

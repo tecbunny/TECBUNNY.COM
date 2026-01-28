@@ -208,7 +208,7 @@ ${paymentData.failureReason ? `❗ Reason: ${paymentData.failureReason}` : ''}
 
 ${paymentData.retryUrl ? `🔄 Retry payment: ${paymentData.retryUrl}` : '🔄 Retry payment: https://tecbunny.com/checkout'}
 
-Need help? Reply to this message or call +91 9429694995
+Need help? Reply to this message or call +91 96041 36010
 
 We're here to help! 💪
     `.trim();

@@ -413,14 +413,16 @@ export const captchaService = new CaptchaService(captchaConfig);
 
 // Export convenience functions
 export async function verifyCaptcha(response: string | null, remoteIp?: string): Promise<CaptchaVerificationResult> {
-  // If no response provided, return failure
-  if (!response) {
+  // If CAPTCHA is not configured, allow verification to pass with a warning
+  if (!captchaConfig.siteKey || !captchaConfig.secretKey) {
     return {
-      success: false,
-      error: 'No CAPTCHA response provided'
+      success: true,
+      error: 'CAPTCHA not configured'
     };
   }
-  return captchaService.verifyCaptcha(response, remoteIp);
+
+  // Delegate to service (handles dev bypass and empty responses)
+  return captchaService.verifyCaptcha(response ?? '', remoteIp);
 }
 
 export function generateSimpleCaptcha(): SimpleCaptchaChallenge {

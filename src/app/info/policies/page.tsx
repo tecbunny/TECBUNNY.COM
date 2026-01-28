@@ -3,7 +3,6 @@ import { ArrowLeft, FileText, Shield, Truck, RotateCcw, Undo2 } from 'lucide-rea
 
 import { Metadata } from 'next';
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../../components/ui/card';
 
 // Static metadata for better SEO and performance
 export const metadata: Metadata = {
@@ -60,68 +59,65 @@ export default function PoliciesPage() {
   ];
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="max-w-4xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
-          <Link 
-            href="/" 
-            className="inline-flex items-center text-muted-foreground hover:text-foreground mb-4"
-          >
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Home
-          </Link>
-          <h1 className="text-4xl font-bold mb-4">Policies & Legal Information</h1>
-          <p className="text-lg text-muted-foreground">
-            Review our policies to understand how we operate and protect your interests.
-          </p>
-        </div>
+    <div className="relative overflow-hidden bg-slate-950 text-slate-200">
+      <div className="pointer-events-none absolute inset-0 bg-[url('/noise.svg')] opacity-20" />
+      <div className="mx-auto max-w-5xl px-4 pb-20 pt-12 sm:px-6 lg:px-8 sm:pt-16">
+        <Link href="/" className="inline-flex items-center text-sm text-slate-400 hover:text-white">
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Back to Home
+        </Link>
 
-        {/* Policies Grid */}
-        <div className="grid md:grid-cols-2 gap-6">
-          {policies.map((policy) => {
-            const IconComponent = policy.icon;
-            return (
-              <Link key={policy.href} href={policy.href}>
-                <Card className="h-full hover:shadow-lg transition-shadow cursor-pointer">
-                  <CardHeader>
-                    <div className="flex items-center space-x-3">
-                      <div className={`p-2 rounded-lg bg-gray-100 ${policy.color}`}>
-                        <IconComponent className="h-6 w-6" />
+        <div className="mt-8 flex flex-col gap-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h1 className="text-3xl font-semibold text-white sm:text-4xl">Legal & Compliance</h1>
+              <p className="mt-2 text-sm text-slate-400">
+                Review our policies to understand how we operate, protect your data, and deliver services.
+              </p>
+            </div>
+            <span className="inline-flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-300">
+              Last updated: Jan 2026
+            </span>
+          </div>
+
+          <div className="grid gap-6 md:grid-cols-2">
+            {policies.map((policy) => {
+              const IconComponent = policy.icon;
+              return (
+                <Link key={policy.href} href={policy.href} className="group">
+                  <div className="h-full rounded-2xl border border-white/10 bg-slate-900/70 p-6 transition-colors group-hover:border-cyan-400/40">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/5">
+                        <IconComponent className="h-5 w-5 text-cyan-300" />
                       </div>
-                      <CardTitle className="text-xl">{policy.title}</CardTitle>
+                      <h2 className="text-lg font-semibold text-white">{policy.title}</h2>
                     </div>
-                  </CardHeader>
-                  <CardContent>
-                    <CardDescription className="text-base">
-                      {policy.description}
-                    </CardDescription>
-                  </CardContent>
-                </Card>
-              </Link>
-            );
-          })}
-        </div>
+                    <p className="mt-3 text-sm text-slate-400">{policy.description}</p>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
 
-        {/* Contact Information */}
-        <div className="mt-12 p-6 bg-gray-50 rounded-lg">
-          <h2 className="text-2xl font-semibold mb-4">Need Help?</h2>
-          <p className="text-muted-foreground mb-4">
-            If you have questions about any of our policies, please don't hesitate to contact us.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4">
-            <Link 
-              href="/contact" 
-              className="inline-flex items-center justify-center px-6 py-3 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
-            >
-              Contact Support
-            </Link>
-            <a 
-              href="mailto:support@tecbunny.com" 
-              className="inline-flex items-center justify-center px-6 py-3 border border-input bg-background hover:bg-accent hover:text-accent-foreground rounded-md transition-colors"
-            >
-              Email Us
-            </a>
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+            <h2 className="text-xl font-semibold text-white">Need Help?</h2>
+            <p className="mt-2 text-sm text-slate-400">
+              If you have questions about any of our policies, please don&apos;t hesitate to contact us.
+            </p>
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+              <Link
+                href="/contact"
+                className="inline-flex items-center justify-center rounded-lg border border-cyan-400/40 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-200"
+              >
+                Contact Support
+              </Link>
+              <a
+                href="mailto:support@tecbunny.com"
+                className="inline-flex items-center justify-center rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white"
+              >
+                Email Us
+              </a>
+            </div>
           </div>
         </div>
       </div>

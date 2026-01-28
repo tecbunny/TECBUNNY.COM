@@ -56,10 +56,13 @@ export default function AdminLayoutClient({ children }: AdminLayoutClientProps) 
   const authorized = !!user && isAtLeast(userRole, 'admin');
 
   return (
-    <div className="flex min-h-screen bg-muted/40" data-auth-state={authorized ? 'authorized' : (loading ? 'checking' : 'redirecting')}>
+    <div
+      className="admin-shell flex min-h-screen w-full items-start bg-[#030712] text-slate-200"
+      data-auth-state={authorized ? 'authorized' : (loading ? 'checking' : 'redirecting')}
+    >
       <a
         href="#admin-main"
-        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 bg-background border rounded px-3 py-1 text-sm z-50"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 rounded border border-white/10 bg-slate-900/90 px-3 py-1 text-sm text-slate-100 z-50"
       >
         Skip to main content
       </a>
@@ -68,7 +71,7 @@ export default function AdminLayoutClient({ children }: AdminLayoutClientProps) 
       </div>
       <main
         id="admin-main"
-        className="flex-1 p-4 sm:p-6 focus:outline-none relative"
+        className="relative flex-1 p-4 sm:p-6 focus:outline-none"
         tabIndex={-1}
         data-sidebar-ready={authorized || undefined}
         aria-label="Admin main content"
@@ -76,10 +79,10 @@ export default function AdminLayoutClient({ children }: AdminLayoutClientProps) 
       >
         {children}
         {loading && !authorized && (
-          <div className="absolute inset-0 flex items-center justify-center bg-background/40 backdrop-blur-sm" aria-live="polite">
-            <div className="flex items-center gap-3 px-4 py-2 rounded-md border bg-background shadow-sm">
-              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600" />
-              <span className="text-sm text-muted-foreground">Checking access…</span>
+          <div className="absolute inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm" aria-live="polite">
+            <div className="flex items-center gap-3 rounded-md border border-white/10 bg-slate-900/80 px-4 py-2 shadow-sm">
+              <div className="h-5 w-5 animate-spin rounded-full border-b-2 border-cyan-300" />
+              <span className="text-sm text-slate-300">Checking access…</span>
             </div>
           </div>
         )}

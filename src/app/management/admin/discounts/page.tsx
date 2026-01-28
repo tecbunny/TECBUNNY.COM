@@ -1,5 +1,5 @@
-import OffersManagement from '../../../../components/admin/OffersManagement';
+import { redirect } from 'next/navigation';
 
 export default function Page() {
-  return <OffersManagement initialTab="discounts" />;
+  redirect('/management/admin/offers?tab=discounts');
 }

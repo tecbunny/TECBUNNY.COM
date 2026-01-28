@@ -428,27 +428,27 @@ export default function PaymentMethodPage() {
             ) : (
               <div className="space-y-4">
                 {paymentMethod.toLowerCase() === 'card' && (
-                  <div className="bg-gray-50 p-4 rounded-lg text-center">
-                    <CreditCard className="h-12 w-12 mx-auto text-gray-400 mb-2" />
-                    <p className="text-sm text-gray-600">
+                  <div className="bg-white/5 border border-white/10 p-4 rounded-lg text-center">
+                    <CreditCard className="h-12 w-12 mx-auto text-slate-400 mb-2" />
+                    <p className="text-sm text-slate-300">
                       Card payment gateway integration coming soon
                     </p>
                   </div>
                 )}
                 
                 {paymentMethod.toLowerCase() === 'netbanking' && (
-                  <div className="bg-gray-50 p-4 rounded-lg text-center">
-                    <Banknote className="h-12 w-12 mx-auto text-gray-400 mb-2" />
-                    <p className="text-sm text-gray-600">
+                  <div className="bg-white/5 border border-white/10 p-4 rounded-lg text-center">
+                    <Banknote className="h-12 w-12 mx-auto text-slate-400 mb-2" />
+                    <p className="text-sm text-slate-300">
                       Net banking integration coming soon
                     </p>
                   </div>
                 )}
                 
                 {paymentMethod.toLowerCase() === 'wallet' && (
-                  <div className="bg-gray-50 p-4 rounded-lg text-center">
-                    <Smartphone className="h-12 w-12 mx-auto text-gray-400 mb-2" />
-                    <p className="text-sm text-gray-600">
+                  <div className="bg-white/5 border border-white/10 p-4 rounded-lg text-center">
+                    <Smartphone className="h-12 w-12 mx-auto text-slate-400 mb-2" />
+                    <p className="text-sm text-slate-300">
                       Digital wallet integration coming soon
                     </p>
                   </div>

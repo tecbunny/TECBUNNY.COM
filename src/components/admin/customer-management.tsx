@@ -163,13 +163,13 @@ export default function CustomerManagementDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <div className="min-h-screen bg-slate-950 p-6 text-slate-100">
       <div className="max-w-7xl mx-auto">
         <div className="mb-6">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+          <h1 className="text-3xl font-bold text-white mb-2">
             Customer Management Dashboard
           </h1>
-          <p className="text-gray-600">
+          <p className="text-slate-300">
             Manage customers from phone contacts and WhatsApp interactions
           </p>
         </div>
@@ -181,7 +181,7 @@ export default function CustomerManagementDashboard() {
               <div className="flex items-center">
                 <User className="w-8 h-8 text-blue-500 mb-2" />
                 <div className="ml-4">
-                  <p className="text-sm text-gray-600">Total Customers</p>
+                  <p className="text-sm text-slate-300">Total Customers</p>
                   <p className="text-2xl font-bold">{customers.length}</p>
                 </div>
               </div>
@@ -193,7 +193,7 @@ export default function CustomerManagementDashboard() {
               <div className="flex items-center">
                 <Phone className="w-8 h-8 text-green-500 mb-2" />
                 <div className="ml-4">
-                  <p className="text-sm text-gray-600">Phone Leads</p>
+                  <p className="text-sm text-slate-300">Phone Leads</p>
                   <p className="text-2xl font-bold">
                     {customers.filter(c => c.lead_source === 'phone_call').length}
                   </p>
@@ -207,7 +207,7 @@ export default function CustomerManagementDashboard() {
               <div className="flex items-center">
                 <MessageCircle className="w-8 h-8 text-purple-500 mb-2" />
                 <div className="ml-4">
-                  <p className="text-sm text-gray-600">WhatsApp Leads</p>
+                  <p className="text-sm text-slate-300">WhatsApp Leads</p>
                   <p className="text-2xl font-bold">
                     {customers.filter(c => c.lead_source === 'whatsapp').length}
                   </p>
@@ -221,7 +221,7 @@ export default function CustomerManagementDashboard() {
               <div className="flex items-center">
                 <Calendar className="w-8 h-8 text-orange-500 mb-2" />
                 <div className="ml-4">
-                  <p className="text-sm text-gray-600">New Today</p>
+                  <p className="text-sm text-slate-300">New Today</p>
                   <p className="text-2xl font-bold">
                     {customers.filter(c => 
                       new Date(c.created_at).toDateString() === new Date().toDateString()
@@ -276,7 +276,7 @@ export default function CustomerManagementDashboard() {
                   {customers.map((customer) => (
                     <div
                       key={customer.id}
-                      className={`p-4 border rounded-lg cursor-pointer transition-colors hover:bg-gray-50 ${
+                      className={`p-4 border border-white/10 rounded-lg cursor-pointer transition-colors hover:bg-white/5 ${
                         selectedCustomer?.id === customer.id ? 'bg-blue-50 border-blue-200' : ''
                       }`}
                       onClick={() => setSelectedCustomer(customer)}
@@ -285,10 +285,10 @@ export default function CustomerManagementDashboard() {
                         <div className="flex items-center space-x-3">
                           {getSourceIcon(customer.lead_source)}
                           <div>
-                            <h3 className="font-medium text-gray-900">
+                            <h3 className="font-medium text-white">
                               {customer.name}
                             </h3>
-                            <p className="text-sm text-gray-600">
+                            <p className="text-sm text-slate-300">
                               {customer.phone}
                             </p>
                           </div>
@@ -302,7 +302,7 @@ export default function CustomerManagementDashboard() {
                           )}
                         </div>
                       </div>
-                      <div className="mt-2 text-xs text-gray-500">
+                      <div className="mt-2 text-xs text-slate-400">
                         First contact: {new Date(customer.first_contact_date).toLocaleDateString()}
                         {customer.call_count > 0 && (
                           <span className="ml-2">• {customer.call_count} calls</span>
@@ -327,32 +327,32 @@ export default function CustomerManagementDashboard() {
                   <CardContent>
                     <div className="space-y-3">
                       <div>
-                        <label className="text-sm font-medium text-gray-600">Name</label>
-                        <p className="text-gray-900">{selectedCustomer.name}</p>
+                        <label className="text-sm font-medium text-slate-300">Name</label>
+                        <p className="text-white">{selectedCustomer.name}</p>
                       </div>
                       <div>
-                        <label className="text-sm font-medium text-gray-600">Phone</label>
-                        <p className="text-gray-900">{selectedCustomer.phone}</p>
+                        <label className="text-sm font-medium text-slate-300">Phone</label>
+                        <p className="text-white">{selectedCustomer.phone}</p>
                       </div>
                       {selectedCustomer.email && (
                         <div>
-                          <label className="text-sm font-medium text-gray-600">Email</label>
-                          <p className="text-gray-900">{selectedCustomer.email}</p>
+                          <label className="text-sm font-medium text-slate-300">Email</label>
+                          <p className="text-white">{selectedCustomer.email}</p>
                         </div>
                       )}
                       <div>
-                        <label className="text-sm font-medium text-gray-600">Source</label>
-                        <p className="text-gray-900">{selectedCustomer.lead_source}</p>
+                        <label className="text-sm font-medium text-slate-300">Source</label>
+                        <p className="text-white">{selectedCustomer.lead_source}</p>
                       </div>
                       <div>
-                        <label className="text-sm font-medium text-gray-600">Status</label>
+                        <label className="text-sm font-medium text-slate-300">Status</label>
                         <Badge className={getStatusColor(selectedCustomer.status)}>
                           {selectedCustomer.status}
                         </Badge>
                       </div>
                       <div>
-                        <label className="text-sm font-medium text-gray-600">Call Count</label>
-                        <p className="text-gray-900">{selectedCustomer.call_count}</p>
+                        <label className="text-sm font-medium text-slate-300">Call Count</label>
+                        <p className="text-white">{selectedCustomer.call_count}</p>
                       </div>
                     </div>
                   </CardContent>
@@ -401,15 +401,15 @@ export default function CustomerManagementDashboard() {
                             <span className="text-sm font-medium">
                               {interaction.interaction_type}
                             </span>
-                            <span className="text-xs text-gray-500">
+                            <span className="text-xs text-slate-400">
                               {new Date(interaction.created_at).toLocaleString()}
                             </span>
                           </div>
-                          <div className="text-xs text-gray-600">
+                          <div className="text-xs text-slate-300">
                             Direction: {interaction.direction}
                           </div>
                           {interaction.interaction_data && (
-                            <div className="text-xs text-gray-500 mt-1">
+                            <div className="text-xs text-slate-400 mt-1">
                               {JSON.stringify(interaction.interaction_data, null, 2)}
                             </div>
                           )}

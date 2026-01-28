@@ -47,6 +47,7 @@ export interface OTPRequest {
   email?: string;
   purpose: OTPPurpose;
   preferredChannel?: OTPChannel;
+  enforcePreferredChannel?: boolean;
   userId?: string;
   orderId?: string;
 }
@@ -91,6 +92,14 @@ type ChannelSendResult = ChannelSendSuccess | ChannelSendFailure;
 
 class MultiChannelOTPManager {
   private emailTransporter: nodemailer.Transporter;
+  private isInfobipWhatsAppConfigured(): boolean {
+    return Boolean(
+      process.env.INFOBIP_API_KEY &&
+      process.env.INFOBIP_BASE_URL &&
+      process.env.INFOBIP_WHATSAPP_FROM &&
+      process.env.INFOBIP_WHATSAPP_TEMPLATE_NAME
+    );
+  }
   
   constructor() {
     // Initialize Nodemailer for email OTP
@@ -126,7 +135,9 @@ class MultiChannelOTPManager {
     
     if (hasPhone) availableChannels.push('sms');
     if (hasEmail) availableChannels.push('email');
-    if (hasPhone) availableChannels.push('whatsapp'); // WhatsApp template 'otp2' is now active
+    if (hasPhone && this.isInfobipWhatsAppConfigured()) {
+      availableChannels.push('whatsapp'); // WhatsApp template 'otp2' is now active
+    }
 
     // Define fallback order: SMS → Email → WhatsApp
     const fallbackOrder: OTPChannel[] = ['sms', 'email', 'whatsapp'];
@@ -195,6 +206,22 @@ class MultiChannelOTPManager {
    */
   private async sendEmailOTP(email: string, code: string, purpose: string): Promise<ChannelSendSuccess> {
     try {
+      const infobipApiKey = process.env.INFOBIP_API_KEY;
+      const infobipBaseUrl = process.env.INFOBIP_BASE_URL;
+      const infobipSender = process.env.INFOBIP_EMAIL_FROM;
+      const infobipReplyTo = process.env.INFOBIP_EMAIL_REPLY_TO;
+      if (infobipApiKey && infobipBaseUrl && infobipSender) {
+        return await this.sendInfobipEmailOTP(
+          email,
+          code,
+          purpose,
+          infobipApiKey,
+          infobipBaseUrl,
+          infobipSender,
+          infobipReplyTo
+        );
+      }
+
       const mailOptions = {
         from: process.env.SMTP_FROM || 'noreply@tecbunny.com',
         to: email,
@@ -237,51 +264,110 @@ class MultiChannelOTPManager {
   }
 
   /**
-   * Send WhatsApp OTP using Superfone API with template 'otp2'
+   * Send Email OTP using Infobip Email API (V4)
+   */
+  private async sendInfobipEmailOTP(
+    email: string,
+    code: string,
+    purpose: string,
+    apiKey: string,
+    baseUrl: string,
+    sender: string,
+    replyTo?: string
+  ): Promise<ChannelSendSuccess> {
+    const normalizedBaseUrl = baseUrl.startsWith('http') ? baseUrl : `https://${baseUrl}`;
+    const endpoint = `${normalizedBaseUrl.replace(/\/$/, '')}/email/4/messages`;
+    const subject = `Your ${purpose.replace('_', ' ').toUpperCase()} Verification Code`;
+    const textBody = `Your verification code for ${purpose.replace('_', ' ')} is: ${code}. This code is valid for 5 minutes.`;
+    const htmlBody = `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #333;">Verification Code</h2>
+            <p>Your verification code for ${purpose.replace('_', ' ')} is:</p>
+            <div style="background: #f5f5f5; padding: 20px; text-align: center; margin: 20px 0;">
+              <h1 style="color: #007bff; font-size: 36px; margin: 0; letter-spacing: 5px;">${code}</h1>
+            </div>
+            <p style="color: #666;">
+              This code is valid for 5 minutes. Do not share this code with anyone.
+            </p>
+            <hr style="margin: 30px 0;">
+            <p style="color: #999; font-size: 12px;">
+              If you didn't request this code, please ignore this email.
+            </p>
+          </div>
+        `;
+
+    const payload: any = {
+      messages: [
+        {
+          sender,
+          destinations: [
+            {
+              to: [{ destination: email }]
+            }
+          ],
+          content: {
+            subject,
+            text: textBody,
+            html: htmlBody
+          }
+        }
+      ]
+    };
+
+    if (replyTo) {
+      payload.messages[0].replyTo = replyTo;
+    }
+
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        Authorization: `App ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const result = await response.json().catch(() => null);
+    if (!response.ok) {
+      const errorMessage = result?.requestError?.serviceException?.text || result?.message || `HTTP ${response.status}`;
+      logger.error('Infobip Email OTP send failed', { email, status: response.status, response: result });
+      throw new Error(errorMessage);
+    }
+
+    const messageId = result?.messages?.[0]?.messageId;
+    if (!messageId) {
+      logger.error('Infobip Email OTP missing messageId', { email, response: result });
+      throw new Error('Email send failed');
+    }
+
+    logger.info('Infobip Email OTP sent successfully', { email, messageId });
+    return {
+      success: true,
+      provider: 'infobip-email',
+      providerMessageId: messageId,
+      raw: result
+    };
+  }
+
+  /**
+   * Send WhatsApp OTP using Infobip template message
    */
   private async sendWhatsAppOTP(phone: string, code: string, _purpose: string): Promise<ChannelSendSuccess> {
     try {
-      const { sendWhatsAppTemplate } = await import('./superfone-whatsapp-service');
-      
-      const result = await sendWhatsAppTemplate({
-        templateName: 'otp2',
-        language: 'en',
-        recipient: phone,
-        components: [
-          {
-            type: 'body',
-            parameters: [
-              {
-                type: 'text',
-                text: code
-              }
-            ]
-          },
-          {
-            type: 'button',
-            sub_type: 'url',
-            index: 0,
-            parameters: [
-              {
-                type: 'text',
-                text: code
-              }
-            ]
-          }
-        ]
-      });
+      const { sendInfobipWhatsAppOtp } = await import('./infobip/infobip-whatsapp-otp');
+      const infobipResult = await sendInfobipWhatsAppOtp(phone, code, 'Customer', code);
 
-      if (!result.success) {
-        throw new Error(result.error || 'WhatsApp send failed');
+      if (infobipResult.success) {
+        logger.info('WhatsApp OTP sent successfully via Infobip', { phone });
+        return {
+          success: true,
+          provider: 'infobip-whatsapp',
+          providerMessageId: infobipResult.messageId,
+          raw: infobipResult.raw
+        };
       }
-
-      logger.info('WhatsApp OTP sent successfully via Superfone template otp2', { phone });
-      return {
-        success: true,
-        provider: 'superfone-whatsapp',
-        providerMessageId: result.messageId,
-        raw: result.data
-      };
+      const errorMessage = infobipResult.error || 'WhatsApp send failed';
+      throw new Error(errorMessage);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('WhatsApp OTP sending failed', {
@@ -359,11 +445,21 @@ class MultiChannelOTPManager {
       const hasEmail = !!request.email;
       
       let preferredChannel = request.preferredChannel;
+      let enforcePreferredChannel = Boolean(request.enforcePreferredChannel);
       if (!preferredChannel) {
         // Auto-select based on available contact methods
         if (hasPhone) preferredChannel = 'sms';
         else if (hasEmail) preferredChannel = 'email';
         else throw new Error('No contact method available');
+      }
+
+      if (preferredChannel === 'whatsapp' && !this.isInfobipWhatsAppConfigured()) {
+        logger.warn('WhatsApp OTP requested but Infobip config missing; falling back', {
+          hasPhone,
+          hasEmail
+        });
+        preferredChannel = hasPhone ? 'sms' : 'email';
+        enforcePreferredChannel = false;
       }
 
       // Validate channel availability
@@ -377,7 +473,9 @@ class MultiChannelOTPManager {
         throw new Error('WhatsApp channel requires phone number');
       }
 
-      const fallbackChannels = this.determineFallbackChannels(preferredChannel, hasPhone, hasEmail);
+      const fallbackChannels = enforcePreferredChannel
+        ? []
+        : this.determineFallbackChannels(preferredChannel, hasPhone, hasEmail);
 
       const supabaseClient = supabase;
       let otpRecord: any;
@@ -448,6 +546,10 @@ class MultiChannelOTPManager {
       if (!primaryResult.success) {
         const primaryError = primaryResult.error || 'Unknown error';
         deliveryErrors.push({ channel: preferredChannel, error: primaryError });
+
+        if (enforcePreferredChannel) {
+          throw new Error(`Failed to send OTP via ${preferredChannel}: ${primaryError}`);
+        }
 
         for (const fallbackChannel of fallbackChannels) {
           const fallbackResult = await this.sendOTPViaChannel(

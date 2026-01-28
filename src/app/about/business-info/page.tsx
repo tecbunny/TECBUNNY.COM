@@ -130,7 +130,7 @@ export default function BusinessInfoPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="p-4 bg-gray-50 rounded-lg border">
+            <div className="p-4 bg-white/5 border border-white/10 rounded-lg">
               <address className="text-lg text-gray-700 not-italic leading-relaxed">
                 TECBUNNY SOLUTIONS PRIVATE LIMITED<br />
                 H NO 11 NHAYGINWADA, PARSE<br />
@@ -158,7 +158,7 @@ export default function BusinessInfoPage() {
               <Phone className="h-5 w-5 text-green-600" />
               <div>
                 <h3 className="font-semibold text-gray-900">Customer Support</h3>
-                <p className="text-gray-700">+91 94296 94995</p>
+                <p className="text-gray-700">+91 96041 36010</p>
               </div>
             </div>
             <div className="flex items-center gap-3">
@@ -226,7 +226,7 @@ export default function BusinessInfoPage() {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="flex items-center justify-between p-6 bg-gray-50 rounded-lg border border-gray-200 hover:border-gray-300 transition-colors">
+              <div className="flex items-center justify-between p-6 bg-white/5 rounded-lg border border-white/10 hover:border-white/20 transition-colors">
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
                     <FileText className="h-6 w-6 text-red-600" />
@@ -247,7 +247,7 @@ export default function BusinessInfoPage() {
                 </a>
               </div>
               
-              <div className="flex items-center justify-between p-6 bg-gray-50 rounded-lg border border-gray-200 hover:border-gray-300 transition-colors">
+              <div className="flex items-center justify-between p-6 bg-white/5 rounded-lg border border-white/10 hover:border-white/20 transition-colors">
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
                     <Shield className="h-6 w-6 text-green-600" />
@@ -344,7 +344,7 @@ export default function BusinessInfoPage() {
         <div className="mt-12 text-center">
           <p className="text-sm text-gray-500">
             This information is accurate as of October 2025. For any business inquiries or verification, 
-            please contact us at support@tecbunny.com or +91 94296 94995.
+            please contact us at support@tecbunny.com or +91 96041 36010.
           </p>
         </div>
       </div>

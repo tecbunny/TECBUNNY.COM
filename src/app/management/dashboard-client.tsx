@@ -34,9 +34,11 @@ export default function ManagementDashboard() {
       
       switch (user.role) {
         case 'admin':
+        case 'superadmin':
           redirectPath = '/management/admin';
           break;
         case 'sales':
+        case 'service_engineer':
         case 'manager':
           redirectPath = '/management/sales';
           break;
@@ -56,11 +58,13 @@ export default function ManagementDashboard() {
   // Show loading state
   if (loading) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="flex items-center justify-center min-h-[400px]">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-            <p className="text-muted-foreground">Loading dashboard...</p>
+      <div className="min-h-screen bg-slate-50">
+        <div className="container mx-auto px-6 pb-16 pt-12">
+          <div className="flex items-center justify-center min-h-[400px]">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+              <p className="text-slate-600">Loading dashboard...</p>
+            </div>
           </div>
         </div>
       </div>
@@ -70,16 +74,18 @@ export default function ManagementDashboard() {
   // Show access denied if no user (should redirect, but just in case)
   if (!user) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="max-w-md mx-auto text-center">
-          <Lock className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-          <h1 className="text-2xl font-bold mb-4">Access Denied</h1>
-          <p className="text-muted-foreground mb-6">
-            You need to be logged in to access the management dashboard.
-          </p>
-          <Button onClick={() => router.push('/auth/signin')}>
-            Go to Login
-          </Button>
+      <div className="min-h-screen bg-slate-50">
+        <div className="container mx-auto px-6 pb-16 pt-12">
+          <div className="max-w-md mx-auto text-center">
+            <Lock className="h-16 w-16 text-slate-400 mx-auto mb-4" />
+            <h1 className="text-2xl font-bold mb-4 text-slate-900">Access Denied</h1>
+            <p className="text-slate-600 mb-6">
+              You need to be logged in to access the management dashboard.
+            </p>
+            <Button onClick={() => router.push('/auth/signin')}>
+              Go to Login
+            </Button>
+          </div>
         </div>
       </div>
     );
@@ -148,16 +154,17 @@ export default function ManagementDashboard() {
   ];
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="min-h-screen bg-slate-50">
+      <div className="container mx-auto px-6 pb-16 pt-12">
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-4xl font-bold mb-2">Management Dashboard</h1>
-          <p className="text-lg text-muted-foreground">
+          <h1 className="text-4xl font-bold mb-2 text-slate-900">Management Dashboard</h1>
+          <p className="text-lg text-slate-600">
             Welcome back, {user?.name || user?.email}
           </p>
           <div className="flex items-center gap-2 mt-2">
-            <span className="text-sm px-2 py-1 bg-primary/10 text-primary rounded-full capitalize">
+            <span className="text-sm px-2 py-1 bg-blue-100 text-blue-700 rounded-full capitalize">
               {user?.role || 'User'}
             </span>
           </div>
@@ -244,6 +251,7 @@ export default function ManagementDashboard() {
             </div>
           </CardContent>
         </Card>
+      </div>
       </div>
     </div>
   );

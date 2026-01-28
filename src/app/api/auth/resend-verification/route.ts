@@ -46,9 +46,9 @@ export async function POST(request: NextRequest) {
       return apiError('VALIDATION_ERROR', { overrideMessage: 'Missing OTP reference. Please request a new code.', correlationId });
     }
 
-    const validChannels: OTPChannel[] = ['sms', 'email', 'whatsapp'];
+    const validChannels: OTPChannel[] = ['whatsapp'];
     if (!fallbackChannel || !validChannels.includes(fallbackChannel as OTPChannel)) {
-      return apiError('VALIDATION_ERROR', { overrideMessage: 'Please choose a valid channel (sms, whatsapp, email).', correlationId });
+      return apiError('VALIDATION_ERROR', { overrideMessage: 'Please choose WhatsApp for verification.', correlationId });
     }
 
     const resendResult = await otpService.resendOTPWithFallback(otpId, fallbackChannel as OTPChannel);

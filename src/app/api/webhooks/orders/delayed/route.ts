@@ -209,7 +209,7 @@ ${orderData.trackingUrl ? `🔍 Live tracking: ${orderData.trackingUrl}` : ''}
 
 📞 Priority Support:
 • Reply to this message for instant help
-• Call +91 9429694995 for urgent assistance
+• Call +91 96041 36010 for urgent assistance
 • WhatsApp updates every 6 hours
 
 We truly appreciate your patience and apologize for any inconvenience caused. Your satisfaction is our priority! 🙏

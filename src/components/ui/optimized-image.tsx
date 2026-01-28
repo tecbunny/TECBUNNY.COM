@@ -107,7 +107,6 @@ export function OptimizedImage({
 
   const imageProps = {
     src: optimizedSrc,
-    alt,
     className: cn(className),
     priority,
     quality,
@@ -121,6 +120,7 @@ export function OptimizedImage({
     return (
       <Image
         {...imageProps}
+        alt={alt}
         fill
         sizes={sizes || '(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw'}
         blurDataURL={blurDataURL || undefined}
@@ -132,6 +132,7 @@ export function OptimizedImage({
     return (
       <Image
         {...imageProps}
+        alt={alt}
         width={width}
         height={height}
         sizes={sizes}
@@ -144,6 +145,7 @@ export function OptimizedImage({
   return (
     <Image
       {...imageProps}
+      alt={alt}
       fill
       sizes={sizes || '(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw'}
       blurDataURL={blurDataURL || undefined}

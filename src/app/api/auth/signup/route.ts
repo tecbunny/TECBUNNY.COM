@@ -72,9 +72,16 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate required fields
-    if (!email || !password || !name) {
+    if (!password || !name) {
       return NextResponse.json(
-        { error: 'Email, password, and name are required' },
+        { error: 'Name and password are required' },
+        { status: 400 }
+      );
+    }
+
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return NextResponse.json(
+        { error: 'Please enter a valid email address' },
         { status: 400 }
       );
     }
@@ -96,25 +103,32 @@ export async function POST(request: NextRequest) {
 
     // Validate mobile if provided
     let mobile = _mobile;
-    if (mobile) {
-      mobile = mobile.replace(/\D/g, ''); // Remove non-digits
-      if (mobile.length < 10 || mobile.length > 15) {
-        return NextResponse.json(
-          { error: 'Mobile number must be between 10-15 digits' },
-          { status: 400 }
-        );
-      }
+    if (!mobile) {
+      return NextResponse.json(
+        { error: 'Mobile number is required' },
+        { status: 400 }
+      );
+    }
+    mobile = mobile.replace(/\D/g, ''); // Remove non-digits
+    if (mobile.length < 10 || mobile.length > 15) {
+      return NextResponse.json(
+        { error: 'Mobile number must be between 10-15 digits' },
+        { status: 400 }
+      );
     }
 
     // Check if user already exists
     try {
       const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
-      const existingUser = existingUsers.users.find((u: any) => u.email === email);
+      const existingUser = existingUsers.users.find((u: any) =>
+        (email && u.email === email) ||
+        (mobile && (u.phone === mobile || u.user_metadata?.mobile === mobile))
+      );
       
       if (existingUser) {
         return NextResponse.json(
           { 
-            error: 'An account with this email already exists', 
+            error: 'An account with this email or mobile already exists', 
             code: 'USER_ALREADY_EXISTS'
           },
           { status: 409 }
@@ -127,18 +141,18 @@ export async function POST(request: NextRequest) {
 
     // DO NOT CREATE USER YET - Only send OTP for verification
     // The user will be created AFTER OTP verification
-    logger.info('signup.sending_email_otp', { email });
+    logger.info('signup.sending_otp', { email, mobile: !!mobile });
 
     const normalizedMobile = mobile || undefined;
-    const preferredChannel: OTPChannel = requestedChannel && ['sms', 'email', 'whatsapp'].includes(requestedChannel)
-      ? requestedChannel
-      : (email ? 'email' : (normalizedMobile ? 'sms' : 'email'));
+    const preferredChannel: OTPChannel = 'whatsapp';
+    const enforcePreferredChannel = true;
 
     const otpResult = await otpService.generateOTP({
-      email,
+      email: email || undefined,
       phone: normalizedMobile,
       purpose: 'registration',
       preferredChannel,
+      enforcePreferredChannel,
     });
 
     if (!otpResult.success || !otpResult.otpId) {

@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Parser } from 'expr-eval';
 
 import { RefreshCw, Save, Settings2 } from 'lucide-react';
 
@@ -221,44 +220,232 @@ function readStringMetadataWithFallback(meta: JsonRecord | null | undefined, key
   return null;
 }
 
+type FormulaToken =
+  | { type: 'number'; value: number }
+  | { type: 'ident'; value: string }
+  | { type: 'op'; value: '+' | '-' | '*' | '/' }
+  | { type: 'paren'; value: '(' | ')' };
+
+function tokenizeFormula(expression: string): FormulaToken[] | null {
+  const tokens: FormulaToken[] = [];
+  let i = 0;
+  let prevType: 'none' | 'op' | 'paren_l' | 'value' = 'none';
+
+  while (i < expression.length) {
+    const ch = expression[i];
+
+    if (ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r') {
+      i += 1;
+      continue;
+    }
+
+    if (ch === '(') {
+      tokens.push({ type: 'paren', value: '(' });
+      prevType = 'paren_l';
+      i += 1;
+      continue;
+    }
+
+    if (ch === ')') {
+      tokens.push({ type: 'paren', value: ')' });
+      prevType = 'value';
+      i += 1;
+      continue;
+    }
+
+    if (ch === '-' && (prevType === 'none' || prevType === 'op' || prevType === 'paren_l')) {
+      tokens.push({ type: 'number', value: 0 });
+      tokens.push({ type: 'op', value: '-' });
+      prevType = 'op';
+      i += 1;
+      continue;
+    }
+
+    if (ch === '+' || ch === '-' || ch === '*' || ch === '/') {
+      tokens.push({ type: 'op', value: ch });
+      prevType = 'op';
+      i += 1;
+      continue;
+    }
+
+    if ((ch >= '0' && ch <= '9') || ch === '.') {
+      let j = i + 1;
+      while (j < expression.length) {
+        const next = expression[j];
+        if ((next >= '0' && next <= '9') || next === '.') {
+          j += 1;
+        } else {
+          break;
+        }
+      }
+      const raw = expression.slice(i, j);
+      const value = Number.parseFloat(raw);
+      if (!Number.isFinite(value)) {
+        return null;
+      }
+      tokens.push({ type: 'number', value });
+      prevType = 'value';
+      i = j;
+      continue;
+    }
+
+    if ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch === '_') {
+      let j = i + 1;
+      while (j < expression.length) {
+        const next = expression[j];
+        if ((next >= 'a' && next <= 'z') || (next >= 'A' && next <= 'Z') || (next >= '0' && next <= '9') || next === '_') {
+          j += 1;
+        } else {
+          break;
+        }
+      }
+      const ident = expression.slice(i, j);
+      tokens.push({ type: 'ident', value: ident });
+      prevType = 'value';
+      i = j;
+      continue;
+    }
+
+    return null;
+  }
+
+  return tokens;
+}
+
+function toRpn(tokens: FormulaToken[]): { rpn: FormulaToken[]; identifiers: Set<string> } | null {
+  const output: FormulaToken[] = [];
+  const stack: FormulaToken[] = [];
+  const identifiers = new Set<string>();
+  const precedence: Record<string, number> = { '+': 1, '-': 1, '*': 2, '/': 2 };
+
+  for (const token of tokens) {
+    if (token.type === 'number' || token.type === 'ident') {
+      output.push(token);
+      if (token.type === 'ident') {
+        identifiers.add(token.value);
+      }
+      continue;
+    }
+
+    if (token.type === 'op') {
+      while (stack.length > 0) {
+        const top = stack[stack.length - 1];
+        if (top.type === 'op' && precedence[top.value] >= precedence[token.value]) {
+          output.push(stack.pop() as FormulaToken);
+        } else {
+          break;
+        }
+      }
+      stack.push(token);
+      continue;
+    }
+
+    if (token.type === 'paren' && token.value === '(') {
+      stack.push(token);
+      continue;
+    }
+
+    if (token.type === 'paren' && token.value === ')') {
+      let found = false;
+      while (stack.length > 0) {
+        const top = stack.pop() as FormulaToken;
+        if (top.type === 'paren' && top.value === '(') {
+          found = true;
+          break;
+        }
+        output.push(top);
+      }
+      if (!found) {
+        return null;
+      }
+    }
+  }
+
+  while (stack.length > 0) {
+    const top = stack.pop() as FormulaToken;
+    if (top.type === 'paren') {
+      return null;
+    }
+    output.push(top);
+  }
+
+  return { rpn: output, identifiers };
+}
+
+function evaluateRpn(rpn: FormulaToken[], context: Record<string, number>): number | null {
+  const stack: number[] = [];
+
+  for (const token of rpn) {
+    if (token.type === 'number') {
+      stack.push(token.value);
+      continue;
+    }
+
+    if (token.type === 'ident') {
+      const value = context[token.value];
+      if (!Number.isFinite(value)) {
+        return null;
+      }
+      stack.push(value);
+      continue;
+    }
+
+    if (token.type === 'op') {
+      const right = stack.pop();
+      const left = stack.pop();
+      if (left === undefined || right === undefined) {
+        return null;
+      }
+      if (token.value === '+') {
+        stack.push(left + right);
+      } else if (token.value === '-') {
+        stack.push(left - right);
+      } else if (token.value === '*') {
+        stack.push(left * right);
+      } else if (token.value === '/') {
+        if (right === 0) {
+          return null;
+        }
+        stack.push(left / right);
+      }
+    }
+  }
+
+  if (stack.length !== 1) {
+    return null;
+  }
+
+  return stack[0];
+}
+
 function evaluateFormula(expression: string | null | undefined, context: Record<string, number>): number {
   if (!expression || !/^[0-9a-zA-Z_+\-*/().\s]*$/.test(expression)) {
     return 0;
   }
 
-  try {
-    const keys = Object.keys(context);
-
-    // Use a safe expression parser instead of new Function
-    // Disable functions and complex operators to avoid risky constructs
-    const parser = new Parser({
-      operators: {
-        add: true,
-        subtract: true,
-        multiply: true,
-        divide: true,
-        power: false,
-        factorial: false,
-        comparison: false,
-        logical: false,
-        conditional: false,
-      },
-    });
-    // Make sure all built-in functions are removed
-    // (this prevents calling e.g. `constructor()` or `Math.*`)
-    parser.functions = {} as any;
-    const expr = parser.parse(expression);
-    const usedVars = expr.variables();
-    const blacklist = ['constructor', 'process', 'globalThis', 'window', 'document', '__proto__'];
-    for (const token of usedVars) {
-      if (blacklist.includes(token)) return 0;
-      if (!keys.includes(token)) return 0;
-    }
-    const result = expr.evaluate(context);
-    return Number.isFinite(result) ? Number(result) : 0;
-  } catch (_error) {
+  const tokens = tokenizeFormula(expression);
+  if (!tokens) {
     return 0;
   }
+
+  const rpnResult = toRpn(tokens);
+  if (!rpnResult) {
+    return 0;
+  }
+
+  const keys = Object.keys(context);
+  const blacklist = ['constructor', 'process', 'globalThis', 'window', 'document', '__proto__'];
+  for (const token of rpnResult.identifiers) {
+    if (blacklist.includes(token)) {
+      return 0;
+    }
+    if (!keys.includes(token)) {
+      return 0;
+    }
+  }
+
+  const result = evaluateRpn(rpnResult.rpn, context);
+  return Number.isFinite(result) ? Number(result) : 0;
 }
 
 function getSelectedOption(

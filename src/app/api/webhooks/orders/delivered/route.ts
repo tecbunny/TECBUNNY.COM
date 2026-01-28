@@ -205,7 +205,7 @@ ${orderData.feedbackUrl ? `📝 Give feedback: ${orderData.feedbackUrl}` : '📝
 🎁 Happy with your purchase? 
 Share it with friends and get ₹100 off your next order!
 
-Need support? Reply to this message or call +91 9429694995
+Need support? Reply to this message or call +91 96041 36010
 
 Thank you for choosing TecBunny! 🚀
 Come back soon for more amazing products! 🛒

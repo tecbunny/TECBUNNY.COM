@@ -37,9 +37,12 @@ const productSchema = z.object({
   model_number: z.string().optional(),
   barcode: z.string().optional(),
   specifications: z.string().optional(),
+  installation_applicable: z.boolean().default(false),
+  installation_charge: z.coerce.number().nonnegative({ message: "Charge must be zero or more." }).default(0),
 });
 
-type ProductFormValues = z.infer<typeof productSchema>;
+type ProductFormInput = z.input<typeof productSchema>;
+type ProductFormValues = z.output<typeof productSchema>;
 
 export default function EditProductPage() {
   const router = useRouter();
@@ -53,7 +56,7 @@ export default function EditProductPage() {
   const [additionalImages, setAdditionalImages] = React.useState<string[]>([]);
   const [uploading, setUploading] = React.useState(false);
 
-  const form = useForm<ProductFormValues>({
+  const form = useForm<ProductFormInput, any, ProductFormValues>({
     resolver: zodResolver(productSchema),
     defaultValues: {
       name: '',
@@ -70,6 +73,8 @@ export default function EditProductPage() {
       model_number: '',
       barcode: '',
       specifications: '',
+      installation_applicable: false,
+      installation_charge: 0,
     },
   });
 
@@ -173,7 +178,9 @@ export default function EditProductPage() {
                 product_url: foundProduct.product_url || '',
                 model_number: foundProduct.model_number || '',
                 barcode: foundProduct.barcode || '',
-                specifications: specificationsString,
+              specifications: specificationsString,
+              installation_applicable: foundProduct.installation_applicable ?? false,
+              installation_charge: foundProduct.installation_charge ?? 0,
             });
         }
     }
@@ -207,6 +214,8 @@ export default function EditProductPage() {
             image: imagePreview || product.image,
             additional_images: additionalImages,
             specifications: Object.keys(specifications).length > 0 ? specifications : undefined,
+          installation_applicable: data.installation_applicable,
+          installation_charge: data.installation_charge ?? 0,
         };
         
         const { error } = await supabase
@@ -392,10 +401,38 @@ export default function EditProductPage() {
                       <CardContent className="space-y-6">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <FormField control={form.control} name="mrp" render={({ field }) => (
-                                <FormItem><FormLabel>MRP (₹)</FormLabel><FormControl><Input type="number" placeholder="e.g., 25000.00" {...field} /></FormControl><FormMessage /></FormItem>
+                                <FormItem>
+                                  <FormLabel>MRP (₹)</FormLabel>
+                                  <FormControl>
+                                    <Input
+                                      type="number"
+                                      placeholder="e.g., 25000.00"
+                                      value={typeof field.value === 'number' || typeof field.value === 'string' ? field.value : ''}
+                                      onChange={(event) => field.onChange(event.target.value)}
+                                      onBlur={field.onBlur}
+                                      name={field.name}
+                                      ref={field.ref}
+                                    />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
                             )}/>
                             <FormField control={form.control} name="price" render={({ field }) => (
-                                <FormItem><FormLabel>Sale Price (₹)</FormLabel><FormControl><Input type="number" placeholder="e.g., 19999.00" {...field} /></FormControl><FormMessage /></FormItem>
+                                <FormItem>
+                                  <FormLabel>Sale Price (₹)</FormLabel>
+                                  <FormControl>
+                                    <Input
+                                      type="number"
+                                      placeholder="e.g., 19999.00"
+                                      value={typeof field.value === 'number' || typeof field.value === 'string' ? field.value : ''}
+                                      onChange={(event) => field.onChange(event.target.value)}
+                                      onBlur={field.onBlur}
+                                      name={field.name}
+                                      ref={field.ref}
+                                    />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
                             )}/>
                         </div>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -430,6 +467,53 @@ export default function EditProductPage() {
                               <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
                             </FormItem>
                           )}/>
+                          <div className="grid grid-cols-1 gap-4">
+                            <FormField
+                              control={form.control}
+                              name="installation_applicable"
+                              render={({ field }) => (
+                                <FormItem className="flex items-center justify-between rounded-lg border border-white/10 bg-white/5 p-4">
+                                  <div className="space-y-0.5">
+                                    <FormLabel>Installation applicable?</FormLabel>
+                                    <p className="text-xs text-muted-foreground">Enable if this product can include installation.</p>
+                                  </div>
+                                  <FormControl>
+                                    <Switch checked={field.value} onCheckedChange={field.onChange} />
+                                  </FormControl>
+                                </FormItem>
+                              )}
+                            />
+                            <FormField
+                              control={form.control}
+                              name="installation_charge"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Installation charge (₹)</FormLabel>
+                                  <FormControl>
+                                    <Input
+                                      type="number"
+                                      step="0.01"
+                                      min="0"
+                                      disabled={!form.watch('installation_applicable')}
+                                      value={
+                                        typeof field.value === 'number'
+                                          ? field.value
+                                          : typeof field.value === 'string'
+                                            ? field.value
+                                            : ''
+                                      }
+                                      onChange={(e) => field.onChange(e.target.value === '' ? '' : Number(e.target.value))}
+                                      name={field.name}
+                                      onBlur={field.onBlur}
+                                      ref={field.ref}
+                                    />
+                                  </FormControl>
+                                  <FormDescription className="text-xs">Added to cart/invoice when customer opts in.</FormDescription>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                          </div>
                       </CardContent>
                   </Card>
                   <Button type="submit" className="w-full" size="lg" disabled={form.formState.isSubmitting || uploading}>

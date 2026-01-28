@@ -16,6 +16,7 @@ import { Button } from '../../components/ui/button';
 import { AddToCartButton } from '../../components/cart/AddToCartButton';
 
 import { StarRating } from './StarRating';
+import { useAnalytics } from '../../hooks/use-analytics';
 
 interface ProductCardProps {
   product: Product;
@@ -24,6 +25,7 @@ interface ProductCardProps {
 
 export function ProductCard({ product, viewMode = 'grid' }: ProductCardProps) {
   const router = useRouter();
+  const { trackEvent } = useAnalytics();
   // State to track image load errors
   const [hasImageError, setHasImageError] = React.useState(false);
   const displayName = product.title || product.name || 'Product';
@@ -32,8 +34,9 @@ export function ProductCard({ product, viewMode = 'grid' }: ProductCardProps) {
     if (target && (target.closest('button') || target.closest('a'))) {
       return;
     }
+    trackEvent('product_view', { productId: product.id, productName: displayName });
     router.push(`/products/${product.id}`);
-  }, [router, product.id]);
+  }, [router, product.id, displayName, trackEvent]);
   const handleQuickView = React.useCallback((event: React.MouseEvent) => {
     event.preventDefault();
     event.stopPropagation();
@@ -380,6 +383,8 @@ export function ProductCard({ product, viewMode = 'grid' }: ProductCardProps) {
               <img
                 src={displayImage}
                 alt={displayName}
+                width={800}
+                height={560}
                 className="w-full h-full object-contain p-4 transition-transform duration-300 group-hover:scale-105"
                 loading="lazy"
                 onError={() => setHasImageError(true)}
@@ -407,6 +412,8 @@ export function ProductCard({ product, viewMode = 'grid' }: ProductCardProps) {
                 <img 
                   src={product.brand_logo} 
                   alt={`${product.brand} logo`}
+                  width={20}
+                  height={20}
                   className="w-5 h-5 object-contain"
                   onError={(e) => {
                     const target = e.target as HTMLImageElement;

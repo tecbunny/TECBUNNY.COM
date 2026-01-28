@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
 import { logger } from '../../../../lib/logger';
+import { sendWelcomeNotification } from '../../../../lib/whatsapp-service';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.local';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 'placeholder-service-role-key';
@@ -33,9 +34,16 @@ export async function POST(request: NextRequest) {
     const { email, password, name, mobile, otpVerified } = await request.json();
 
     // Validate required fields
-    if (!email || !password || !name) {
+    if (!password || !name || !mobile) {
       return NextResponse.json(
-        { error: 'Email, password, and name are required' },
+        { error: 'Mobile, password, and name are required' },
+        { status: 400 }
+      );
+    }
+
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return NextResponse.json(
+        { error: 'Please enter a valid email address' },
         { status: 400 }
       );
     }
@@ -48,27 +56,39 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if user already exists
+    const normalizedMobile = String(mobile).replace(/\D/g, '');
     const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
-    const existingUser = existingUsers.users.find(u => u.email === email);
+    const existingUser = existingUsers.users.find(u =>
+      (email && u.email === email) ||
+      (normalizedMobile && (u.phone === normalizedMobile || u.user_metadata?.mobile === normalizedMobile))
+    );
     
     if (existingUser) {
       return NextResponse.json(
-        { error: 'An account with this email already exists' },
+        { error: 'An account with this email or mobile already exists' },
         { status: 409 }
       );
     }
 
     // Create user account NOW (after OTP verification)
-    const { data: userData, error: createError } = await supabaseAdmin.auth.admin.createUser({
-      email,
+    const userPayload: Record<string, any> = {
       password,
-      email_confirm: true, // Set to true since OTP was verified
       user_metadata: {
         name,
         role: 'customer',
-        ...(mobile && { mobile })
+        ...(mobile && { mobile: normalizedMobile })
       }
-    });
+    };
+
+    if (email) {
+      userPayload.email = email;
+      userPayload.email_confirm = true;
+    } else {
+      userPayload.phone = normalizedMobile;
+      userPayload.phone_confirm = true;
+    }
+
+    const { data: userData, error: createError } = await supabaseAdmin.auth.admin.createUser(userPayload);
 
     if (createError) {
       logger.error('complete_signup.create_user_failed', { error: createError, email });
@@ -77,7 +97,7 @@ export async function POST(request: NextRequest) {
       if (createError.message.includes('already been registered') || 
           createError.message.includes('User already registered')) {
         return NextResponse.json(
-          { error: 'An account with this email already exists' },
+          { error: 'An account with this email or mobile already exists' },
           { status: 409 }
         );
       }
@@ -94,7 +114,6 @@ export async function POST(request: NextRequest) {
     try {
       const profilePayload: Record<string, any> = {
         id: userData.user.id,
-        email: userData.user.email,
         name,
         full_name: name,
         role: 'customer',
@@ -102,9 +121,13 @@ export async function POST(request: NextRequest) {
         updated_at: new Date().toISOString()
       };
 
-      if (mobile) {
-        profilePayload.mobile = mobile;
-        profilePayload.phone = mobile;
+      if (userData.user.email) {
+        profilePayload.email = userData.user.email;
+      }
+
+      if (normalizedMobile) {
+        profilePayload.mobile = normalizedMobile;
+        profilePayload.phone = normalizedMobile;
       }
 
       const { error: profileError } = await supabaseAdmin
@@ -136,10 +159,14 @@ export async function POST(request: NextRequest) {
       SUPABASE_ANON_KEY
     );
 
-    const { data: signInData, error: signInError } = await regularSupabase.auth.signInWithPassword({
-      email,
-      password
-    });
+    const signInPayload: Record<string, string> = { password };
+    if (email) {
+      signInPayload.email = email;
+    } else {
+      signInPayload.phone = normalizedMobile;
+    }
+
+    const { data: signInData, error: signInError } = await regularSupabase.auth.signInWithPassword(signInPayload as any);
 
     if (signInError) {
       logger.error('complete_signup.signin_failed', { error: signInError, userId: userData.user.id });
@@ -148,7 +175,7 @@ export async function POST(request: NextRequest) {
         message: 'Account created successfully! Please sign in to continue.',
         user: {
           id: userData.user.id,
-          email: userData.user.email,
+          email: userData.user.email ?? null,
           name: userData.user.user_metadata?.name
         },
         requiresSignIn: true
@@ -156,6 +183,18 @@ export async function POST(request: NextRequest) {
     }
 
   logger.info('complete_signup.signin_success', { userId: signInData.user.id });
+
+    // Send welcome WhatsApp notification
+    if (normalizedMobile) {
+      try {
+        await sendWelcomeNotification(normalizedMobile, {
+          customerName: name,
+        });
+        logger.info('complete_signup.welcome_whatsapp_sent', { mobile: normalizedMobile });
+      } catch (welcomeError: any) {
+        logger.error('complete_signup.welcome_whatsapp_failed', { error: welcomeError.message });
+      }
+    }
 
     // Create response with redirect
     const response = NextResponse.json({

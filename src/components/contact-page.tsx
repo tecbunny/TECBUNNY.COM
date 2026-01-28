@@ -4,29 +4,21 @@ import * as React from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-
+import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { 
   MapPin, 
   Phone, 
   Mail, 
-  Clock,
-  MessageCircle,
   Send,
-  Facebook,
-  Instagram,
-  Twitter,
-  Linkedin,
-  Youtube,
-  Globe
 } from 'lucide-react';
 
 import { logger } from '../lib/logger';
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
+import { Checkbox } from '../components/ui/checkbox';
 import { Input } from '../components/ui/input';
 import { Textarea } from '../components/ui/textarea';
-import { createClient } from '../lib/supabase/client';
 import { usePageContent } from '../hooks/use-page-content';
 import {
   Form,
@@ -45,7 +37,7 @@ import {
 } from '../components/ui/select';
 import { useToast } from '../hooks/use-toast';
 
-const SUBJECT_OPTIONS = ['general', 'support', 'sales', 'billing', 'partnership', 'feedback'] as const;
+const SUBJECT_OPTIONS = ['general', 'support', 'sales', 'billing', 'partnership', 'feedback', 'web_development'] as const;
 const SUBJECT_LABELS: Record<(typeof SUBJECT_OPTIONS)[number], string> = {
   general: 'General Inquiry',
   support: 'Technical Support',
@@ -53,6 +45,7 @@ const SUBJECT_LABELS: Record<(typeof SUBJECT_OPTIONS)[number], string> = {
   billing: 'Billing Issue',
   partnership: 'Partnership',
   feedback: 'Feedback',
+  web_development: 'Web Development Inquiry',
 };
 
 const SUBJECT_SELECT_OPTIONS = SUBJECT_OPTIONS.map(value => ({
@@ -64,25 +57,24 @@ const contactSchema = z.object({
   name: z.string().min(2, { message: 'Name must be at least 2 characters.' }),
   email: z.string().email({ message: 'Please enter a valid email address.' }),
   phone: z.string().min(10, { message: 'Please enter a valid phone number.' }),
-  subject: z.enum(SUBJECT_OPTIONS, { errorMap: () => ({ message: 'Please select a subject.' }) }),
+  subject: z.enum(SUBJECT_OPTIONS, { message: 'Please select a subject.' }),
   message: z.string().min(10, { message: 'Message must be at least 10 characters.' }),
+  privacyConsent: z.boolean().refine((val) => val === true, { message: 'Please accept the Privacy Policy to proceed.' }),
 });
 
 type ContactFormValues = z.infer<typeof contactSchema>;
 
-const businessHours = [
-  { day: 'Monday - Friday', hours: '9:00 AM - 8:00 PM' },
-  { day: 'Saturday', hours: '9:00 AM - 8:00 PM' },
-  { day: 'Sunday', hours: '10:00 AM - 6:00 PM' },
-  { day: 'Public Holidays', hours: 'Closed' }
-];
-
 export default function ContactPage() {
+  const searchParams = useSearchParams();
+  const subjectParam = searchParams.get('subject');
+  const defaultSubject = (subjectParam && SUBJECT_OPTIONS.includes(subjectParam as any)) 
+    ? (subjectParam as typeof SUBJECT_OPTIONS[number]) 
+    : SUBJECT_OPTIONS[0];
+
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [companyInfo, setCompanyInfo] = React.useState<{supportEmail?: string; supportPhone?: string; registeredAddress?: string}>({});
-  const [socialMediaLinks, setSocialMediaLinks] = React.useState<{[key: string]: string}>({});
-  const supabase = createClient();
+  const [activeFaq, setActiveFaq] = React.useState<number | null>(0);
   const { content, loading } = usePageContent('contact_us');
 
   // Icon mapping for dynamic content
@@ -90,8 +82,6 @@ export default function ContactPage() {
     MapPin,
     Phone,
     Mail,
-    Clock,
-    MessageCircle
   };
 
   // Load social media links
@@ -104,41 +94,6 @@ export default function ContactPage() {
 
   }, []);
 
-  const loadSocialMediaLinks = React.useCallback(async () => {
-    try {
-      const { data: settings, error } = await supabase
-        .from('settings')
-        .select('key, value')
-        .in('key', [
-          'facebookUrl', 
-          'twitterUrl', 
-          'instagramUrl', 
-          'linkedinUrl', 
-          'youtubeUrl', 
-          'websiteUrl'
-        ]);
-
-      if (error) {
-        logger.error('Error loading social media settings', { error });
-        return;
-      }
-
-      const links: {[key: string]: string} = {};
-      settings?.forEach((setting) => {
-        if (setting.value) {
-          links[setting.key] = setting.value;
-        }
-      });
-      
-      setSocialMediaLinks(links);
-    } catch (error) {
-      logger.error('Error loading social media links', { error });
-    }
-  }, [supabase]);
-
-  React.useEffect(() => {
-    loadSocialMediaLinks();
-  }, [loadSocialMediaLinks]);
 
   const form = useForm<ContactFormValues>({
     resolver: zodResolver(contactSchema),
@@ -146,8 +101,9 @@ export default function ContactPage() {
       name: '',
       email: '',
       phone: '',
-      subject: SUBJECT_OPTIONS[0],
+      subject: defaultSubject,
       message: '',
+      privacyConsent: false,
     },
   });
 
@@ -213,259 +169,211 @@ export default function ContactPage() {
     }
   };
 
+  const faqItems = [
+    {
+      question: 'Do you offer site visits?',
+      answer:
+        'Yes, we provide site consultation visits in North Goa. For standard repairs, a visit charge of ₹999 applies, waived for major installations.',
+    },
+    {
+      question: 'How fast is installation?',
+      answer:
+        'For standard home setups (up to 8 cameras), installation is typically completed within 24-48 hours of confirmation.',
+    },
+    {
+      question: 'What does AMC cover?',
+      answer:
+        'AMC plans include regular maintenance, software updates, lens cleaning, and priority breakdown support. Hardware replacement costs are separate unless covered by warranty.',
+    },
+  ];
+
   return (
-    <div className="container mx-auto px-4 py-8">
-      {loading ? (
-        <div className="min-h-screen">
-          {/* Header with fallback content */}
-          <div className="text-center mb-12">
-            <h1 className="text-4xl font-bold text-primary mb-4">
-              Contact Us
-            </h1>
-            <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              Have questions? We'd love to hear from you. Send us a message and we'll respond as soon as possible.
-            </p>
-          </div>
-          <div className="flex items-center justify-center h-64">
+    <section className="relative overflow-hidden bg-slate-950 text-slate-200">
+      <div className="pointer-events-none absolute inset-0 bg-[url('/noise.svg')] opacity-20" />
+      <div className="pointer-events-none absolute left-20 top-20 h-96 w-96 rounded-full bg-cyan-500/10 blur-[120px]" />
+
+      <div className="mx-auto max-w-7xl px-4 pb-20 pt-0 sm:px-6 lg:px-8 sm:pt-0">
+        <div className="text-center">
+          <h1 className="text-4xl font-semibold text-white sm:text-5xl lg:text-6xl">
+            {content?.content?.hero?.title || 'Initialize'}{' '}
+            <span className="bg-gradient-to-r from-cyan-300 to-blue-400 bg-clip-text text-transparent">
+              Protocol.
+            </span>
+          </h1>
+          <p className="mx-auto mt-4 max-w-2xl text-base text-slate-400 sm:text-lg">
+            {content?.content?.hero?.description ||
+              'Ready to secure your premises? Our team in Parse, Goa is on standby for site visits, repairs, and consultations.'}
+          </p>
+        </div>
+
+        {loading ? (
+          <div className="flex min-h-[40vh] items-center justify-center">
             <div className="text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-              <p>Loading contact information...</p>
+              <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-b-2 border-cyan-300" />
+              <p className="text-sm text-slate-400">Loading contact information...</p>
             </div>
           </div>
-        </div>
-      ) : (
-        <>
-          {/* Header */}
-          <div className="text-center mb-12">
-            <h1 className="text-4xl font-bold text-primary mb-4">
-              {content?.content?.hero?.title || 'Contact Us'}
-            </h1>
-            <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              {content?.content?.hero?.description || "Have questions? We'd love to hear from you. Send us a message and we'll respond as soon as possible."}
-            </p>
-          </div>
+        ) : (
+          <div className="mt-16 grid gap-12 lg:grid-cols-2">
+            <div className="space-y-10">
+              <div className="grid gap-6 sm:grid-cols-2">
+                {((content?.content?.contactInfo as any[]) || [
+                  {
+                    icon: 'MapPin',
+                    title: 'HQ Location',
+                    details: [
+                      companyInfo.registeredAddress || 'Parcem, Pernem, Goa - 403512',
+                      { text: 'Directions', href: 'https://maps.app.goo.gl/HZDjt3zoB1Rcrjqp8' },
+                    ],
+                  },
+                  {
+                    icon: 'Phone',
+                    title: 'WhatsApp Support',
+                    details: [
+                      { text: '+91 96041 36010', href: 'https://wa.me/919604136010' },
+                      { text: companyInfo.supportEmail || 'support@tecbunny.com', href: `mailto:${companyInfo.supportEmail || 'support@tecbunny.com'}` },
+                    ],
+                  },
+                ]).map((info: any, index: number) => {
+                  const IconComponent = iconMap[info.icon] || Mail;
+                  return (
+                    <div key={index} className="rounded-2xl border border-white/10 bg-slate-900/70 p-6">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-cyan-500/10 text-cyan-300">
+                        <IconComponent className="h-5 w-5" />
+                      </div>
+                      <h3 className="mt-4 text-lg font-semibold text-white">{info.title}</h3>
+                      {info.details.map((detail: any, idx: number) => {
+                        const text = typeof detail === 'string' ? detail : detail?.text;
+                        const href = typeof detail === 'object' ? detail?.href : undefined;
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
-            {/* Contact Information */}
-            <div className="lg:col-span-1 space-y-6">
+                        if (!text) return null;
+
+                        return href ? (
+                          <a
+                            key={idx}
+                            href={href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="mt-1 block text-sm text-cyan-300 hover:text-cyan-200"
+                          >
+                            {text}
+                          </a>
+                        ) : (
+                          <p key={idx} className="mt-1 text-sm text-slate-400">
+                            {text}
+                          </p>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+              </div>
+
               <div>
-                <h2 className="text-2xl font-bold mb-6">Get in Touch</h2>
+                <h3 className="mb-4 flex items-center gap-2 text-xl font-semibold text-white">
+                  <span className="h-6 w-1 rounded-full bg-cyan-400" /> Common Queries
+                </h3>
                 <div className="space-y-4">
-                  {((content?.content?.contactInfo as any[]) || [
-                    {
-                      icon: 'MapPin',
-                      title: 'Visit Us',
-                      details: [companyInfo.registeredAddress || 'Parcem, Pernem, Goa - 403512'],
-                    },
-                    {
-                      icon: 'Phone',
-                      title: 'Call Us',
-                      details: [companyInfo.supportPhone || '+91 94296 94995'],
-                    },
-                    {
-                      icon: 'Mail',
-                      title: 'Email Us',
-                      details: [companyInfo.supportEmail || 'support@tecbunny.com'],
-                    },
-                  ]).map((info: any, index: number) => {
-                    const IconComponent = iconMap[info.icon] || Mail;
-                    return (
-                      <Card key={index} className="p-4">
-                        <div className="flex items-start gap-3">
-                          <div className="p-2 rounded-lg bg-primary/10">
-                            <IconComponent className="h-5 w-5 text-primary" />
-                          </div>
-                          <div className="flex-1">
-                            <h3 className="font-semibold mb-1">{info.title}</h3>
-                            {info.details.map((detail: string, idx: number) => (
-                              <p key={idx} className="text-sm text-muted-foreground">{detail}</p>
-                            ))}
-                            {info.action && (
-                              <Button variant="link" className="p-0 h-auto text-primary text-sm mt-1">
-                                {info.action}
-                              </Button>
-                            )}
-                          </div>
+                  {faqItems.map((item, index) => (
+                    <div key={item.question} className="rounded-xl border border-white/10 bg-white/5">
+                      <button
+                        type="button"
+                        onClick={() => setActiveFaq(activeFaq === index ? null : index)}
+                        className="flex w-full items-center justify-between px-5 py-4 text-left"
+                      >
+                        <span className="text-sm font-medium text-white">{item.question}</span>
+                        <span className={`text-cyan-300 transition-transform ${activeFaq === index ? 'rotate-180' : ''}`}>
+                          ▾
+                        </span>
+                      </button>
+                      {activeFaq === index && (
+                        <div className="border-t border-white/10 px-5 pb-4 text-sm text-slate-400">
+                          {item.answer}
                         </div>
-                      </Card>
-                    );
-                  })}
+                      )}
+                    </div>
+                  ))}
                 </div>
               </div>
+            </div>
 
-          {/* Business Hours */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Clock className="h-5 w-5" />
-                Business Hours
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                {businessHours.map((schedule, index) => (
-                  <div key={index} className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">{schedule.day}</span>
-                    <span className="font-medium">{schedule.hours}</span>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+            <div className="relative">
+              <div className="absolute -inset-1 rounded-2xl bg-gradient-to-r from-cyan-500/30 via-blue-500/30 to-violet-500/30 blur-xl" />
+              <div className="relative rounded-2xl border border-white/10 bg-slate-900/80 p-8">
+                <h3 className="text-2xl font-semibold text-white">Send Transmission</h3>
+                <p className="mt-2 text-sm text-slate-400">We&apos;ll respond within 24 hours.</p>
+                <Form {...form}>
+                  <form onSubmit={form.handleSubmit(onSubmit)} className="mt-6 space-y-6">
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <FormField
+                        control={form.control}
+                        name="name"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-sm text-slate-300">Name</FormLabel>
+                            <FormControl>
+                              <Input
+                                placeholder="Your name"
+                                {...field}
+                                disabled={isSubmitting}
+                                className="border-white/10 bg-white/5 text-white"
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="phone"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-sm text-slate-300">Phone</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="tel"
+                                placeholder="+91 98765 43210"
+                                {...field}
+                                disabled={isSubmitting}
+                                className="border-white/10 bg-white/5 text-white"
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
 
-          {/* Social Media */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Follow Us</CardTitle>
-              <CardDescription>Stay connected on social media</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex gap-4 flex-wrap">
-                {/* Dynamic Social Media Links */}
-                {socialMediaLinks.facebookUrl && (
-                  <Button 
-                    variant="outline" 
-                    size="icon"
-                    onClick={() => window.open(socialMediaLinks.facebookUrl, '_blank')}
-                    title="Follow us on Facebook"
-                  >
-                    <Facebook className="h-4 w-4" />
-                  </Button>
-                )}
-                
-                {socialMediaLinks.instagramUrl && (
-                  <Button 
-                    variant="outline" 
-                    size="icon"
-                    onClick={() => window.open(socialMediaLinks.instagramUrl, '_blank')}
-                    title="Follow us on Instagram"
-                  >
-                    <Instagram className="h-4 w-4" />
-                  </Button>
-                )}
-                
-                {socialMediaLinks.twitterUrl && (
-                  <Button 
-                    variant="outline" 
-                    size="icon"
-                    onClick={() => window.open(socialMediaLinks.twitterUrl, '_blank')}
-                    title="Follow us on Twitter"
-                  >
-                    <Twitter className="h-4 w-4" />
-                  </Button>
-                )}
-                
-                {socialMediaLinks.linkedinUrl && (
-                  <Button 
-                    variant="outline" 
-                    size="icon"
-                    onClick={() => window.open(socialMediaLinks.linkedinUrl, '_blank')}
-                    title="Follow us on LinkedIn"
-                  >
-                    <Linkedin className="h-4 w-4" />
-                  </Button>
-                )}
-                
-                {socialMediaLinks.youtubeUrl && (
-                  <Button 
-                    variant="outline" 
-                    size="icon"
-                    onClick={() => window.open(socialMediaLinks.youtubeUrl, '_blank')}
-                    title="Follow us on YouTube"
-                  >
-                    <Youtube className="h-4 w-4" />
-                  </Button>
-                )}
-                
-                {socialMediaLinks.websiteUrl && (
-                  <Button 
-                    variant="outline" 
-                    size="icon"
-                    onClick={() => window.open(socialMediaLinks.websiteUrl, '_blank')}
-                    title="Visit our website"
-                  >
-                    <Globe className="h-4 w-4" />
-                  </Button>
-                )}
-                
-                {/* Show message if no social media links are configured */}
-                {Object.keys(socialMediaLinks).length === 0 && (
-                  <div className="text-center w-full py-4">
-                    <p className="text-sm text-muted-foreground">
-                      Social media links will appear here once configured by the admin.
-                    </p>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Contact Form */}
-        <div className="lg:col-span-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>Send us a Message</CardTitle>
-              <CardDescription>
-                Fill out the form below and we'll get back to you as soon as possible.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="name"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Full Name</FormLabel>
-                          <FormControl>
-                            <Input placeholder="Your full name" {...field} disabled={isSubmitting} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
                     <FormField
                       control={form.control}
                       name="email"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Email Address</FormLabel>
+                          <FormLabel className="text-sm text-slate-300">Email</FormLabel>
                           <FormControl>
-                            <Input type="email" placeholder="your.email@example.com" {...field} disabled={isSubmitting} />
+                            <Input
+                              type="email"
+                              placeholder="your.email@example.com"
+                              {...field}
+                              disabled={isSubmitting}
+                              className="border-white/10 bg-white/5 text-white"
+                            />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
-                  </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="phone"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Phone Number</FormLabel>
-                          <FormControl>
-                            <Input type="tel" placeholder="+91 98765 43210" {...field} disabled={isSubmitting} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
                     <FormField
                       control={form.control}
                       name="subject"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Subject</FormLabel>
+                          <FormLabel className="text-sm text-slate-300">Service Interest</FormLabel>
                           <Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting}>
                             <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select a subject" />
+                              <SelectTrigger className="border-white/10 bg-white/5 text-white">
+                                <SelectValue placeholder="Select Service Interest" />
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
@@ -480,75 +388,84 @@ export default function ContactPage() {
                         </FormItem>
                       )}
                     />
-                  </div>
 
-                  <FormField
-                    control={form.control}
-                    name="message"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Message</FormLabel>
-                        <FormControl>
-                          <Textarea 
-                            placeholder="Tell us how we can help you..." 
-                            rows={6}
-                            {...field} 
-                            disabled={isSubmitting}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                    <FormField
+                      control={form.control}
+                      name="message"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-sm text-slate-300">Message</FormLabel>
+                          <FormControl>
+                            <Textarea
+                              rows={4}
+                              placeholder="Tell us how we can help you..."
+                              {...field}
+                              disabled={isSubmitting}
+                              className="border-white/10 bg-white/5 text-white"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                  <Button type="submit" size="lg" className="w-full" disabled={isSubmitting}>
-                    {isSubmitting ? (
-                      'Sending...'
-                    ) : (
-                      <>
-                        Send Message <Send className="ml-2 h-4 w-4" />
-                      </>
-                    )}
-                  </Button>
-                </form>
-              </Form>
-            </CardContent>
-          </Card>
-        </div>
+                    <FormField
+                      control={form.control}
+                      name="privacyConsent"
+                      render={({ field }) => (
+                        <FormItem className="flex items-start gap-3 rounded-lg border border-white/10 bg-white/5 p-3">
+                          <FormControl>
+                            <Checkbox
+                              checked={field.value}
+                              onCheckedChange={field.onChange}
+                              disabled={isSubmitting}
+                              className="mt-1"
+                            />
+                          </FormControl>
+                          <div className="space-y-1 text-sm text-slate-300">
+                            <FormLabel className="text-sm text-white">Privacy consent</FormLabel>
+                            <p className="text-xs text-slate-400">
+                              I agree to the
+                              {' '}
+                              <Link href="/info/policies/privacy" className="text-cyan-300 hover:text-white underline">
+                                Privacy Policy
+                              </Link>
+                              {' '}and allow Tecbunny to contact me regarding my enquiry.
+                            </p>
+                            <FormMessage />
+                          </div>
+                        </FormItem>
+                      )}
+                    />
+
+                    <Button type="submit" className="w-full bg-cyan-400 text-slate-950 hover:bg-white" disabled={isSubmitting}>
+                      {isSubmitting ? 'Sending...' : <span className="flex items-center gap-2">Submit Request <Send className="h-4 w-4" /></span>}
+                    </Button>
+                  </form>
+                </Form>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Map Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Find Our Store</CardTitle>
-          <CardDescription>Visit us at our physical location</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="relative w-full overflow-hidden rounded-lg" style={{ paddingTop: '56.25%' }}>
-            <iframe
-              title="Tecbunny Solutions Location"
-              src="https://www.google.com/maps?q=15.6730616,73.7855133&z=17&output=embed"
-              className="absolute left-0 top-0 h-full w-full border-0"
-              loading="lazy"
-              allowFullScreen
-              referrerPolicy="no-referrer-when-downgrade"
-            />
-          </div>
-          <div className="mt-4 flex justify-center">
-            <Button variant="outline" asChild>
-              <a
-                href="https://maps.app.goo.gl/1Af8Aeya8R1X1Z7b7"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Open in Google Maps
-              </a>
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-        </>
-      )}
-    </div>
+      <section className="relative h-96 border-t border-white/10">
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-slate-950 via-transparent to-slate-950" />
+        <iframe
+          title="Tecbunny Solutions Location"
+          src="https://www.google.com/maps?q=15.6730616,73.7855133&z=17&output=embed"
+          className="h-full w-full border-0"
+          loading="lazy"
+          allowFullScreen
+          data-cookieconsent="marketing"
+          referrerPolicy="no-referrer-when-downgrade"
+        />
+        <div className="absolute left-1/2 top-1/2 z-10 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center">
+          <div className="absolute h-4 w-4 animate-ping rounded-full bg-cyan-400" />
+          <div className="relative h-4 w-4 rounded-full border-2 border-slate-950 bg-cyan-400" />
+          <div className="mt-2 rounded bg-slate-950/90 px-3 py-1 text-xs font-semibold text-cyan-300">Operational Base</div>
+        </div>
+      </section>
+    </section>
   );
 }

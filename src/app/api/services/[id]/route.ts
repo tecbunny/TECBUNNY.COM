@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const correlationId = request.headers.get('x-correlation-id') || null;
@@ -24,7 +24,7 @@ export async function GET(
       return apiError('UNAUTHORIZED', { correlationId });
     }
 
-    const { id } = params;
+    const { id } = await params;
 
     const { data: service, error } = await supabase
       .from('services')
@@ -64,7 +64,7 @@ export async function GET(
  */
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const correlationId = request.headers.get('x-correlation-id') || null;
@@ -76,7 +76,7 @@ export async function PUT(
       return apiError('UNAUTHORIZED', { correlationId });
     }
 
-    const { id } = params;
+    const { id } = await params;
     const body = await request.json();
     const {
       name,
@@ -139,7 +139,7 @@ export async function PUT(
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const correlationId = request.headers.get('x-correlation-id') || null;
@@ -151,7 +151,7 @@ export async function DELETE(
       return apiError('UNAUTHORIZED', { correlationId });
     }
 
-    const { id } = params;
+    const { id } = await params;
 
     // Check if service has active requests
     const { data: activeRequests } = await supabase

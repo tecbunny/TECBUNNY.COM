@@ -297,16 +297,16 @@ export default function PoliciesManagement() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <div className="min-h-screen bg-transparent p-6 text-slate-200">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Policy Management</h1>
-            <p className="text-gray-600">Manage legal documents and policies for your store</p>
+            <h1 className="text-3xl font-bold text-white">Policy Management</h1>
+            <p className="text-slate-400">Manage legal documents and policies for your store</p>
           </div>
           <Button asChild variant="outline">
-            <Link href="/info/policies" target="_blank">
+            <Link href="/info/policies" target="_blank" rel="noopener noreferrer">
               <Eye className="h-4 w-4 mr-2" />
               View Public Policies
               <ExternalLink className="h-4 w-4 ml-2" />
@@ -360,7 +360,7 @@ export default function PoliciesManagement() {
                           variant="outline"
                           asChild
                         >
-                          <Link href={`/info/policies/${policyType.key.replace('_policy', '').replace('_service', '')}`} target="_blank">
+                          <Link href={`/info/policies/${policyType.key.replace('_policy', '').replace('_service', '')}`} target="_blank" rel="noopener noreferrer">
                             <Eye className="h-4 w-4" />
                           </Link>
                         </Button>

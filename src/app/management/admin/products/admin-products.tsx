@@ -17,7 +17,8 @@ import {
   Image,
   Eye,
   X,
-  Search
+  Search,
+  Sparkles
 } from 'lucide-react';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../../../components/ui/card';
@@ -160,8 +161,37 @@ export default function AdminProductCatalogPage() {
     variants: []
   });
   const [isCleaningImages, setIsCleaningImages] = useState(false);
+  const [isGeneratingDescription, setIsGeneratingDescription] = useState(false);
 
   const { toast } = useToast();
+
+  const handleGenerateDescription = async () => {
+    if (!selectedProduct?.id) {
+      toast({ title: 'Select a product', description: 'Open a product to generate its description.', variant: 'destructive' });
+      return;
+    }
+
+    setIsGeneratingDescription(true);
+    try {
+      const response = await fetch('/api/admin/ai/product-description', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productId: selectedProduct.id }),
+      });
+
+      const result = await response.json();
+      if (!response.ok || result.error) {
+        throw new Error(result.error || 'Failed to generate description');
+      }
+
+      setFormData((prev) => ({ ...prev, description: result.description || prev.description }));
+      toast({ title: 'Description updated', description: 'AI description has been saved to the database.' });
+    } catch (error: any) {
+      toast({ title: 'AI generation failed', description: error?.message || 'Please try again.', variant: 'destructive' });
+    } finally {
+      setIsGeneratingDescription(false);
+    }
+  };
 
   const fetchProducts = useCallback(async () => {
     // Ensure only the most recent query updates the grid
@@ -912,13 +942,13 @@ export default function AdminProductCatalogPage() {
   // No manual ordering needed - products display in the order they were added
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <div className="min-h-screen bg-transparent p-6 text-slate-200">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Product Management</h1>
-            <p className="text-gray-600">Manage your product catalog with variants</p>
+            <h1 className="text-3xl font-bold text-white">Product Management</h1>
+            <p className="text-slate-400">Manage your product catalog with variants</p>
           </div>
           <div className="flex space-x-3">
             <Button 
@@ -975,8 +1005,8 @@ export default function AdminProductCatalogPage() {
               <div className="flex items-center">
                 <Package className="h-8 w-8 text-blue-600" />
                 <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Total Products</p>
-                  <p className="text-2xl font-bold text-gray-900">{products.length}</p>
+                  <p className="text-sm font-medium text-slate-400">Total Products</p>
+                  <p className="text-2xl font-bold text-white">{products.length}</p>
                 </div>
               </div>
             </CardContent>
@@ -986,8 +1016,8 @@ export default function AdminProductCatalogPage() {
               <div className="flex items-center">
                 <ShoppingCart className="h-8 w-8 text-green-600" />
                 <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Active Products</p>
-                  <p className="text-2xl font-bold text-gray-900">
+                  <p className="text-sm font-medium text-slate-400">Active Products</p>
+                  <p className="text-2xl font-bold text-white">
                     {products.filter(p => p.status === 'active').length}
                   </p>
                 </div>
@@ -999,8 +1029,8 @@ export default function AdminProductCatalogPage() {
               <div className="flex items-center">
                 <Tag className="h-8 w-8 text-purple-600" />
                 <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Total Variants</p>
-                  <p className="text-2xl font-bold text-gray-900">
+                  <p className="text-sm font-medium text-slate-400">Total Variants</p>
+                  <p className="text-2xl font-bold text-white">
                     {products.reduce((acc, p) => acc + (p.variants?.length || 0), 0)}
                   </p>
                 </div>
@@ -1012,8 +1042,8 @@ export default function AdminProductCatalogPage() {
               <div className="flex items-center">
                 <Image className="h-8 w-8 text-orange-600" />
                 <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Draft Products</p>
-                  <p className="text-2xl font-bold text-gray-900">
+                  <p className="text-sm font-medium text-slate-400">Draft Products</p>
+                  <p className="text-2xl font-bold text-white">
                     {products.filter(p => p.status === 'draft').length}
                   </p>
                 </div>
@@ -1200,7 +1230,7 @@ export default function AdminProductCatalogPage() {
                     </div>
                     <div className="space-y-2">
                       <Label>Stock Status</Label>
-                      <div className="border rounded-md p-3 bg-gray-50">
+                      <div className="border border-white/10 rounded-md p-3 bg-slate-900/60">
                         <Badge
                           variant={
                             computedStockStatus === 'in_stock'
@@ -1221,7 +1251,28 @@ export default function AdminProductCatalogPage() {
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="description">Description</Label>
+                    <div className="flex items-center justify-between gap-2">
+                      <Label htmlFor="description">Description</Label>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleGenerateDescription}
+                        disabled={isGeneratingDescription || !selectedProduct}
+                      >
+                        {isGeneratingDescription ? (
+                          <>
+                            <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                            Generating
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="mr-2 h-4 w-4" />
+                            Generate with AI
+                          </>
+                        )}
+                      </Button>
+                    </div>
                     <Textarea
                       id="description"
                       value={formData.description}
@@ -1326,7 +1377,7 @@ export default function AdminProductCatalogPage() {
                               </div>
                               <div className="space-y-2">
                                 <Label>Options</Label>
-                                <div className="text-sm text-gray-600">
+                                <div className="text-sm text-slate-400">
                                   {[variant.option1, variant.option2, variant.option3].filter(Boolean).join(' / ')}
                                 </div>
                               </div>
@@ -1336,7 +1387,7 @@ export default function AdminProductCatalogPage() {
                       ))}
                     </div>
                   ) : (
-                    <div className="text-center py-8 text-gray-500">
+                    <div className="text-center py-8 text-slate-500">
                       No variants created yet. Add options first, then generate variants.
                     </div>
                   )}
@@ -1360,25 +1411,25 @@ export default function AdminProductCatalogPage() {
                     onDragLeave={onDragLeave}
                     className={`border-2 border-dashed rounded-lg p-8 text-center transition-all duration-200 ${
                       isDragOver 
-                        ? 'border-blue-500 bg-blue-50 scale-105' 
-                        : 'border-blue-300 hover:border-blue-500 hover:bg-blue-50'
+                        ? 'border-cyan-400 bg-cyan-500/10 scale-105' 
+                        : 'border-slate-600 hover:border-cyan-400 hover:bg-slate-800/60'
                     }`}
                   >
                     <div className="flex flex-col items-center space-y-2">
                       {isUploadingImage ? (
                         <>
-                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-                          <div className="text-sm font-medium text-blue-600">
+                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-300"></div>
+                          <div className="text-sm font-medium text-cyan-200">
                             Uploading images...
                           </div>
                         </>
                       ) : (
                         <>
-                          <Upload className={`h-8 w-8 ${isDragOver ? 'text-blue-600' : 'text-blue-500'}`} />
-                          <div className="text-sm font-medium text-gray-700">
+                          <Upload className={`h-8 w-8 ${isDragOver ? 'text-cyan-200' : 'text-cyan-300'}`} />
+                          <div className="text-sm font-medium text-slate-200">
                             {isDragOver ? 'Drop images here!' : 'Drag & drop images here to upload'}
                           </div>
-                          <div className="text-xs text-gray-500 space-y-1">
+                          <div className="text-xs text-slate-400 space-y-1">
                             <div>• Drop image files from your computer</div>
                             <div>• Or drag images directly from websites</div>
                             <div>• Supports JPG, PNG, WebP, and GIF formats</div>
@@ -1389,10 +1440,10 @@ export default function AdminProductCatalogPage() {
                   </div>
                   
                   {/* URL Input Alternative */}
-                  <div className="border rounded-lg p-4 bg-gray-50">
+                  <div className="border border-white/10 rounded-lg p-4 bg-slate-900/60">
                     <div className="flex items-center justify-between mb-2">
                       <Label className="text-sm font-medium">Add from URL</Label>
-                      <span className="text-xs text-gray-500">Alternative method</span>
+                      <span className="text-xs text-slate-500">Alternative method</span>
                     </div>
                     <div className="flex gap-2">
                       <Input
@@ -1425,7 +1476,7 @@ export default function AdminProductCatalogPage() {
                         Add Image
                       </Button>
                     </div>
-                    <p className="text-xs text-gray-500 mt-1">
+                    <p className="text-xs text-slate-500 mt-1">
                       Enter the direct URL of an image to add it to your product
                     </p>
                   </div>
@@ -1445,7 +1496,7 @@ export default function AdminProductCatalogPage() {
                       ))}
                     </div>
                   ) : (
-                    <div className="text-sm text-gray-500">No images yet. Upload product images to showcase the item.</div>
+                    <div className="text-sm text-slate-500">No images yet. Upload product images to showcase the item.</div>
                   )}
                 </TabsContent>
               </Tabs>
@@ -1471,7 +1522,7 @@ export default function AdminProductCatalogPage() {
               <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div className="flex w-full max-w-xl items-center gap-2">
                   <div className="relative w-full">
-                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
                     <Input
                       placeholder="Search products by name, handle, or description"
                       value={searchQuery}
@@ -1510,7 +1561,7 @@ export default function AdminProductCatalogPage() {
               </div>
               {loading ? (
                 <div className="flex justify-center py-8">
-                  <RefreshCw className="h-8 w-8 animate-spin text-gray-400" />
+                  <RefreshCw className="h-8 w-8 animate-spin text-slate-500" />
                 </div>
               ) : (
                 <Table>
@@ -1533,10 +1584,10 @@ export default function AdminProductCatalogPage() {
                       <TableRow key={product.id}>
                         <TableCell>
                           <div className="flex flex-col items-center gap-1">
-                            <span className="text-lg font-semibold text-blue-600">
+                            <span className="text-lg font-semibold text-cyan-300">
                               {totalItems - ((page - 1) * limit) - index}
                             </span>
-                            <span className="text-xs text-gray-500">
+                            <span className="text-xs text-slate-500">
                               Auto Order
                             </span>
                           </div>
@@ -1549,14 +1600,14 @@ export default function AdminProductCatalogPage() {
                               onClick={() => toggleProductPriority(product.id, product.prioritized || false)}
                               className={`text-xs px-2 py-1 h-7 ${
                                 product.prioritized 
-                                  ? 'bg-orange-500 hover:bg-orange-600 text-white' 
-                                  : 'border-orange-300 text-orange-600 hover:bg-orange-50'
+                                  ? 'bg-amber-500 hover:bg-amber-400 text-slate-900' 
+                                  : 'border-amber-500/40 text-amber-300 hover:bg-amber-500/10'
                               }`}
                             >
                               {product.prioritized ? '⭐ Priority' : '☆ Prioritize'}
                             </Button>
                             {product.prioritized && product.prioritized_at && (
-                              <span className="text-xs text-gray-500">
+                              <span className="text-xs text-slate-500">
                                 {new Date(product.prioritized_at).toLocaleDateString()}
                               </span>
                             )}
@@ -1613,11 +1664,11 @@ export default function AdminProductCatalogPage() {
               {/* Pagination controls */}
               {!showAddForm && (
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mt-6">
-                  <div className="text-sm text-gray-600">
+                  <div className="text-sm text-slate-400">
                     Page {page} of {totalPages} • {totalItems} items
                   </div>
                   <div className="flex items-center gap-2">
-                    <label className="text-sm text-gray-600 hidden md:block">Rows:</label>
+                    <label className="text-sm text-slate-400 hidden md:block">Rows:</label>
                     <select
                       className="border rounded px-2 py-1 text-sm"
                       value={limit}

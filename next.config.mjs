@@ -1,13 +1,28 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  poweredByHeader: false,
   experimental: {
-    serverComponentsExternalPackages: ['@node-rs/argon2']
+    // Allow argon2 native bindings to be bundled for server environments
+    serverComponentsExternalPackages: ['@node-rs/argon2'],
   },
   images: {
     remotePatterns: [
       {
         protocol: 'https',
         hostname: 'abviphzzwoexcpwgppfi.supabase.co',
+        port: '',
+        pathname: '/storage/v1/object/public/**',
+      },
+      {
+        protocol: 'https',
+        // Allow any Supabase project storage bucket (covering preview/prod projects)
+        hostname: '**.supabase.co',
+        port: '',
+        pathname: '/storage/v1/object/public/**',
+      },
+      {
+        protocol: 'https',
+        hostname: '**.supabase.in',
         port: '',
         pathname: '/storage/v1/object/public/**',
       },

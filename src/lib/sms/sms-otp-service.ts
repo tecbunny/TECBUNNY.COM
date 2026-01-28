@@ -1,5 +1,3 @@
-import axios from 'axios';
-
 import { logger } from '../logger';
 
 export interface SMSOTPConfig {
@@ -54,6 +52,39 @@ export class SMSOTPService {
     }
   }
 
+  private async requestJson<T>(
+    method: 'GET' | 'POST',
+    url: string,
+    body?: Record<string, unknown>
+  ): Promise<T> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+
+    try {
+      const response = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: body ? JSON.stringify(body) : undefined,
+        signal: controller.signal
+      });
+
+      const data = (await response.json()) as T;
+
+      if (!response.ok) {
+        const message = typeof (data as any)?.Details === 'string'
+          ? (data as any).Details
+          : `SMS API Error: ${response.status}`;
+        throw new Error(message);
+      }
+
+      return data;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
   /**
    * Send SMS OTP using 2Factor API
    */
@@ -81,24 +112,23 @@ export class SMSOTPService {
       }
 
       // Send via 2Factor API
-      const response = await axios.post(`${this.baseUrl!}/V1/SendSMS`, requestData, {
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        timeout: 10000 // 10 second timeout
-      });
+      const response = await this.requestJson<{ Status: string; Details?: string }>(
+        'POST',
+        `${this.baseUrl!}/V1/SendSMS`,
+        requestData
+      );
 
       // Handle 2Factor response format
-      if (response.data.Status === 'Success') {
+      if (response.Status === 'Success') {
         return {
           success: true,
-          messageId: response.data.Details || 'SMS_SENT',
+          messageId: response.Details || 'SMS_SENT',
           provider: '2factor'
         };
       } else {
         return {
           success: false,
-          error: response.data.Details || 'Unknown SMS sending error',
+          error: response.Details || 'Unknown SMS sending error',
           provider: '2factor'
         };
       }
@@ -106,17 +136,9 @@ export class SMSOTPService {
     } catch (error: any) {
       logger.error('SMS OTP sending failed', { error, context: 'SMSOTPService.sendOTP' });
 
-      if (axios.isAxiosError(error)) {
-        return {
-          success: false,
-          error: `SMS API Error: ${error.response?.data?.Details || error.message}`,
-          provider: '2factor'
-        };
-      }
-
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown SMS error',
+        error: error?.name === 'AbortError' ? 'SMS API timeout' : (error instanceof Error ? error.message : 'Unknown SMS error'),
         provider: '2factor'
       };
     }
@@ -172,23 +194,22 @@ export class SMSOTPService {
         sender_id: this.config!.senderId
       };
 
-      const response = await axios.post(`${this.baseUrl!}/V1/SendSMS`, requestData, {
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        timeout: 10000
-      });
+      const response = await this.requestJson<{ Status: string; Details?: string }>(
+        'POST',
+        `${this.baseUrl!}/V1/SendSMS`,
+        requestData
+      );
 
-      if (response.data.Status === 'Success') {
+      if (response.Status === 'Success') {
         return {
           success: true,
-          messageId: response.data.Details || 'SMS_SENT',
+          messageId: response.Details || 'SMS_SENT',
           provider: '2factor'
         };
       } else {
         return {
           success: false,
-          error: response.data.Details || 'SMS sending failed',
+          error: response.Details || 'SMS sending failed',
           provider: '2factor'
         };
       }
@@ -223,16 +244,15 @@ export class SMSOTPService {
         session_id: sessionId
       };
 
-      const response = await axios.post(`${this.baseUrl!}/V1/VerifyOTP`, requestData, {
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        timeout: 10000
-      });
+      const response = await this.requestJson<{ Status: string; Details?: string }>(
+        'POST',
+        `${this.baseUrl!}/V1/VerifyOTP`,
+        requestData
+      );
 
       return {
-        success: response.data.Status === 'Success',
-        error: response.data.Status !== 'Success' ? response.data.Details : undefined
+        success: response.Status === 'Success',
+        error: response.Status !== 'Success' ? response.Details : undefined
       };
 
     } catch (error) {
@@ -255,20 +275,22 @@ export class SMSOTPService {
   }> {
     try {
       this.ensureInitialized();
-      const response = await axios.get(`${this.baseUrl!}/V1/Balance/${this.config!.apiKey}`, {
-        timeout: 10000
-      });
+      const response = await this.requestJson<{ Status: string; Details?: { Balance?: string } | string }>(
+        'GET',
+        `${this.baseUrl!}/V1/Balance/${this.config!.apiKey}`
+      );
 
-      if (response.data.Status === 'Success') {
+      if (response.Status === 'Success') {
+        const details = response.Details as { Balance?: string } | undefined;
         return {
           success: true,
-          balance: parseFloat(response.data.Details.Balance),
+          balance: parseFloat(details?.Balance || '0'),
           currency: 'INR' // 2Factor typically uses INR
         };
       } else {
         return {
           success: false,
-          error: response.data.Details || 'Failed to fetch balance'
+          error: typeof response.Details === 'string' ? response.Details : 'Failed to fetch balance'
         };
       }
 
@@ -352,20 +374,21 @@ export class SMSOTPService {
     try {
       this.ensureInitialized();
       // Note: Check 2Factor documentation for delivery status API
-      const response = await axios.get(
-        `${this.baseUrl!}/V1/Status/${this.config!.apiKey}/${messageId}`,
-        { timeout: 10000 }
+      const response = await this.requestJson<{ Status: string; Details?: { Status?: string } | string }>(
+        'GET',
+        `${this.baseUrl!}/V1/Status/${this.config!.apiKey}/${messageId}`
       );
 
-      if (response.data.Status === 'Success') {
+      if (response.Status === 'Success') {
+        const details = response.Details as { Status?: string } | undefined;
         return {
           success: true,
-          status: this.mapDeliveryStatus(response.data.Details.Status)
+          status: this.mapDeliveryStatus(details?.Status || '')
         };
       } else {
         return {
           success: false,
-          error: response.data.Details || 'Failed to get delivery status'
+          error: typeof response.Details === 'string' ? response.Details : 'Failed to get delivery status'
         };
       }
 

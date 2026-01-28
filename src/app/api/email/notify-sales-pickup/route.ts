@@ -1,42 +1,51 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { emailHelpers } from '../../../../lib/email';
+import { sendWhatsAppNotification } from '../../../../lib/whatsapp-service';
+import { logger } from '../../../../lib/logger';
 import { rateLimit } from '../../../../lib/rate-limit';
-import { createClient as createServerClient } from '../../../../lib/supabase/server';
 
 const LIMIT = 10; // higher allowance for internal notifications
 const WINDOW_MS = 10 * 60 * 1000;
 
 export async function POST(request: NextRequest) {
   try {
-    const { to, orderId } = await request.json();
-    if (typeof to !== 'string' || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) {
-      return NextResponse.json({ error: 'Invalid recipient email' }, { status: 400 });
+    const { orderId } = await request.json();
+    
+    const teamNumbers = [
+      process.env.TEAM_WHATSAPP_1,
+      process.env.TEAM_WHATSAPP_2
+    ].filter(Boolean) as string[];
+
+    if (teamNumbers.length === 0) {
+       return NextResponse.json({ success: true, message: 'No team numbers configured' });
     }
+
     if (!orderId) {
       return NextResponse.json({ error: 'Missing orderId' }, { status: 400 });
     }
-    let userId: string | null = null;
-    try {
-      const supabase = await createServerClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      userId = user?.id || null;
-    } catch(_) {}
+
     const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
-    const rateKey = userId ? `user:${userId}` : `ip:${ip}`;
-    if (!rateLimit(rateKey, 'email_notify_sales_pickup', { limit: LIMIT, windowMs: WINDOW_MS })) {
+    const rateKey = `notify-sales:${ip}`;
+
+    if (!rateLimit(rateKey, 'whatsapp_sales_pickup', { limit: LIMIT, windowMs: WINDOW_MS })) {
       return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429 });
     }
-    const success = await emailHelpers.notifySalesPickupOrder(to, { orderId, orderType: 'pickup' });
-    const res = success
-      ? NextResponse.json({ success: true, message: 'Sales pickup notification sent' })
-      : NextResponse.json({ error: 'Failed to send sales pickup notification' }, { status: 500 });
-    res.headers.set('Cache-Control', 'no-store');
-    res.headers.set('X-Content-Type-Options', 'nosniff');
-    res.headers.set('Referrer-Policy', 'same-origin');
-    return res;
-  } catch (error) {
-    console.error('Sales pickup notification email API error:', error);
+
+    const message = `
+🏬 Pickup Order Alert!
+
+📦 Order: ${orderId}
+⚠️ Action Required: Customer is arriving for pickup / Pick up initiated.
+Check dashboard for details.
+    `.trim();
+
+    for (const number of teamNumbers) {
+      await sendWhatsAppNotification(number, message);
+    }
+
+    return NextResponse.json({ success: true, message: 'Sales pickup WhatsApp sent' });
+  } catch (error: any) {
+    logger.error('Sales pickup notification WhatsApp API error:', { error: error.message });
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

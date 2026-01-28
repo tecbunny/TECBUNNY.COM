@@ -37,7 +37,7 @@ export default function AccountsLayoutClient({ children }: AccountsLayoutClientP
   }
 
   return (
-    <div className={`flex min-h-screen bg-muted/40${!navReady ? ' pointer-events-none select-none opacity-80' : ''}${!navReady ? ' transition-opacity' : ''}`}>
+    <div className={`flex w-full items-start bg-muted/40${!navReady ? ' pointer-events-none select-none opacity-80' : ''}${!navReady ? ' transition-opacity' : ''}`}>
       <div className={!navReady ? 'animate-pulse' : undefined}>
         <AccountsSidebar />
       </div>

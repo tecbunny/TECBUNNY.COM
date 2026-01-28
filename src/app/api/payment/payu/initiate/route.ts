@@ -82,31 +82,13 @@ export async function POST(request: NextRequest) {
       return apiError('RATE_LIMITED', { correlationId });
     }
 
-    const { data: settingsRows, error: settingsError } = await supabase
-      .from('settings')
-      .select('value, updated_at, created_at')
-      .eq('key', 'payment_payu')
-      .order('updated_at', { ascending: false })
-      .order('created_at', { ascending: false })
-      .limit(1);
-
-    const settings = settingsRows?.[0];
-    if (settingsError || !settings) {
-      return apiError('SERVICE_UNAVAILABLE', {
-        correlationId,
-        overrideMessage: 'PayU payment method not configured',
-      });
-    }
-
-    const parsedSetting = typeof settings.value === 'string' ? JSON.parse(settings.value) : settings.value;
-    const payuConfig = parsedSetting as {
-      enabled?: boolean;
-      config?: {
-        merchantKey?: string;
-        merchantSalt?: string;
-        merchantId?: string;
-        environment?: string;
-      };
+    // Payment settings are now managed via code/env vars
+    // We skip the DB lookup and use hardcoded defaults + env vars
+    const payuConfig = {
+      enabled: true,
+      config: {
+        environment: process.env.PAYU_ENVIRONMENT || 'test'
+      }
     };
 
     if (!payuConfig.enabled) {
@@ -116,7 +98,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const rawConfig = payuConfig.config ?? {};
+    const rawConfig = (payuConfig.config ?? {}) as any;
     const envMerchantKey = (process.env.PAYU_MERCHANT_KEY || '').trim();
     const envMerchantSalt = (process.env.PAYU_MERCHANT_SALT || '').trim();
 

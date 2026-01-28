@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
+
+import { NextRequest, NextResponse } from 'next/server';
 
 import { createClient } from '../../../../../lib/supabase/server';
 import { sendWhatsAppNotification } from '../../../../../lib/whatsapp-service';
@@ -196,7 +197,7 @@ async function sendPaymentConfirmationWhatsApp(phoneNumber: string, paymentData:
 ${paymentData.customerName ? `Hi ${paymentData.customerName}! ` : ''}Your payment has been successfully processed! 🎉
 
 📦 Your order is now confirmed and will be processed within 24 hours.
-📱 Track your order: https://tecbunny.store/orders/${paymentData.orderId || ''}
+📱 Track your order: https://www.tecbunny.com/orders/${paymentData.orderId || ''}
 
 Thank you for shopping with TecBunny! 🚀
     `.trim();

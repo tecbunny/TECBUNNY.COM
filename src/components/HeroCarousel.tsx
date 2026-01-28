@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
@@ -150,13 +151,15 @@ export default function HeroCarousel({ pageKey, intervalMs = 6000, className }: 
                 )}
                 aria-hidden={index === activeIndex ? undefined : true}
               >
-                <img
+                <Image
                   src={slide.imageUrl}
                   alt={slide.title || 'Hero banner image'}
+                  fill
+                  sizes="(max-width: 768px) 100vw, (max-width: 1280px) 80vw, 1200px"
+                  priority={index === activeIndex}
                   className="h-full w-full object-cover"
-                  loading={index === activeIndex ? 'eager' : 'lazy'}
                   onError={event => {
-                    const target = event.currentTarget;
+                    const target = event.currentTarget as HTMLImageElement;
                     target.onerror = null;
                     target.src = 'https://placehold.co/1200x600?text=Hero+Banner';
                   }}

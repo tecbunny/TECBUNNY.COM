@@ -58,9 +58,9 @@ export function CaptchaComponent({
 
   if (loading) {
     return (
-      <div className={`flex items-center justify-center p-4 bg-gray-50 rounded-lg ${className}`}>
-        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
-        <span className="ml-2 text-sm text-gray-600">Loading security verification...</span>
+      <div className={`flex items-center justify-center p-4 bg-white/5 border border-white/10 rounded-lg ${className}`}>
+        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-cyan-400"></div>
+        <span className="ml-2 text-sm text-slate-300">Loading security verification...</span>
       </div>
     );
   }

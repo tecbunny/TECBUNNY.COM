@@ -155,7 +155,7 @@ For urgent support, visit: https://tecbunny.com/contact
 How can we help you today?
 
 🛍️ Browse products: https://tecbunny.com
-📞 Call us: +91 9429694995
+📞 Call us: +91 96041 36010
 💬 Or just tell us what you're looking for!
     `.trim());
   } else if (content.includes('price') || content.includes('cost')) {

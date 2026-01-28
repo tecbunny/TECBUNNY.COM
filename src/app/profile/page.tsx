@@ -34,6 +34,33 @@ async function getUserData() {
     .eq('user_id', user.id)
     .maybeSingle();
 
+  let recentOrders: any[] = [];
+  let recentTickets: any[] = [];
+
+  try {
+    const { data } = await supabase
+      .from('orders')
+      .select('id, status, total, total_amount, created_at, type')
+      .eq('customer_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(3);
+    recentOrders = data ?? [];
+  } catch (error) {
+    // Swallow errors to avoid breaking profile page if table missing
+  }
+
+  try {
+    const { data } = await supabase
+      .from('service_tickets')
+      .select('id, issue_description, status, priority, created_at')
+      .eq('customer_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(5);
+    recentTickets = data ?? [];
+  } catch (error) {
+    // Swallow errors to avoid breaking profile page if table missing
+  }
+
   const fallbackProfile = profileData ?? {
     id: user.id,
     name: user.user_metadata?.name ?? user.email?.split('@')[0] ?? 'User',
@@ -45,12 +72,22 @@ async function getUserData() {
   return {
     user,
     profile: fallbackProfile,
-    salesAgentData
+    salesAgentData,
+    recentOrders: recentOrders ?? [],
+    recentTickets: recentTickets ?? []
   };
 }
 
 export default async function ProfilePage() {
-  const { user, profile, salesAgentData } = await getUserData();
+  const { user, profile, salesAgentData, recentOrders, recentTickets } = await getUserData();
   
-  return <UserProfile user={user} profile={profile} salesAgentData={salesAgentData} />;
+  return (
+    <UserProfile
+      user={user}
+      profile={profile}
+      salesAgentData={salesAgentData}
+      orders={recentOrders}
+      serviceTickets={recentTickets}
+    />
+  );
 }

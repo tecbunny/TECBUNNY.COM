@@ -1,7 +1,7 @@
 import type {Config} from 'tailwindcss';
 
 const config: Config = {
-  darkMode: ['class'],
+  darkMode: ['class', '.dark'],
   content: [
     './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
     './src/components/**/*.{js,ts,jsx,tsx,mdx}',
@@ -13,11 +13,23 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
+        sans: ['Inter', 'sans-serif'],
+        tech: ['Rajdhani', 'sans-serif'],
         body: ['var(--font-body)', 'sans-serif'],
         headline: ['var(--font-body)', 'sans-serif'],
         code: ['monospace'],
       },
       colors: {
+        brand: {
+          dark: '#030712',
+          card: '#0f172a',
+          cyan: '#06b6d4',
+          blue: '#3b82f6',
+          purple: '#8b5cf6',
+          green: '#10b981',
+          alert: '#ef4444',
+          accent: '#f59e0b',
+        },
         background: 'hsl(var(--background))',
         foreground: 'hsl(var(--foreground))',
         card: {
@@ -79,6 +91,14 @@ const config: Config = {
         'harsh': 'var(--shadow-lg)',
       },
       keyframes: {
+        scanLine: {
+          '0%': { transform: 'translateX(-100%)' },
+          '100%': { transform: 'translateX(100%)' },
+        },
+        float: {
+          '0%, 100%': { transform: 'translateY(0)' },
+          '50%': { transform: 'translateY(-10px)' },
+        },
         'accordion-down': {
           from: {
             height: '0',
@@ -97,6 +117,9 @@ const config: Config = {
         },
       },
       animation: {
+        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'scan-line': 'scanLine 2s linear infinite',
+        'float': 'float 6s ease-in-out infinite',
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
       },

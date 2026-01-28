@@ -1,505 +1,529 @@
-
 'use client';
 
-import * as React from 'react';
+import React from 'react';
 import Link from 'next/link';
-import { Heart, LogOut, ShoppingCart, User, Shield, Briefcase, FileText, Menu, X, Package, ChevronDown } from 'lucide-react';
-
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
+import {
+  Menu,
+  X,
+  ChevronRight,
+  ArrowRight,
+  ShoppingCart,
+  User,
+  LogOut,
+} from 'lucide-react';
 
-import { logger } from '../../lib/logger';
-
-import { Button } from '../../components/ui/button';
-import { DynamicLogo } from '../../components/ui/dynamic-logo';
-import { ProductSearch } from '../../components/products/ProductSearch';
-import { EnhancedCartSheet } from '../../components/cart/EnhancedCartSheet';
-import { useAuth, useCart, useWishlist } from '../../lib/hooks';
-import { Badge } from '../../components/ui/badge';
+import { useAnalytics } from '../../hooks/use-analytics';
+import { useAuth, useCart } from '../../lib/hooks';
+import { hasRoleClient } from '../../lib/permissions-client';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '../../components/ui/dropdown-menu';
-import { LoginDialog } from '../../components/auth/LoginDialog';
-import { SignupDialog } from '../../components/auth/SignupDialogNew';
+} from '../ui/dropdown-menu';
+import { CartSheet } from '../cart/CartSheet';
 
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '../ui/sheet';
-
-  const navLinks = [
-    { name: 'Home', href: '/' },
-    { name: 'Products', href: '/products' },
-    { name: 'Services', href: '/services' },
-    { name: 'Customised Setups', href: '/customised-setups' },
-    { name: 'Offers', href: '/offers' },
-    { name: 'About Us', href: '/about' },
-    { name: 'Contact', href: '/contact' },
-  ];
-
-  const policyLinks = [
-    { name: 'Privacy Policy', href: '/info/policies/privacy' },
-    { name: 'Terms & Conditions', href: '/info/policies/terms' },
-    { name: 'Return Policy', href: '/info/policies/return' },
-    { name: 'Shipping Policy', href: '/info/policies/shipping' },
-    { name: 'Refund & Cancellation', href: '/info/policies/refund-cancellation' },
-  ];
-
-function extractSiteName(record: { value?: unknown; siteName?: string } | null): string | null {
-  if (!record) return null;
-
-  if (typeof record.siteName === 'string' && record.siteName.trim()) {
-    return record.siteName.trim();
-  }
-
-  const raw = record.value;
-  if (typeof raw === 'string') {
-    const trimmed = raw.trim();
-    if (trimmed) {
-      return trimmed;
-    }
-  }
-
-  if (raw && typeof raw === 'object') {
-    const maybe = (raw as Record<string, unknown>).siteName;
-    if (typeof maybe === 'string' && maybe.trim()) {
-      return maybe.trim();
-    }
-  }
-
-  return null;
-}
+const navLinks = [
+  { name: 'Home', href: '/' },
+  { name: 'Products', href: '/products' },
+  { 
+    name: 'Services', 
+    href: '/services',
+    children: [
+      { name: 'All Services', href: '/services' },
+      { name: 'Web Development', href: '/webdev' },
+    ]
+  },
+  { name: 'Innovation', href: '/innovation' },
+  { name: 'About Us', href: '/about' },
+  { name: 'Contact Us', href: '/contact' },
+  {
+    name: 'Policies',
+    href: '/info/policies',
+    children: [
+      { name: 'Privacy Policy', href: '/info/policies/privacy' },
+      { name: 'Shipping Policies', href: '/info/policies/shipping' },
+      { name: 'Terms & Conditions', href: '/info/policies/terms' },
+    ],
+  },
+];
 
 export function Header() {
+  useAnalytics();
+  const { user, loading, logout } = useAuth();
   const { cartCount } = useCart();
-  const { wishlistCount } = useWishlist();
-  const { user, logout } = useAuth();
-  const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
-  const [siteName, setSiteName] = React.useState('TecBunny');
   const pathname = usePathname();
+  const [isScrolled, setIsScrolled] = React.useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
+  const [mobileSubmenuOpen, setMobileSubmenuOpen] = React.useState<string | null>(null);
+  const [topInfo, setTopInfo] = React.useState({
+    location: 'Goa',
+    phone: '+91 96041 36010',
+    hours: '',
+  });
+
+  React.useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 20);
+    };
+    window.addEventListener('scroll', handleScroll);
+    handleScroll();
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   React.useEffect(() => {
     let isMounted = true;
+    const controller = new AbortController();
 
-    async function loadSiteName() {
-      const fetchKey = async (key: string) => {
-        try {
-          const response = await fetch(`/api/settings?key=${encodeURIComponent(key)}`, { cache: 'no-store' });
-          if (!response.ok) {
-            if (response.status !== 404) {
-              logger.warn('Failed to fetch site name setting', { key, status: response.status, context: 'Header.loadSiteName' });
-            }
-            return null;
+    const loadCompanyInfo = async () => {
+      try {
+        const response = await fetch('/company-info.json', { cache: 'no-store', signal: controller.signal });
+        if (!response.ok) return;
+        const data = await response.json();
+
+        const supportPhone = typeof data?.supportPhone === 'string' && data.supportPhone.trim()
+          ? data.supportPhone.trim()
+          : typeof data?.phone === 'string' && data.phone.trim()
+            ? data.phone.trim()
+            : undefined;
+
+        const supportHours = typeof data?.supportHours === 'string' && data.supportHours.trim()
+          ? data.supportHours.trim()
+          : undefined;
+
+        let location = typeof data?.locationShort === 'string' && data.locationShort.trim()
+          ? data.locationShort.trim()
+          : undefined;
+
+        if (!location && typeof data?.registeredAddress === 'string') {
+          const match = data.registeredAddress.match(/([A-Za-z\s]+Goa)/i);
+          if (match && match[1]) {
+            location = match[1].replace(/\s+/g, ' ').trim();
           }
-
-          const payload = (await response.json()) as { value?: unknown; siteName?: string };
-          return extractSiteName(payload);
-        } catch (error) {
-          logger.error('Error fetching site name', { error, key, context: 'Header.loadSiteName' });
-          return null;
         }
-      };
 
-      const primary = await fetchKey('siteName');
-      const fallback = primary || (await fetchKey('site_branding'));
+        if (!location && typeof data?.city === 'string' && typeof data?.state === 'string') {
+          location = `${data.city}, ${data.state}`;
+        }
 
-      if (isMounted && fallback) {
-        setSiteName(fallback);
+        if (isMounted) {
+          setTopInfo((current) => ({
+            location: location || current.location,
+            phone: supportPhone || current.phone,
+            hours: supportHours || current.hours,
+          }));
+        }
+      } catch (_error) {
+        // Keep defaults on failure
       }
-    }
+    };
 
-    loadSiteName();
+    loadCompanyInfo();
 
     return () => {
       isMounted = false;
+      controller.abort();
     };
   }, []);
 
   React.useEffect(() => {
     setMobileMenuOpen(false);
+    setMobileSubmenuOpen(null);
   }, [pathname]);
+
+  const isActive = (href: string) => {
+    if (href === '/') return pathname === '/';
+    return pathname.startsWith(href);
+  };
+
+  const applyMagneticEffect = (event: React.MouseEvent<HTMLElement>) => {
+    const target = event.currentTarget;
+    const rect = target.getBoundingClientRect();
+    const x = event.clientX - rect.left - rect.width / 2;
+    const y = event.clientY - rect.top - rect.height / 2;
+    target.style.transform = `translate(${x * 0.2}px, ${y * 0.2}px)`;
+  };
+
+  const resetMagneticEffect = (event: React.MouseEvent<HTMLElement>) => {
+    event.currentTarget.style.transform = 'translate(0px, 0px)';
+  };
 
   const handleLogout = async () => {
     try {
       await logout();
-      // The AuthProvider logout function now handles the redirect
-    } catch (error) {
-      logger.error('Logout error:', { error });
-      // Emergency fallback: force redirect even if logout failed
-      window.location.href = '/';
+    } catch {
+      // AuthProvider handles redirect; ignore here
     }
   };
 
-  const handleDashboardRedirect = () => {
-    if (!user) return;
-    
-    let dashboardPath = '/';
+  const showDashboard = !loading && !!user && user.role !== 'customer';
+
+  const dashboardHref = React.useMemo(() => {
+    if (!user?.role) return '/management';
     switch (user.role) {
-      case 'superadmin':
       case 'admin':
-        dashboardPath = '/management/admin';
-        break;
+      case 'superadmin':
+        return '/management/admin';
+      case 'accounts':
+        return '/management/accounts';
       case 'sales':
       case 'manager':
-        dashboardPath = '/management/sales';
-        break;
-      case 'accounts':
-        dashboardPath = '/management/accounts';
-        break;
+      case 'service_engineer':
+        return '/management/sales';
       default:
-        dashboardPath = '/'; // Fallback for customers
+        return '/management';
     }
-    
-    // Use window.location for immediate navigation
-    window.location.href = dashboardPath;
-  };
+  }, [user?.role]);
+
+  const accountHref = showDashboard ? dashboardHref : '/orders';
 
   return (
-    <header className="header-custom sticky top-0 z-50 w-full">
-      <div className="container mx-auto px-4">
-        {/* Top row with logo, navigation, and user controls */}
-        <div className="flex h-16 items-center justify-between">
-          <div className="flex items-center gap-6">
-            <Link
-              href="/"
-              className="flex items-center gap-2 text-blue-800 transition-all duration-300 hover:text-blue-900 hover:scale-105 shadow-button rounded-lg px-2 py-1"
-              onClick={() => {
-                // Force navigation for logo click
-                if (window.location.pathname !== '/') {
-                  window.location.href = '/';
-                }
-              }}
-            >
-              <DynamicLogo className="h-8 w-8 shrink-0" alt={`${siteName} logo`} />
-              <span
-                className="hidden sm:inline text-xl font-bold bg-gradient-to-r from-blue-700 to-blue-600 bg-clip-text text-transparent whitespace-nowrap shrink-0"
-                title={siteName}
-              >
-                {siteName}
+    <nav
+      id="navbar"
+      className={`sticky top-0 z-50 w-full transition-all duration-500 ease-in-out
+        ${isScrolled
+          ? 'bg-slate-950/95 backdrop-blur-xl border-b border-white/5 py-3 shadow-[0_10px_30px_-10px_rgba(0,0,0,0.5)]'
+          : 'bg-slate-950/85 backdrop-blur-xl border-b border-white/5 py-5'}
+      `}
+    >
+      <div className="absolute top-0 left-0 h-px w-full bg-gradient-to-r from-transparent via-cyan-400 to-transparent opacity-60"></div>
+
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between">
+          <Link href="/" className="relative z-20 flex items-center gap-4 group">
+            <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl border border-white/70 bg-white shadow-[0_0_28px_rgba(6,182,212,0.35)] transition-all duration-300 group-hover:border-cyan-300/80 group-hover:bg-white group-hover:shadow-[0_0_36px_rgba(6,182,212,0.5)]">
+              <Image
+                src="/brand.png"
+                alt="TecBunny Solutions"
+                width={72}
+                height={72}
+                className="h-14 w-14 object-contain drop-shadow-[0_0_10px_rgba(255,255,255,0.4)] transition-transform group-hover:scale-110"
+                priority
+              />
+            </div>
+            <div className="flex flex-col">
+              <span className="font-tech text-2xl font-bold tracking-wide text-white leading-none">
+                TECBUNNY<span className="text-cyan-300 animate-pulse">.</span>
               </span>
-            </Link>
-             <nav className="hidden md:flex items-center gap-4">
-               {navLinks.map(link => (
-                  <Link 
-                    key={link.name} 
-                    href={link.href} 
-                    className="text-sm font-medium text-blue-700 transition-all duration-200 hover:text-blue-900 hover:bg-blue-100/50 rounded-md px-3 py-2 shadow-button"
-                    onClick={(e) => {
-                      // Prevent default and use window.location for reliable navigation
-                      e.preventDefault();
-                      if (window.location.pathname !== link.href) {
-                        window.location.href = link.href;
+              <span className="text-[10px] uppercase tracking-widest text-slate-500 font-medium group-hover:text-cyan-300 transition-colors">
+                Solutions Pvt Ltd
+              </span>
+            </div>
+          </Link>
+
+          <div className="hidden flex-1 items-center justify-center lg:flex">
+            <nav className="flex items-center gap-1 rounded-full border border-white/5 bg-white/5 p-1.5 backdrop-blur-md shadow-lg shadow-black/20">
+              {navLinks.map((item) => (
+                item.children ? (
+                  <div key={item.name} className="relative group">
+                    <Link
+                      href={item.href}
+                      className={`relative rounded-full px-4 py-2 text-sm font-medium transition-all duration-300 inline-flex items-center gap-1
+                        ${isActive(item.href)
+                          ? 'bg-white/10 text-white border border-white/5 shadow-inner'
+                          : 'text-slate-400 hover:text-white hover:bg-white/5'
+                        }
+                      `}
+                    >
+                      {item.name}
+                      {isActive(item.href) && (
+                        <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-cyan-400 shadow-[0_0_8px_#06b6d4]" />
+                      )}
+                    </Link>
+                    <div className="invisible absolute left-1/2 top-full z-50 mt-3 w-56 -translate-x-1/2 rounded-2xl border border-white/10 bg-slate-950/95 p-2 opacity-0 shadow-2xl backdrop-blur-xl transition-all duration-200 group-hover:visible group-hover:opacity-100">
+                      {item.children.map((child) => (
+                        <Link
+                          key={child.name}
+                          href={child.href}
+                          className="flex items-center justify-between rounded-lg px-3 py-2 text-sm text-slate-300 transition-colors hover:bg-white/5 hover:text-white"
+                        >
+                          {child.name}
+                          <ChevronRight size={14} className="text-slate-500" />
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <Link
+                    key={item.name}
+                    href={item.href}
+                    className={`relative rounded-full px-4 py-2 text-sm font-medium transition-all duration-300
+                      ${isActive(item.href)
+                        ? 'bg-white/10 text-white border border-white/5 shadow-inner'
+                        : 'text-slate-400 hover:text-white hover:bg-white/5'
                       }
-                    }}
+                    `}
                   >
-                      {link.name}
+                    {item.name}
+                    {isActive(item.href) && (
+                      <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-cyan-400 shadow-[0_0_8px_#06b6d4]" />
+                    )}
                   </Link>
-               ))}
-               <DropdownMenu>
-                 <DropdownMenuTrigger asChild>
-                   <Button
-                     type="button"
-                     variant="ghost"
-                     className="text-sm font-medium text-blue-700 transition-all duration-200 hover:text-blue-900 hover:bg-blue-100/50 rounded-md px-3 py-2 shadow-button flex items-center gap-1"
-                   >
-                     Policies
-                     <ChevronDown className="h-4 w-4" />
-                   </Button>
-                 </DropdownMenuTrigger>
-                 <DropdownMenuContent align="start" className="w-52">
-                   <DropdownMenuLabel className="text-[11px] font-semibold tracking-wider text-muted-foreground">
-                     POLICIES
-                   </DropdownMenuLabel>
-                   <DropdownMenuSeparator />
-                   {policyLinks.map(link => (
-                     <DropdownMenuItem
-                       key={link.href}
-                       className="cursor-pointer"
-                       onSelect={(event) => {
-                         event.preventDefault();
-                         if (window.location.pathname !== link.href) {
-                           window.location.href = link.href;
-                         }
-                       }}
-                     >
-                       {link.name}
-                     </DropdownMenuItem>
-                   ))}
-                 </DropdownMenuContent>
-               </DropdownMenu>
+                )
+              ))}
             </nav>
           </div>
 
-          <div className="flex items-center gap-2">
-            <div className="hidden md:flex items-center gap-2">
-                <EnhancedCartSheet>
-                  <Button variant="ghost" size="icon" className="relative">
-                  <ShoppingCart className="h-5 w-5" />
-                  {cartCount > 0 && (
-                      <Badge
-                      variant="destructive"
-                      className="absolute -top-1 -right-1 h-5 w-5 justify-center p-0"
-                      >
-                      {cartCount}
-                      </Badge>
-                  )}
-                  <span className="sr-only">Open Cart</span>
-                  </Button>
-              </EnhancedCartSheet>
-
-              <Button variant="ghost" size="icon" className="relative" disabled>
-                  <Heart className="h-5 w-5" />
-                  {wishlistCount > 0 && (
-                      <Badge
-                      variant="destructive"
-                      className="absolute -top-1 -right-1 h-5 w-5 justify-center p-0"
-                      >
-                      {wishlistCount}
-                      </Badge>
-                  )}
-                  <span className="sr-only">Wishlist</span>
-              </Button>
-               {user ? (
-                  <DropdownMenu>
+          <div className="relative z-20 hidden items-center gap-4 lg:flex">
+            {!loading && !user && (
+              <div className="flex items-center gap-2">
+                <Link
+                  href="/auth/signin"
+                  className="rounded-full px-4 py-2 text-sm font-semibold text-slate-300 transition-colors hover:text-white hover:bg-white/5"
+                >
+                  Login
+                </Link>
+                <Link
+                  href="/auth/signup"
+                  className="rounded-full border border-cyan-400/40 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-200 transition-colors hover:border-cyan-400/70"
+                >
+                  Signup
+                </Link>
+              </div>
+            )}
+            {!loading && user && (
+              <>
+                <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                      <Button variant="secondary" size="icon" className="rounded-full">
-                      <User className="h-5 w-5" />
-                      <span className="sr-only">User Menu</span>
-                      </Button>
+                    <button
+                      type="button"
+                      className="flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-white/5 text-slate-200 transition-colors hover:border-cyan-400/50 hover:text-white"
+                      aria-label="Open profile menu"
+                    >
+                      <User size={18} />
+                    </button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                      <DropdownMenuLabel>My Account</DropdownMenuLabel>
-                      <DropdownMenuSeparator />
-            {user.role !== 'customer' && (
-                          <DropdownMenuItem onClick={handleDashboardRedirect} className="cursor-pointer">
-                {/* Show shield for admin+ */}
-                {['admin','superadmin'].includes(user.role) && <Shield className="mr-2 h-4 w-4" />}
-                              {(user.role === 'sales' || user.role === 'manager') && <Briefcase className="mr-2 h-4 w-4" />}
-                              {user.role === 'accounts' && <FileText className="mr-2 h-4 w-4" />}
-                              <span>Dashboard</span>
-                          </DropdownMenuItem>
-                      )}
-                      <DropdownMenuItem 
-                        className="cursor-pointer"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          window.location.href = '/profile';
-                        }}
-                      >
-                        <User className="mr-2 h-4 w-4" />
-                        Profile
-                      </DropdownMenuItem>
-                      <DropdownMenuItem 
-                        className="cursor-pointer"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          window.location.href = '/orders';
-                        }}
-                      >
-                        <Package className="mr-2 h-4 w-4" />
-                        Orders
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
-                      <LogOut className="mr-2 h-4 w-4" />
-                      <span>Log out</span>
-                      </DropdownMenuItem>
+                  <DropdownMenuContent align="end" className="border-white/10 bg-slate-950 text-slate-200">
+                    <DropdownMenuItem asChild className="cursor-pointer focus:bg-white/10">
+                      <Link href="/profile">Profile</Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild className="cursor-pointer focus:bg-white/10">
+                      <Link href={accountHref}>Account</Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild className="cursor-pointer focus:bg-white/10">
+                      <Link href="/auth/change-password">Change Password</Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator className="bg-white/10" />
+                    <DropdownMenuItem
+                      className="cursor-pointer focus:bg-white/10"
+                      onClick={handleLogout}
+                    >
+                      <LogOut className="mr-2 h-4 w-4" /> Logout
+                    </DropdownMenuItem>
                   </DropdownMenuContent>
-                  </DropdownMenu>
-              ) : (
-                  <div className="flex items-center gap-2">
-                  <LoginDialog>
-                      <Button variant="ghost" size="sm">
-                      Login
-                      </Button>
-                  </LoginDialog>
-                  <SignupDialog>
-                      <Button size="sm">
-                          Sign Up
-                      </Button>
-                  </SignupDialog>
+                </DropdownMenu>
+              </>
+            )}
+
+            <CartSheet>
+              <button
+                type="button"
+                className="relative flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-white/5 text-slate-200 transition-colors hover:border-cyan-400/50 hover:text-white"
+                aria-label="Open cart"
+              >
+                <ShoppingCart size={18} />
+                {cartCount > 0 && (
+                  <span className="absolute -right-1 -top-1 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-cyan-400 px-1 text-[10px] font-bold text-slate-900">
+                    {cartCount}
+                  </span>
+                )}
+              </button>
+            </CartSheet>
+
+            <Link
+              href="/customised-setups"
+              onMouseMove={applyMagneticEffect}
+              onMouseLeave={resetMagneticEffect}
+              className="magnetic-btn group relative rounded-lg border border-white/10 bg-gradient-to-r from-cyan-500/20 to-violet-500/20 px-6 py-2.5 text-sm font-bold text-white shadow-[0_0_15px_rgba(6,182,212,0.05)] transition-all hover:border-cyan-400/50 hover:shadow-[0_0_25px_rgba(6,182,212,0.2)]"
+            >
+              <span className="absolute inset-0 bg-gradient-to-r from-cyan-500 via-blue-500 to-violet-500 opacity-0 transition-opacity duration-300 group-hover:opacity-20"></span>
+              <span className="relative flex items-center gap-2">
+                Get Quote <ArrowRight size={14} className="transition-transform group-hover:translate-x-1" />
+              </span>
+            </Link>
+          </div>
+
+          <button
+            className="lg:hidden h-10 w-10 rounded-lg border border-white/10 p-1.5 text-slate-300 hover:text-white hover:bg-white/5 transition-colors"
+            onClick={() =>
+              setMobileMenuOpen((open) => {
+                const next = !open;
+                if (!next) {
+                  setMobileSubmenuOpen(null);
+                }
+                return next;
+              })
+            }
+            aria-label="Toggle menu"
+          >
+            {mobileMenuOpen ? <X size={22} /> : <Menu size={22} />}
+          </button>
+        </div>
+      </div>
+
+      <div
+        id="mobile-menu"
+        className={`absolute left-0 top-full w-full border-t border-white/5 bg-slate-950/95 backdrop-blur-xl md:hidden transition-all duration-500
+          ${mobileMenuOpen ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4 pointer-events-none'}
+        `}
+      >
+        <div className="max-h-[calc(100vh-5rem)] overflow-y-auto px-4 pt-3 pb-5 space-y-2">
+          {navLinks.map((item) => (
+            <div key={item.name} className="space-y-2">
+              {item.children ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setMobileSubmenuOpen((current) => (current === item.name ? null : item.name))}
+                    className={`flex min-h-[40px] w-full items-center justify-between rounded-lg px-4 py-2 text-sm transition-colors ${
+                      mobileSubmenuOpen === item.name
+                        ? 'text-cyan-300 font-bold bg-cyan-500/10 border border-cyan-400/20'
+                        : 'text-slate-300 hover:bg-white/5 hover:text-white'
+                    }`}
+                  >
+                    {item.name}
+                    <ChevronRight
+                      size={16}
+                      className={`text-slate-500 transition-transform ${mobileSubmenuOpen === item.name ? 'rotate-90' : ''}`}
+                    />
+                  </button>
+                  <div
+                    className={`space-y-1 pl-4 overflow-hidden transition-all ${
+                      mobileSubmenuOpen === item.name
+                        ? 'max-h-96 opacity-100'
+                        : 'max-h-0 opacity-0 pointer-events-none'
+                    }`}
+                  >
+                    {!item.children.some((c) => c.href === item.href) && (
+                      <Link
+                        href={item.href}
+                        onClick={() => setMobileMenuOpen(false)}
+                        className="flex min-h-[40px] items-center justify-between rounded-lg px-4 py-2 text-sm text-slate-400 transition-colors hover:bg-white/5 hover:text-white"
+                      >
+                        All {item.name}
+                        <ChevronRight size={14} className="text-slate-600" />
+                      </Link>
+                    )}
+                    {item.children.map((child) => (
+                      <Link
+                        key={child.name}
+                        href={child.href}
+                        onClick={() => setMobileMenuOpen(false)}
+                        className="flex min-h-[40px] items-center justify-between rounded-lg px-4 py-2 text-sm text-slate-400 transition-colors hover:bg-white/5 hover:text-white"
+                      >
+                        {child.name}
+                        <ChevronRight size={14} className="text-slate-600" />
+                      </Link>
+                    ))}
                   </div>
+                </>
+              ) : (
+                <Link
+                  href={item.href}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`flex min-h-[40px] items-center justify-between rounded-lg px-4 py-2 text-sm transition-colors ${
+                    isActive(item.href)
+                      ? 'text-cyan-300 font-bold bg-cyan-500/10 border border-cyan-400/20'
+                      : 'text-slate-300 hover:bg-white/5 hover:text-white'
+                  }`}
+                >
+                  {item.name}
+                  <ChevronRight size={16} className="text-slate-500" />
+                </Link>
               )}
             </div>
-           
-            <div className="md:hidden">
-              <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
-                  <SheetTrigger asChild>
-                       <Button variant="ghost" size="icon">
-                          <Menu className="h-6 w-6" />
-                          <span className="sr-only">Open menu</span>
-                      </Button>
-                  </SheetTrigger>
-                  <SheetContent side="left" className="w-full max-w-sm">
-                      <SheetHeader className="sr-only">
-                          <SheetTitle>Mobile Menu</SheetTitle>
-                          <SheetDescription>Main navigation and account options for mobile users.</SheetDescription>
-                      </SheetHeader>
-                       <div className="flex justify-between items-center mb-6">
-                  <Link
-                    href="/"
-                    className="flex items-center gap-2 text-primary"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                setMobileMenuOpen(false);
-                                setTimeout(() => {
-                                  if (window.location.pathname !== '/') {
-                                    window.location.href = '/';
-                                  }
-                                }, 100);
-                              }}
-                          >
-                <DynamicLogo className="h-8 w-8 shrink-0" alt={`${siteName} logo`} />
-                <span className="text-xl font-bold whitespace-nowrap shrink-0" title={siteName}>{siteName}</span>
-                          </Link>
-                          <Button variant="ghost" size="icon" onClick={() => setMobileMenuOpen(false)}>
-                              <X className="h-6 w-6" />
-                          </Button>
-                       </div>
-                       <nav className="flex flex-col gap-4 mb-8">
-                          {navLinks.map(link => (
-                              <Link 
-                                key={link.name} 
-                                href={link.href} 
-                                className="text-lg font-medium text-foreground hover:text-primary" 
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  setMobileMenuOpen(false);
-                                  // Small delay to allow sheet to close, then navigate
-                                  setTimeout(() => {
-                                    if (window.location.pathname !== link.href) {
-                                      window.location.href = link.href;
-                                    }
-                                  }, 100);
-                                }}
-                              >
-                                  {link.name}
-                              </Link>
-                          ))}
-                          <div className="mt-4">
-                            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground mb-2">POLICIES</p>
-                            <div className="flex flex-col gap-3 pl-1">
-                              {policyLinks.map(link => (
-                                <Link
-                                  key={link.name}
-                                  href={link.href}
-                                  className="text-base font-medium text-foreground hover:text-primary"
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    setMobileMenuOpen(false);
-                                    setTimeout(() => {
-                                      if (window.location.pathname !== link.href) {
-                                        window.location.href = link.href;
-                                      }
-                                    }, 100);
-                                  }}
-                                >
-                                  {link.name}
-                                </Link>
-                              ))}
-                            </div>
-                          </div>
-                       </nav>
-                       <div className="flex items-center gap-4">
-                            <EnhancedCartSheet>
-                              <Button variant="ghost" size="icon" className="relative">
-                                  <ShoppingCart className="h-5 w-5" />
-                                  {cartCount > 0 && <Badge variant="destructive" className="absolute -top-1 -right-1 h-5 w-5 justify-center p-0">{cartCount}</Badge>}
-                                  <span className="sr-only">Open Cart</span>
-                              </Button>
-                          </EnhancedCartSheet>
-
-                          <Button variant="ghost" size="icon" className="relative" disabled>
-                              <Heart className="h-5 w-5" />
-                              {wishlistCount > 0 && <Badge variant="destructive" className="absolute -top-1 -right-1 h-5 w-5 justify-center p-0">{wishlistCount}</Badge>}
-                              <span className="sr-only">Wishlist</span>
-                          </Button>
-                       </div>
-                        <div className="mt-auto pt-6 border-t">
-                              {user ? (
-                                  <div className="space-y-4">
-                                       <div className="flex items-center gap-3">
-                                          <User className="h-8 w-8 text-primary"/>
-                                          <div>
-                                              <p className="font-semibold">{user.name}</p>
-                                              <p className="text-sm text-muted-foreground">{user.email}</p>
-                                          </div>
-                                      </div>
-                                      {user.role !== 'customer' && (
-                                        <Button 
-                                          className="w-full justify-start" 
-                                          variant="ghost" 
-                                          onClick={() => {
-                                            setMobileMenuOpen(false);
-                                            setTimeout(() => {
-                                              handleDashboardRedirect();
-                                            }, 100);
-                                          }}
-                                        >
-                                          Dashboard
-                                        </Button>
-                                      )}
-                                      <Button 
-                                        className="w-full justify-start" 
-                                        variant="ghost"
-                                        onClick={() => {
-                                          setMobileMenuOpen(false);
-                                          window.location.href = '/profile';
-                                        }}
-                                      >
-                                        Profile
-                                      </Button>
-                                      <Button 
-                                        className="w-full justify-start" 
-                                        variant="ghost" 
-                                        asChild
-                                      >
-                                        <Link href="/orders">My Orders</Link>
-                                      </Button>
-                                      <Button 
-                                        className="w-full justify-start" 
-                                        variant="ghost" 
-                                        onClick={() => {
-                                          setMobileMenuOpen(false);
-                                          setTimeout(() => {
-                                            handleLogout();
-                                          }, 100);
-                                        }}
-                                      >
-                                        Logout
-                                      </Button>
-                                  </div>
-                              ) : (
-                                  <div className="space-y-4">
-                                      <LoginDialog>
-                                          <Button className="w-full">Login</Button>
-                                      </LoginDialog>
-                                      <SignupDialog>
-                                          <Button variant="outline" className="w-full">
-                                              Sign Up
-                                          </Button>
-                                      </SignupDialog>
-                                  </div>
-                              )}
-                       </div>
-                  </SheetContent>
-              </Sheet>
+          ))}
+          <Link
+            href="/contact"
+            onClick={() => setMobileMenuOpen(false)}
+            className="flex min-h-[40px] items-center justify-between rounded-lg px-4 py-2 text-sm text-slate-300 hover:bg-white/5 hover:text-white transition-colors"
+          >
+            Contact Support
+            <ChevronRight size={16} className="text-slate-500" />
+          </Link>
+          {showDashboard && (
+            <Link
+              href={dashboardHref}
+              onClick={() => setMobileMenuOpen(false)}
+              className="flex min-h-[40px] items-center justify-between rounded-lg px-4 py-2 text-sm text-slate-300 hover:bg-white/5 hover:text-white transition-colors"
+            >
+              Dashboard
+              <ChevronRight size={16} className="text-slate-500" />
+            </Link>
+          )}
+          <Link
+            href="/cart"
+            onClick={() => setMobileMenuOpen(false)}
+            className="flex min-h-[40px] items-center justify-between rounded-lg px-4 py-2 text-sm text-slate-300 hover:bg-white/5 hover:text-white transition-colors"
+          >
+            Cart
+            <ChevronRight size={16} className="text-slate-500" />
+          </Link>
+          {!loading && !user && (
+            <div className="space-y-2">
+              <Link
+                href="/auth/signin"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex min-h-[40px] items-center justify-between rounded-lg px-4 py-2 text-sm text-slate-300 hover:bg-white/5 hover:text-white transition-colors"
+              >
+                Login
+                <ChevronRight size={16} className="text-slate-500" />
+              </Link>
+              <Link
+                href="/auth/signup"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center justify-between rounded-lg border border-cyan-400/40 bg-cyan-500/10 px-4 py-2 text-sm text-cyan-200 hover:border-cyan-400/70 transition-colors"
+              >
+                Signup
+                <ChevronRight size={16} className="text-cyan-300" />
+              </Link>
             </div>
-          </div>
-        </div>
-        
-        {/* Search bar row */}
-        <div className="border-t border-blue-100 py-3">
-          <div className="flex justify-center">
-            <div className="w-full max-w-2xl">
-              <React.Suspense fallback={null}>
-                <ProductSearch />
-              </React.Suspense>
+          )}
+          {!loading && user && (
+            <div className="space-y-2">
+              <Link
+                href="/profile"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex min-h-[40px] items-center justify-between rounded-lg px-4 py-2 text-sm text-slate-300 hover:bg-white/5 hover:text-white transition-colors"
+              >
+                Profile
+                <ChevronRight size={16} className="text-slate-500" />
+              </Link>
+              <Link
+                href={accountHref}
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center justify-between rounded-lg px-4 py-2 text-sm text-slate-300 hover:bg-white/5 hover:text-white transition-colors"
+              >
+                Account
+                <ChevronRight size={16} className="text-slate-500" />
+              </Link>
+              <button
+                type="button"
+                onClick={async () => {
+                  setMobileMenuOpen(false);
+                  await handleLogout();
+                }}
+                className="flex w-full items-center justify-between rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-200 hover:border-cyan-400/50 hover:text-white transition-colors"
+              >
+                Logout
+                <ChevronRight size={16} className="text-slate-500" />
+              </button>
             </div>
+          )}
+          <div className="pt-4 mt-2 border-t border-white/5 space-y-3">
+            <Link
+              href="/customised-setups"
+              onClick={() => setMobileMenuOpen(false)}
+              className="block w-full rounded-lg bg-cyan-500 py-2 text-center text-sm font-bold text-slate-950 shadow-[0_0_12px_rgba(6,182,212,0.35)]"
+            >
+              Get Instant Quote
+            </Link>
           </div>
         </div>
       </div>
-    </header>
+    </nav>
   );
 }

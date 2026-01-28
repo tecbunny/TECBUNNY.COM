@@ -116,8 +116,8 @@ Locked for 30 minutes for security.
 🆘 *Need Help?*
 If this wasn't you, please contact our support team immediately:
 
-📧 support@tecbunnysolutions.com
-📞 +91 94296 94995
+📧 support@tecbunny.com
+📞 +91 96041 36010
 
 🛡️ *Security Tip:*
 Never share your OTP codes with anyone.
@@ -171,7 +171,7 @@ Please verify using the OTP sent to your registered email/phone.
 3. Review account activity
 
 📞 *Emergency Support:*
-+91 94296 94995 (24/7)
++91 96041 36010 (24/7)
 
 🛡️ Your security is our priority.
 
@@ -222,8 +222,8 @@ Thank you for joining our family! To complete your registration, please verify y
 
 🆘 *Need Help?*
 Our team is here to assist you!
-📧 support@tecbunnysolutions.com
-📞 +91 94296 94995
+📧 support@tecbunny.com
+📞 +91 96041 36010
 
 Welcome aboard! 🚀
 
@@ -274,8 +274,8 @@ If you didn't request this reset, please:
 2. Secure your account
 3. Contact support if concerned
 
-📞 *Support:* +91 94296 94995
-📧 *Email:* support@tecbunnysolutions.com
+📞 *Support:* +91 96041 36010
+📧 *Email:* support@tecbunny.com
 
 🛡️ *Security Tip:*
 Never share your reset codes with anyone, including our staff.
@@ -339,7 +339,7 @@ ${orderInfo}
 
 ❌ *Didn't make this transaction?*
 Contact us immediately:
-📞 +91 94296 94995
+📞 +91 96041 36010
 
 🛡️ Your security is our priority.
 
@@ -389,8 +389,8 @@ Your ${purpose} code is:
 ❌ Never share with anyone
 
 🆘 *Need Help?*
-📞 +91 94296 94995
-📧 support@tecbunnysolutions.com
+📞 +91 96041 36010
+📧 support@tecbunny.com
 
 _This is an automated security message_
     `.trim();

@@ -6,6 +6,12 @@
   "buildCommand": "npm run build",
   "outputDirectory": ".next",
   "installCommand": "npm install --include=dev",
+  "crons": [
+    {
+      "path": "/api/orders/auto-cancel",
+      "schedule": "0 * * * *"
+    }
+  ],
   "rewrites": [
     {
       "source": "/api/settings/:path*",
@@ -77,24 +83,6 @@
       "maxDuration": 30
     },
     "src/app/api/auth/signup/route.ts": {
-      "maxDuration": 60
-    },
-    "src/app/api/payment/phonepe/initiate/route.ts": {
-      "maxDuration": 60
-    },
-    "src/app/api/payment/phonepe/status/route.ts": {
-      "maxDuration": 60
-    },
-    "src/app/api/payment/phonepe/callback/route.ts": {
-      "maxDuration": 60
-    },
-    "src/app/api/payment/paytm/initiate/route.ts": {
-      "maxDuration": 60
-    },
-    "src/app/api/payment/paytm/status/route.ts": {
-      "maxDuration": 60
-    },
-    "src/app/api/payment/paytm/callback/route.ts": {
       "maxDuration": 60
     },
     "src/app/api/settings/route.ts": {

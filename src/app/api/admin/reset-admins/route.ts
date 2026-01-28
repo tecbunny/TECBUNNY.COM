@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
+import { logger } from '../../../../lib/logger';
+
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.local';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 'placeholder-service-role-key';
 
@@ -86,7 +88,9 @@ export async function POST(request: NextRequest) {
     for (const p of toDelete) {
       try {
         await supabaseAdmin.auth.admin.deleteUser(p.id);
-      } catch (_) {}
+      } catch (error) {
+        logger.error('admin_reset_delete_user_failed', { userId: p.id, error });
+      }
       await supabaseAdmin.from('profiles').delete().eq('id', p.id);
     }
 

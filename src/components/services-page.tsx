@@ -10,6 +10,7 @@ import type { LucideProps } from 'lucide-react';
 import {
   Award,
   Cctv,
+  Code,
   Cpu,
   HeadphonesIcon,
   RefreshCw,
@@ -19,13 +20,10 @@ import {
   Wrench,
 } from 'lucide-react';
 
-import { Badge } from '../components/ui/badge';
-import { Button } from '../components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
+import { Button } from '@/components/ui/button';
 import { useCart } from '../lib/hooks';
+import { usePermissions } from '../hooks/use-permissions';
 import type { Product, Service } from '../lib/types';
-
-import HeroCarousel from './HeroCarousel';
 
 
 const iconMap: Record<string, ComponentType<LucideProps>> = {
@@ -37,6 +35,7 @@ const iconMap: Record<string, ComponentType<LucideProps>> = {
   Award,
   Cctv,
   Cpu,
+  Code,
 };
 
 interface ServicePricingTier {
@@ -73,49 +72,9 @@ interface AmcTerm {
 
 const servicePricing: ServicePricingCategory[] = [
   {
-    category: 'CCTV Services',
-    blurb: 'Structured deployments and proactive maintenance for surveillance infrastructure.',
-    plans: [
-      {
-        name: 'New Installation',
-        summary: 'Complete survey, cabling, DVR/NVR configuration, and remote viewing setup.',
-        tiers: [
-          { label: 'Up to 4 Cameras', price: '₹1,499', detail: 'Includes on-site survey, cabling up to 80m, and DVR pairing for smaller sites.', amount: 1499 },
-          { label: 'Up to 8 Cameras', price: '₹2,499', detail: 'Balanced setup for villas or retail floors with DVR/NVR tuning.', amount: 2499 },
-          { label: 'More than 8 Cameras', price: '₹3,999', detail: 'Large deployments with advanced routing and monitoring dashboards.', amount: 3999 }
-        ]
-      },
-      {
-        name: 'Repair Services',
-        summary: 'Flat-fee diagnostics plus minor fixes for existing CCTV setups.',
-        tiers: [
-          { label: 'Standard Repair', price: '₹999', detail: 'Includes visit, feed diagnostics, and quick component swaps (parts extra).', amount: 999 }
-        ]
-      },
-      {
-        name: 'AMC Services',
-        summary: 'Annual maintenance programs with monthly coverage payments billed upfront.',
-        tiers: [
-          { label: 'Home AMC', price: '₹999 / month (billed annually)', detail: 'Covers up to 1 PC and 1 CCTV setup; invoiced ₹11,988 yearly.', amount: 999 * 12 },
-          { label: 'Business AMC 1', price: '₹1,999 / month (billed annually)', detail: 'Covers up to 3 PCs and 1 CCTV (up to 8CH); invoiced ₹23,988 yearly.', amount: 1999 * 12 },
-          { label: 'Business AMC 2', price: '₹2,999 / month (billed annually)', detail: 'Covers up to 5 PCs and 1 CCTV (up to 8CH); invoiced ₹35,988 yearly.', amount: 2999 * 12 },
-          { label: 'Enterprise AMC 1', price: '₹3,999 / month (billed annually)', detail: 'Covers up to 5 PCs and 1 CCTV (up to 16CH); invoiced ₹47,988 yearly.', amount: 3999 * 12 },
-          { label: 'Enterprise AMC 2', price: '₹4,999 / month (billed annually)', detail: 'Covers up to 5 PCs and 1 CCTV (up to 32CH); invoiced ₹59,988 yearly.', amount: 4999 * 12 }
-        ]
-      }
-    ]
-  },
-  {
     category: 'Computer Services',
     blurb: 'From bespoke workstation builds to fast repair and upgrade programs.',
     plans: [
-      {
-        name: 'New Customised Setup',
-        summary: 'Requirement capture, component sourcing, assembly, and burn-in testing.',
-        tiers: [
-          { label: 'Custom Build Request', price: '₹1,999', detail: 'Covers consulting plus configuration blueprint (hardware billed separately).', amount: 1999 }
-        ]
-      },
       {
         name: 'Repair Services',
         summary: 'Rapid fault isolation plus genuine spares for laptops and desktops.',
@@ -217,7 +176,20 @@ export interface ServicesPageProps {
 export default function ServicesPage({ services }: ServicesPageProps) {
   const router = useRouter();
   const { addToCart } = useCart();
+  const { atLeast } = usePermissions();
   const [busyServiceId, setBusyServiceId] = useState<string | null>(null);
+  const canManageServices = atLeast('admin');
+
+  const serviceSections = services.reduce<Array<{ key: string; items: Service[] }>>((acc, service) => {
+    const key = service.category || 'Services';
+    const existing = acc.find(section => section.key === key);
+    if (existing) {
+      existing.items.push(service);
+    } else {
+      acc.push({ key, items: [service] });
+    }
+    return acc;
+  }, []);
 
   const buildServiceProduct = (service: Service): Product => {
     const title = service.title || 'TecBunny Service';
@@ -259,7 +231,37 @@ export default function ServicesPage({ services }: ServicesPageProps) {
   const handleRaiseRequest = (service: Service) => {
     if (busyServiceId === service.id) return;
     setBusyServiceId(service.id);
-    const product = buildServiceProduct(service);
+
+    const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    const findDefaultAmount = (): number => {
+      const normTitle = normalize(service.title || '');
+      for (const category of servicePricing) {
+        const categoryMatches = category.category.toLowerCase().includes(service.category?.toLowerCase() || '');
+        for (const plan of category.plans) {
+          const normPlan = normalize(plan.name);
+          if (normTitle.includes(normPlan) || normPlan.includes(normTitle) || categoryMatches) {
+            const tier = plan.tiers.find(t => typeof t.amount === 'number' && t.amount > 0);
+            if (tier && typeof tier.amount === 'number') return tier.amount;
+          }
+        }
+      }
+      const firstTier = servicePricing
+        .flatMap(c => c.plans.flatMap(p => p.tiers))
+        .find(t => typeof t.amount === 'number' && t.amount > 0);
+      return typeof firstTier?.amount === 'number' ? firstTier.amount : 0;
+    };
+
+    const fallbackAmount = findDefaultAmount();
+    const coercedPrice = typeof service.price === 'number' && service.price > 0
+      ? service.price
+      : fallbackAmount;
+
+    const product = buildServiceProduct({ ...service, price: coercedPrice });
+    product.price = coercedPrice;
+    product.offer_price = coercedPrice;
+    product.gstRate = coercedPrice > 0 ? 18 : 0;
+    product.gst_rate = product.gstRate;
+
     addToCart(product);
     router.push('/checkout?source=services');
   };
@@ -291,6 +293,8 @@ export default function ServicesPage({ services }: ServicesPageProps) {
     product.title = syntheticService.title;
     product.price = tier.amount;
     product.offer_price = tier.amount;
+    product.gstRate = tier.amount > 0 ? 18 : 0;
+    product.gst_rate = product.gstRate;
 
     addToCart(product);
     router.push('/checkout?source=services');
@@ -298,171 +302,248 @@ export default function ServicesPage({ services }: ServicesPageProps) {
   };
 
   return (
-    <>
-      <HeroCarousel pageKey="services" />
-      <div className="container mx-auto px-4 py-8">
-      {/* Header */}
-      <div className="text-center mb-12">
-        <h1 className="text-4xl font-bold text-primary mb-4">Our Services</h1>
-        <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-          Comprehensive technology services designed to enhance your experience and keep your devices running smoothly.
-        </p>
-      </div>
+    <div className="relative overflow-hidden bg-slate-950 text-slate-200">
+      <div className="pointer-events-none absolute inset-0 bg-[url('/noise.svg')] opacity-20" />
+      <div className="pointer-events-none absolute left-1/2 top-32 h-[420px] w-[820px] -translate-x-1/2 rounded-full bg-blue-500/10 blur-[140px]" />
 
-      {/* Services Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
-        {services.map(service => {
-          const Icon = iconMap[service.icon] || Wrench;
-          return (
-            <Card key={service.id} className="relative h-full hover:shadow-lg transition-shadow">
-              {service.badge && (
-                <Badge
-                  variant={
-                    service.badge === 'Popular'
-                      ? 'default'
-                      : service.badge === 'New'
-                      ? 'secondary'
-                      : 'outline'
-                  }
-                  className="absolute top-4 right-4"
-                >
-                  {service.badge}
-                </Badge>
-              )}
-              <CardHeader>
-                <div className="flex items-center gap-3 mb-2">
-                  <div className="p-2 rounded-lg bg-primary/10">
-                    <Icon className="h-6 w-6 text-primary" />
-                  </div>
-                  <CardTitle className="text-xl">{service.title}</CardTitle>
-                </div>
-                <CardDescription className="text-base">{service.description}</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ul className="space-y-2 mb-4">
-                  {service.features.map((feature, idx) => (
-                    <li key={idx} className="flex items-center gap-2 text-sm">
-                      <div className="w-1.5 h-1.5 rounded-full bg-primary" />
-                      {feature}
-                    </li>
-                  ))}
-                </ul>
-                <Button
-                  variant="default"
-                  className="w-full"
-                  disabled={busyServiceId === service.id}
-                  onClick={() => handleRaiseRequest(service)}
-                >
-                  <ShoppingCart className="mr-2 h-4 w-4" />
-                  Raise Request
-                </Button>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
-
-      {/* Pricing Section */}
-      <div className="mb-12">
-        <div className="text-center mb-8">
-          <h2 className="text-3xl font-bold text-foreground">Transparent Service Pricing</h2>
-          <p className="text-muted-foreground max-w-2xl mx-auto">
-            Indicative pricing tiers keep budgeting simple. Final estimates include on-site assessment, travel, and any consumables.
+      <div className="relative mx-auto flex max-w-7xl flex-col gap-16 px-4 pb-20 pt-0 sm:px-6 lg:px-8 sm:pt-0">
+        <section className="text-center">
+          <div className="inline-flex items-center gap-2 rounded-full border border-violet-400/30 bg-violet-500/5 px-3 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-violet-300">
+            End-to-end Solutions
+          </div>
+          <h1 className="mt-6 text-4xl font-semibold text-white sm:text-5xl lg:text-6xl">
+            Engineering{' '}
+            <span className="bg-gradient-to-r from-cyan-300 via-blue-400 to-violet-400 bg-clip-text text-transparent">
+              Sanctuary
+            </span>
+          </h1>
+          <p className="mx-auto mt-4 max-w-2xl text-base text-slate-400 sm:text-lg">
+            From secure perimeters to smart automation, we deliver professional installation, maintenance, and service care across Goa.
           </p>
-        </div>
-        <div className="space-y-8">
-          {servicePricing.map(category => (
-            <Card key={category.category} className="shadow-sm border-primary/10">
-              <CardHeader>
-                <CardTitle className="text-2xl">{category.category}</CardTitle>
-                <CardDescription>{category.blurb}</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {category.plans.map(plan => (
-                  <div key={plan.name} className="rounded-2xl border border-primary/10 bg-muted/10 p-5">
-                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-5">
-                      <div>
-                        <h3 className="text-xl font-semibold text-foreground">{plan.name}</h3>
-                        <p className="text-sm text-muted-foreground max-w-2xl">{plan.summary}</p>
+          {canManageServices && (
+            <div className="mt-6 flex justify-center">
+              <Link
+                href="/management/admin/services"
+                className="inline-flex items-center justify-center rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-cyan-200 transition-colors hover:border-cyan-400/60"
+              >
+                Manage Services
+              </Link>
+            </div>
+          )}
+        </section>
+
+        <section className="grid gap-4 md:grid-cols-2">
+          <div className="flex flex-col gap-3 rounded-2xl border border-white/5 bg-slate-900/60 p-6 shadow-md">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-cyan-500/10 text-cyan-300 flex items-center justify-center">
+                <Cctv className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-white">CCTV New Setup</h3>
+                <p className="text-sm text-slate-400">Site survey, design, and deployment with a tailored quote.</p>
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              className="justify-center border-cyan-400/40 text-cyan-200 hover:border-cyan-400/70 hover:bg-cyan-500/10"
+              onClick={() => router.push('/customised-setups')}
+            >
+              Get Quote
+            </Button>
+          </div>
+
+          <div className="flex flex-col gap-3 rounded-2xl border border-white/5 bg-slate-900/60 p-6 shadow-md">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-blue-500/10 text-blue-300 flex items-center justify-center">
+                <Cpu className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-white">New Computer Setup</h3>
+                <p className="text-sm text-slate-400">Capture requirements and raise a ticket for a customised build.</p>
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              className="justify-center border-blue-400/40 text-blue-200 hover:border-blue-400/70 hover:bg-blue-500/10"
+              onClick={() => router.push('/customised-setups?type=computer')}
+            >
+              Raise Ticket
+            </Button>
+          </div>
+        </section>
+
+        <section>
+          <div className="space-y-8">
+            {serviceSections.map((section) => (
+              <div key={section.key} className="space-y-6">
+                <div className="flex items-center gap-3">
+                  <div className="h-8 w-1 rounded-full bg-cyan-400" />
+                  <div>
+                    <h2 className="text-2xl font-semibold text-white">{section.key}</h2>
+                    <p className="text-sm text-slate-400">Explore curated services under {section.key.toLowerCase()}.</p>
+                  </div>
+                </div>
+                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                  {section.items.map((service) => {
+                    const Icon = iconMap[service.icon] || Wrench;
+                    return (
+                      <div
+                        key={service.id}
+                        className="group flex h-full flex-col rounded-2xl border border-white/5 bg-slate-900/60 p-6 transition-all duration-300 hover:-translate-y-1 hover:border-cyan-400/30"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-300 transition-transform duration-300 group-hover:scale-110">
+                            <Icon className="h-6 w-6" />
+                          </div>
+                          <div>
+                            <h3 className="text-lg font-semibold text-white">{service.title}</h3>
+                            {service.badge && (
+                              <p className="text-xs uppercase tracking-widest text-cyan-300">{service.badge}</p>
+                            )}
+                          </div>
+                        </div>
+                        <p className="mt-4 text-sm text-slate-400">{service.description}</p>
+                        <ul className="mt-5 space-y-2 text-sm text-slate-500">
+                          {service.features.map((feature, idx) => (
+                            <li key={idx} className="flex items-start gap-2">
+                              <span className="mt-1 h-1.5 w-1.5 rounded-full bg-cyan-300" />
+                              <span>{feature}</span>
+                            </li>
+                          ))}
+                        </ul>
+                        <button
+                          type="button"
+                          className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition-colors hover:border-cyan-400/40 hover:bg-cyan-500/10"
+                          disabled={busyServiceId === service.id}
+                          onClick={() => handleRaiseRequest(service)}
+                        >
+                          <ShoppingCart className="h-4 w-4" />
+                          Raise Request
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="rounded-3xl border border-white/5 bg-black/20 p-6 sm:p-10">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 className="text-3xl font-semibold text-white">Service Rates & AMC Plans</h2>
+              <p className="mt-2 max-w-2xl text-sm text-slate-400">
+                Transparent pricing tiers across CCTV and computer services. Final quotations include on-site assessment, travel, and consumables.
+              </p>
+            </div>
+            <Link
+              href="/contact"
+              className="inline-flex items-center justify-center rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-200 transition-colors hover:border-cyan-400/60"
+            >
+              Request a Quote
+            </Link>
+          </div>
+
+          <div className="mt-8 grid gap-6 lg:grid-cols-2">
+            {servicePricing.map((category) => (
+              <div key={category.category} className="rounded-2xl border border-white/5 bg-slate-900/60 p-6">
+                <div className="flex items-center gap-3">
+                  <div className="h-8 w-1 rounded-full bg-cyan-400" />
+                  <div>
+                    <h3 className="text-xl font-semibold text-white">{category.category}</h3>
+                    <p className="text-sm text-slate-400">{category.blurb}</p>
+                  </div>
+                </div>
+                <div className="mt-6 space-y-4">
+                  {category.plans.map((plan) => (
+                    <div key={plan.name} className="rounded-xl border border-white/5 bg-black/30 p-4">
+                      <div className="flex flex-col gap-1">
+                        <p className="text-sm font-semibold text-white">{plan.name}</p>
+                        <p className="text-xs text-slate-500">{plan.summary}</p>
+                      </div>
+                      <div className="mt-4 grid gap-3">
+                        {plan.tiers.map((tier) => {
+                          const tierId = `pricing-${slugify(category.category)}-${slugify(plan.name)}-${slugify(tier.label)}`;
+                          const hasPrice = Boolean(tier.amount);
+                          return (
+                            <div
+                              key={tier.label}
+                              className="flex flex-col gap-2 rounded-lg border border-white/5 bg-slate-950/60 p-4"
+                            >
+                              <div className="flex items-center justify-between">
+                                <p className="text-xs font-semibold uppercase tracking-widest text-cyan-300">{tier.label}</p>
+                                <p className="text-lg font-semibold text-cyan-200">{tier.price}</p>
+                              </div>
+                              <p className="text-xs text-slate-500">{tier.detail}</p>
+                              <button
+                                type="button"
+                                className="mt-2 inline-flex w-full items-center justify-center rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white transition-colors hover:border-cyan-400/40 hover:bg-cyan-500/10"
+                                disabled={!hasPrice || busyServiceId === tierId}
+                                onClick={() => handlePricingTierAdd(category.category, plan, tier)}
+                              >
+                                {hasPrice ? 'Add to Cart' : 'Request Quote'}
+                              </button>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
-                    <div className="grid gap-4 md:grid-cols-3">
-                      {plan.tiers.map(tier => {
-                        const tierId = `pricing-${slugify(category.category)}-${slugify(plan.name)}-${slugify(tier.label)}`;
-                        const hasPrice = Boolean(tier.amount);
-                        return (
-                        <div key={tier.label} className="rounded-xl border border-dashed border-primary/30 bg-background p-4 flex flex-col">
-                          <p className="text-xs font-semibold uppercase tracking-wide text-primary">{tier.label}</p>
-                          <p className="text-2xl font-bold text-foreground mt-2">{tier.price}</p>
-                          <p className="text-sm text-muted-foreground mt-2 flex-1">{tier.detail}</p>
-                          <Button
-                            variant={hasPrice ? 'default' : 'outline'}
-                            size="sm"
-                            className="mt-4 w-full"
-                            disabled={!hasPrice || busyServiceId === tierId}
-                            onClick={() => handlePricingTierAdd(category.category, plan, tier)}
-                          >
-                            {hasPrice ? 'Add to Cart' : 'Request Quote'}
-                          </Button>
-                        </div>
-                      );
-                      })}
-                    </div>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-        <p className="text-xs text-muted-foreground text-center mt-6">*All prices are indicative. Taxes, hardware, and travel charges (if applicable) are shared on the final quotation.</p>
-      </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="mt-6 text-center text-xs text-slate-500">
+            *All prices are indicative. Taxes, hardware, and travel charges (if applicable) are shared on the final quotation.
+          </p>
+        </section>
 
-      {/* AMC Terms */}
-      <Card className="mb-12 border-primary/20 shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-2xl">Annual Maintenance Contract (AMC) Terms</CardTitle>
-          <CardDescription>
-            General terms and conditions applicable to all CCTV and PC AMC plans offered by TecBunny.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="grid gap-4 sm:grid-cols-2 text-sm">
+        <section className="rounded-3xl border border-white/5 bg-slate-900/40 p-6 sm:p-10">
+          <div className="flex items-center gap-3">
+            <div className="h-8 w-1 rounded-full bg-violet-400" />
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Company</p>
-              <p className="font-semibold text-foreground">{companyInfo.name}</p>
+              <h2 className="text-2xl font-semibold text-white">Annual Maintenance Contract (AMC) Terms</h2>
+              <p className="text-sm text-slate-400">General terms and conditions for CCTV and PC AMC plans.</p>
+            </div>
+          </div>
+
+          <div className="mt-6 grid gap-4 sm:grid-cols-2 text-sm text-slate-300">
+            <div>
+              <p className="text-xs uppercase tracking-widest text-slate-500">Company</p>
+              <p className="font-semibold text-white">{companyInfo.name}</p>
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">CIN</p>
+              <p className="text-xs uppercase tracking-widest text-slate-500">CIN</p>
               <p>{companyInfo.cin}</p>
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Udyam</p>
+              <p className="text-xs uppercase tracking-widest text-slate-500">Udyam</p>
               <p>{companyInfo.udyam}</p>
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">GSTIN</p>
+              <p className="text-xs uppercase tracking-widest text-slate-500">GSTIN</p>
               <p>{companyInfo.gstin}</p>
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">CEO</p>
+              <p className="text-xs uppercase tracking-widest text-slate-500">CEO</p>
               <p>{companyInfo.ceo}</p>
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Website</p>
-              <a href={companyInfo.website} target="_blank" rel="noreferrer" className="text-primary underline">
+              <p className="text-xs uppercase tracking-widest text-slate-500">Website</p>
+              <a href={companyInfo.website} target="_blank" rel="noopener noreferrer" className="text-cyan-300 hover:text-cyan-200">
                 {companyInfo.website.replace('https://', '')}
               </a>
             </div>
           </div>
-          <div className="space-y-5">
-            {amcTerms.map(term => (
-              <div key={term.title} className="rounded-2xl border border-dashed border-primary/20 bg-muted/30 p-5">
-                <h3 className="text-lg font-semibold text-foreground">{term.title}</h3>
-                {term.description && (
-                  <p className="text-sm text-muted-foreground mt-1">{term.description}</p>
-                )}
+
+          <div className="mt-8 grid gap-4">
+            {amcTerms.map((term) => (
+              <div key={term.title} className="rounded-2xl border border-white/5 bg-slate-950/60 p-5">
+                <h3 className="text-lg font-semibold text-white">{term.title}</h3>
+                {term.description && <p className="mt-1 text-sm text-slate-400">{term.description}</p>}
                 {term.bullets && (
-                  <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-muted-foreground">
+                  <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-slate-400">
                     {term.bullets.map((bullet, index) => (
                       <li key={index}>{bullet}</li>
                     ))}
@@ -470,13 +551,11 @@ export default function ServicesPage({ services }: ServicesPageProps) {
                 )}
                 {term.sections && (
                   <div className="mt-4 space-y-4">
-                    {term.sections.map(section => (
+                    {term.sections.map((section) => (
                       <div key={section.title}>
-                        <p className="text-sm font-semibold text-foreground">{section.title}</p>
-                        {section.description && (
-                          <p className="text-sm text-muted-foreground">{section.description}</p>
-                        )}
-                        <ul className="mt-2 list-disc space-y-2 pl-5 text-sm text-muted-foreground">
+                        <p className="text-sm font-semibold text-white">{section.title}</p>
+                        {section.description && <p className="text-sm text-slate-400">{section.description}</p>}
+                        <ul className="mt-2 list-disc space-y-2 pl-5 text-sm text-slate-400">
                           {section.bullets.map((bullet, index) => (
                             <li key={index}>{bullet}</li>
                           ))}
@@ -488,22 +567,21 @@ export default function ServicesPage({ services }: ServicesPageProps) {
               </div>
             ))}
           </div>
-        </CardContent>
-      </Card>
+        </section>
 
-      {/* CTA Section */}
-      <div className="bg-secondary/50 rounded-lg p-8 text-center">
-        <h2 className="text-2xl font-bold mb-4">Need Custom Solutions?</h2>
-        <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-          Can't find what you're looking for? Our team can create custom solutions tailored to your specific needs.
-        </p>
-        <Button size="lg" asChild>
-          <Link href="/contact">
+        <section className="rounded-2xl border border-white/10 bg-gradient-to-r from-cyan-500/10 via-blue-500/10 to-violet-500/10 p-8 text-center">
+          <h2 className="text-2xl font-semibold text-white">Need Custom Solutions?</h2>
+          <p className="mx-auto mt-3 max-w-md text-sm text-slate-400">
+            Share your requirements and our team will craft a tailored setup for your space.
+          </p>
+          <Link
+            href="/contact"
+            className="mt-6 inline-flex items-center justify-center rounded-lg border border-cyan-400/40 bg-cyan-500/10 px-5 py-3 text-sm font-semibold text-cyan-200 transition-colors hover:border-cyan-400/70"
+          >
             Contact Our Experts
           </Link>
-        </Button>
+        </section>
       </div>
-      </div>
-    </>
+    </div>
   );
 }

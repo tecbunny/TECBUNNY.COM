@@ -113,6 +113,8 @@ export function DynamicFavicon() {
 export function DynamicTitle() {
   React.useEffect(() => {
     let isMounted = true;
+    const suffix = 'CCTV, Computers & AMC Services in Goa';
+    const defaultTitle = `TecBunny Solutions | ${suffix}`;
 
     async function updateTitle() {
       try {
@@ -133,8 +135,14 @@ export function DynamicTitle() {
         const fallback = primary || (await fetchKey('site_branding'));
 
         if (fallback && isMounted && typeof window !== 'undefined') {
-          document.title = fallback;
-          logger.info('Title updated', { title: fallback, context: 'DynamicTitle.updateTitle' });
+          const normalized = fallback.trim();
+          const title = normalized.length < 12
+            ? defaultTitle
+            : normalized.toLowerCase().includes('cctv')
+              ? normalized
+              : `${normalized} | ${suffix}`;
+          document.title = title;
+          logger.info('Title updated', { title, context: 'DynamicTitle.updateTitle' });
         }
       } catch (error) {
         logger.error('Error updating title', { error, context: 'DynamicTitle.updateTitle' });

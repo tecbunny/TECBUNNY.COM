@@ -4,11 +4,11 @@ import OrderConfirmationPage from '../../../components/orders/OrderConfirmationP
 export const dynamic = 'force-dynamic';
 
 interface OrderDetailsPageProps {
-  params: { orderId: string };
+  params: Promise<{ orderId: string }>;
 }
 
-export default function OrderDetailsPage({ params }: OrderDetailsPageProps) {
-  const { orderId } = params;
+export default async function OrderDetailsPage({ params }: OrderDetailsPageProps) {
+  const { orderId } = await params;
 
   return <OrderConfirmationPage orderId={orderId} />;
 }

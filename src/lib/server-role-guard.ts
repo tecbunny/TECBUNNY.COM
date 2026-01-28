@@ -1,7 +1,7 @@
 import type { Session, SupabaseClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
-import { ALL_ROLES, isAtLeast, type UserRole } from './roles';
+import { ALL_ROLES, isAtLeast, ROLE_HIERARCHY, type UserRole } from './roles';
 import { createClient } from './supabase/server';
 
 const DEFAULT_ROLE: UserRole = 'customer';
@@ -15,6 +15,49 @@ const normalizeRole = (value: unknown): NullableRole => {
 
   const lower = value.trim().toLowerCase() as UserRole;
   return ALL_ROLES.includes(lower) ? lower : null;
+};
+
+const pickHighestRole = (...roles: Array<NullableRole | undefined>): UserRole => {
+  let best: UserRole = DEFAULT_ROLE;
+  for (const role of roles) {
+    if (!role) continue;
+    if (ROLE_HIERARCHY[role] > ROLE_HIERARCHY[best]) {
+      best = role;
+    }
+  }
+  return best;
+};
+
+const METADATA_ROLE_KEYS = ['role', 'default_role', 'app_role', 'user_role'] as const;
+const METADATA_ROLE_ARRAY_KEYS = ['roles', 'app_roles'] as const;
+
+const extractRoleFromMetadata = (metadata: Record<string, unknown> | null | undefined): NullableRole => {
+  if (!metadata || typeof metadata !== 'object') {
+    return null;
+  }
+
+  for (const key of METADATA_ROLE_KEYS) {
+    if (key in metadata) {
+      const parsed = normalizeRole((metadata as Record<string, unknown>)[key]);
+      if (parsed) {
+        return parsed;
+      }
+    }
+  }
+
+  for (const key of METADATA_ROLE_ARRAY_KEYS) {
+    const value = (metadata as Record<string, unknown>)[key];
+    if (Array.isArray(value)) {
+      for (const entry of value) {
+        const parsed = normalizeRole(entry);
+        if (parsed) {
+          return parsed;
+        }
+      }
+    }
+  }
+
+  return null;
 };
 
 const fetchProfileRole = async (supabase: SupabaseClient, userId: string): Promise<NullableRole> => {
@@ -51,11 +94,11 @@ export async function getServerAuthState(): Promise<ServerAuthState> {
     return { supabase, session: null, role: DEFAULT_ROLE };
   }
 
-  let resolvedRole = normalizeRole(session.user.app_metadata?.role) ?? DEFAULT_ROLE;
+  const metadataRole = extractRoleFromMetadata(session.user.app_metadata as Record<string, unknown> | undefined);
+  const userMetadataRole = extractRoleFromMetadata(session.user.user_metadata as Record<string, unknown> | undefined);
   const profileRole = await fetchProfileRole(supabase, session.user.id);
-  if (profileRole) {
-    resolvedRole = profileRole;
-  }
+
+  const resolvedRole = pickHighestRole(metadataRole, userMetadataRole, profileRole);
 
   return { supabase, session, role: resolvedRole };
 }

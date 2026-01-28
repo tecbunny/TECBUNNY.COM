@@ -11,9 +11,10 @@ export const dynamic = 'force-dynamic';
  */
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const supabase = await createClient();
     
     // Check authentication and authorization
@@ -56,7 +57,7 @@ export async function PUT(
         valid_to: valid_to || null,
         is_active: is_active !== undefined ? is_active : true,
       })
-      .eq('id', params.id)
+      .eq('id', id)
       .select()
       .single();
 
@@ -84,9 +85,10 @@ export async function PUT(
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const supabase = await createClient();
     
     // Check authentication and authorization
@@ -106,7 +108,7 @@ export async function DELETE(
     const { error } = await serviceClient
       .from('product_pricing')
       .delete()
-      .eq('id', params.id);
+      .eq('id', id);
 
     if (error) {
       console.error('Error deleting pricing rule:', error);

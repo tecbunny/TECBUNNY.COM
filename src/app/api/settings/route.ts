@@ -8,6 +8,18 @@ import { logger } from '../../../lib/logger';
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 'service-role-placeholder';
 
+const PUBLIC_DEFAULTS: Record<string, unknown> = {
+  site_branding: 'TecBunny',
+  siteName: 'TecBunny - Your Tech Store',
+  siteDescription: 'Discover the latest technology with beautiful design and exceptional user experience.',
+  logoUrl: '/logo.svg',
+  faviconUrl: '/favicon.ico',
+  tagline: '',
+  payment_phonepe_public: null,
+  payment_razorpay_public: null,
+  feature_flags_public: {},
+};
+
 function getSupabaseAdmin() {
   return createAdminClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 }
@@ -44,24 +56,36 @@ function isAllowedPublicKey(key: string) {
 
 export async function GET(request: NextRequest) {
   try {
-    if (!isSupabaseServiceConfigured) {
-      logger.error('settings.get.missing_supabase_config');
-      return NextResponse.json(
-        { error: 'Service unavailable' },
-        { status: 503 }
-      );
-    }
-
-    // Security: Only allow authenticated users to read settings
-    const { session } = await getSessionAndRole(request);
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const supabaseAdmin = getSupabaseAdmin();
     const { searchParams } = new URL(request.url)
     const key = searchParams.get('key')
     const keys = searchParams.get('keys')
+    const keyArray = keys ? keys.split(',').map(k => k.trim()).filter(Boolean) : key ? [key] : null
+    const allPublic = keyArray ? keyArray.every(isAllowedPublicKey) : false
+
+    if (!isSupabaseServiceConfigured) {
+      logger.warn('settings.get.missing_supabase_config');
+      if (keyArray && allPublic) {
+        if (key) {
+          return NextResponse.json({ key, value: PUBLIC_DEFAULTS[key] ?? null })
+        }
+        const payload = keyArray.reduce<Record<string, unknown>>((acc, currentKey) => {
+          acc[currentKey] = PUBLIC_DEFAULTS[currentKey] ?? null
+          return acc
+        }, {})
+        return NextResponse.json(payload)
+      }
+      return NextResponse.json({ error: 'Service unavailable' }, { status: 503 })
+    }
+
+    // Security: Only allow authenticated users to read settings unless public keys
+    if (!allPublic) {
+      const { session } = await getSessionAndRole(request);
+      if (!session) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+    }
+
+    const supabaseAdmin = getSupabaseAdmin();
 
     if (key) {
       // Get single setting by key
@@ -72,13 +96,16 @@ export async function GET(request: NextRequest) {
           return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }
       }
-  const { data, error } = await supabaseAdmin
+      const { data, error } = await supabaseAdmin
         .from('settings')
         .select('*')
         .eq('key', key)
         .single()
 
       if (error) {
+        if (isAllowedPublicKey(key)) {
+          return NextResponse.json({ key, value: PUBLIC_DEFAULTS[key] ?? null })
+        }
         return NextResponse.json({ error: error.message }, { status: 404 })
       }
 
@@ -94,12 +121,19 @@ export async function GET(request: NextRequest) {
           return NextResponse.json({ error: 'Unauthorized for protected keys' }, { status: 401 })
         }
       }
-  const { data, error } = await supabaseAdmin
+      const { data, error } = await supabaseAdmin
         .from('settings')
         .select('*')
         .in('key', keyArray)
 
       if (error) {
+        if (protectedKeys.length === 0) {
+          const payload = keyArray.reduce<Record<string, unknown>>((acc, currentKey) => {
+            acc[currentKey] = PUBLIC_DEFAULTS[currentKey] ?? null
+            return acc
+          }, {})
+          return NextResponse.json(payload)
+        }
         return NextResponse.json({ error: error.message }, { status: 500 })
       }
 
@@ -109,10 +143,18 @@ export async function GET(request: NextRequest) {
         return acc
       }, {})
 
+      if (protectedKeys.length === 0) {
+        keyArray.forEach((currentKey) => {
+          if (!(currentKey in settings)) {
+            settings[currentKey] = PUBLIC_DEFAULTS[currentKey] ?? null
+          }
+        })
+      }
+
       return NextResponse.json(settings)
     } else {
       // Get all settings
-    const { data, error } = await supabaseAdmin
+      const { data, error } = await supabaseAdmin
         .from('settings')
         .select('*')
         .order('key')

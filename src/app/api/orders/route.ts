@@ -41,13 +41,21 @@ export async function POST(request: NextRequest) {
     }
 
     // Security: Recalculate totals server-side to prevent price tampering
-    const itemIds = (orderData.items || []).map((item: any) => item.id);
+    const itemIds = (orderData.items || [])
+      .map((item: any) => item.id || item.productId)
+      .filter((id: any) => typeof id === 'string' && id.length > 0);
+
+    if (itemIds.length === 0) {
+      return apiError('VALIDATION_ERROR', { correlationId, overrideMessage: 'No valid items in order' });
+    }
+
     const { data: dbProducts, error: productsError } = await serviceSupabase
       .from('products')
-      .select('id, price, offer_price, stock_quantity')
+      .select('id, price, stock_quantity')
       .in('id', itemIds);
 
     if (productsError || !dbProducts) {
+       logger.error('order_product_validation_failed', { error: productsError, itemIds });
        return apiError('INTERNAL_ERROR', { correlationId, overrideMessage: 'Failed to validate products' });
     }
 
@@ -55,9 +63,10 @@ export async function POST(request: NextRequest) {
     const validatedItems = [];
 
     for (const item of (orderData.items || [])) {
-      const dbProduct = dbProducts.find(p => p.id === item.id);
+      const itemId = item.id || item.productId;
+      const dbProduct = dbProducts.find(p => p.id === itemId);
       if (!dbProduct) {
-         return apiError('VALIDATION_ERROR', { correlationId, overrideMessage: `Product not found: ${item.id}` });
+         return apiError('VALIDATION_ERROR', { correlationId, overrideMessage: `Product not found: ${itemId}` });
       }
       
       // Check stock
@@ -65,12 +74,13 @@ export async function POST(request: NextRequest) {
          return apiError('VALIDATION_ERROR', { correlationId, overrideMessage: `Insufficient stock for product: ${item.name}` });
       }
 
-      const price = dbProduct.offer_price || dbProduct.price;
+      const price = dbProduct.price;
       calculatedSubtotal += price * item.quantity;
       
       validatedItems.push({
         ...item,
-        price: price // Enforce server price
+        id: itemId, // Ensure ID is present for stock deduction
+        price, // Enforce server price
       });
     }
 
@@ -80,7 +90,34 @@ export async function POST(request: NextRequest) {
     const shipping_amount = orderData.shipping_amount || 0;
     const total = subtotal + gst_amount + shipping_amount - discount_amount;
     
-    const orderType = orderData.type || orderData.order_type || 'Delivery';
+    const normalizeOrderType = (value: unknown): string => {
+      if (typeof value !== 'string') return '';
+      const key = value.trim().toLowerCase();
+      if (['pickup', 'pick-up', 'store pickup', 'store-pickup'].includes(key)) return 'Pickup';
+      if (['walk-in', 'walkin', 'walk in'].includes(key)) return 'Walk-in';
+      if (['service', 'service order', 'service_call', 'service-call'].includes(key)) return 'Service';
+      if (['repair', 'repair order', 'rma'].includes(key)) return 'Repair';
+      if (['installation', 'install', 'installation order'].includes(key)) return 'Installation';
+      if (['setup', 'set-up', 'custom setup', 'customised setup'].includes(key)) return 'Setup';
+      if (['delivery', 'ship', 'shipping'].includes(key)) return 'Delivery';
+      return '';
+    };
+
+    const rawOrderType = orderData.service_type
+      || orderData.type
+      || orderData.order_type
+      || orderData.category;
+
+    let orderType = normalizeOrderType(rawOrderType);
+
+    // Force service type when flagged explicitly
+    if (!orderType && orderData.is_service_order === true) {
+      orderType = 'Service';
+    }
+
+    if (!orderType) {
+      orderType = 'Delivery';
+    }
 
     // Store additional info that doesn't have dedicated columns in the items field
     const pickupStore = orderType === 'Pickup'
@@ -215,7 +252,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Send order confirmation email
+    // Send order confirmation email - REMOVED per user request (WhatsApp only)
+    /*
     try {
   await fetch(`${resolveSiteUrl(request.headers.get('host') || undefined)}/api/email/order-confirmation`, {
         method: 'POST',
@@ -231,6 +269,7 @@ export async function POST(request: NextRequest) {
       logger.warn('order_email_failure', { orderId: createdOrder.id, error: emailError instanceof Error ? emailError.message : 'unknown' });
       // Don't fail the order creation if email fails
     }
+    */
 
     const adminEmailList = (process.env.ADMIN_ORDER_NOTIFICATION_EMAILS || process.env.ADMIN_NOTIFICATION_EMAILS || '')
       .split(',')

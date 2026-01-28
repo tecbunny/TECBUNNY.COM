@@ -2,14 +2,13 @@
 
 import * as React from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 
 import { Facebook, Twitter, Instagram, Linkedin, Youtube, Globe, FileText, Shield } from 'lucide-react';
 
-import { Button } from '../../components/ui/enhanced-ui';
-import { Input } from '../../components/ui/enhanced-ui';
-import { Logo } from '../../components/ui/logo';
 import { createClient } from '../../lib/supabase/client';
 import { logger } from '../../lib/logger';
+import { useAnalytics } from '../../hooks/use-analytics';
 
 function WhatsAppIcon(props: React.SVGProps<SVGSVGElement>) {
     return (
@@ -28,14 +27,94 @@ function WhatsAppIcon(props: React.SVGProps<SVGSVGElement>) {
 export function Footer() {
   const [companyInfo, setCompanyInfo] = React.useState<{supportEmail?: string; supportPhone?: string; registeredAddress?: string}>({});
   const [socialLinks, setSocialLinks] = React.useState<Record<string, string>>({});
+  const [subscribeEmail, setSubscribeEmail] = React.useState('');
+  const [subscribeStatus, setSubscribeStatus] = React.useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [subscribeMessage, setSubscribeMessage] = React.useState<string | null>(null);
+  const isMountedRef = React.useRef(true);
+  const subscribeAbortRef = React.useRef<AbortController | null>(null);
   const supabase = React.useMemo(() => createClient(), []);
+  const { trackEvent } = useAnalytics();
 
   React.useEffect(() => {
+    isMountedRef.current = true;
     fetch('/company-info.json')
       .then(r => r.ok ? r.json() : null)
       .then(data => data && setCompanyInfo(data))
       .catch(() => {});
+
+    return () => {
+      isMountedRef.current = false;
+      subscribeAbortRef.current?.abort();
+    };
   }, []);
+
+  const handleSocialClick = (platform: string) => {
+    trackEvent('social_click', { platform });
+  };
+
+  const handleSubscribe = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const email = subscribeEmail.trim().toLowerCase();
+
+    if (!email || !/.+@.+\..+/.test(email)) {
+      setSubscribeStatus('error');
+      setSubscribeMessage('Please enter a valid email address.');
+      return;
+    }
+
+    if (!isMountedRef.current) return;
+    setSubscribeStatus('loading');
+    setSubscribeMessage(null);
+
+    try {
+      subscribeAbortRef.current?.abort();
+      const controller = new AbortController();
+      subscribeAbortRef.current = controller;
+
+      const response = await fetch('/api/contact-messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        signal: controller.signal,
+        body: JSON.stringify({
+          name: 'Newsletter Subscriber',
+          email,
+          subject: 'System Updates Subscription',
+          message: 'Please subscribe me to system updates and product announcements.',
+        }),
+      });
+
+      if (!response.ok) {
+        let errorMessage = 'Subscription failed. Please try again later.';
+        try {
+          const data = await response.json();
+          if (typeof data?.error === 'string') {
+            errorMessage = data.error;
+          }
+        } catch (parseError) {
+          logger.warn('footer_subscribe_response_parse_failed', {
+            error: parseError instanceof Error ? parseError.message : String(parseError),
+          });
+        }
+        throw new Error(errorMessage);
+      }
+
+      trackEvent('newsletter_subscribe', { status: 'success' });
+      if (!isMountedRef.current) return;
+      setSubscribeStatus('success');
+      setSubscribeMessage('You are subscribed! We will keep you updated.');
+      setSubscribeEmail('');
+    } catch (error) {
+      if (!isMountedRef.current) return;
+      trackEvent('newsletter_subscribe', { status: 'error' });
+      logger.error('footer_subscribe_failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      setSubscribeStatus('error');
+      setSubscribeMessage(error instanceof Error ? error.message : 'Subscription failed.');
+    }
+  };
 
   React.useEffect(() => {
     const loadSocialLinks = async () => {
@@ -92,136 +171,159 @@ export function Footer() {
   const activeSocialPlatforms = socialPlatforms.filter(({ key }) => Boolean(socialLinks[key]));
 
   return (
-    <footer className="footer-custom">
-      <div className="container mx-auto px-4 py-12">
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-8">
-          
-          <div className="lg:col-span-2 space-y-6">
-              <div className="flex items-center gap-2">
-                 <Logo className="h-8 w-8 text-blue-400" />
-                 <span className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-blue-400 bg-clip-text text-transparent">TecBunny</span>
+    <footer className="footer-custom relative overflow-hidden bg-[#030712] border-t border-white/10 pt-12 pb-8 font-sans shadow-[0_-4px_20px_rgba(6,182,212,0.05)]">
+      <div className="absolute top-0 right-0 h-48 w-48 sm:h-64 sm:w-64 rounded-full bg-brand-purple/5 blur-[80px] pointer-events-none" />
+      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-10 mb-12 pb-12 border-b border-white/5">
+          <div className="max-w-md">
+            <Link href="/" className="flex items-center gap-3 mb-4 group">
+              <div className="relative flex h-14 w-14 items-center justify-center rounded-2xl border border-white/50 bg-white shadow-[0_0_18px_rgba(6,182,212,0.25)] transition-all duration-300 group-hover:border-cyan-300/80 group-hover:bg-white group-hover:shadow-[0_0_24px_rgba(6,182,212,0.35)]">
+                <Image
+                  src="/brand.png"
+                  alt="TecBunny Solutions"
+                  width={56}
+                  height={56}
+                  className="h-12 w-12 object-contain drop-shadow-[0_0_8px_rgba(255,255,255,0.35)] transition-transform group-hover:scale-105"
+                />
               </div>
-              <p className="text-gray-300 text-lg leading-relaxed">Your friendly neighborhood tech store, bringing you the latest gadgets and accessories with style and innovation.</p>
-              {address && (
-                <p className="text-gray-400 text-sm">{address}</p>
-              )}
-              <div>
-                <h4 className="font-semibold mb-4 text-blue-300 text-lg">Stay in the loop</h4>
-                 <div className="flex w-full max-w-sm items-center gap-3">
-                    <Input type="email" placeholder="Enter your email" className="bg-gray-800/80 text-white placeholder:text-gray-400 border-gray-600 focus:border-blue-400 flex-1" />
-                    <Button variant="gradient" size="default" className="shadow-button">Subscribe</Button>
-                </div>
-              </div>
-          </div>
-          
-          <div className="space-y-4">
-            <h4 className="text-lg font-semibold text-blue-300">Quick Links</h4>
-            <nav className="flex flex-col gap-2">
-              <Link href="/" className="text-gray-300 hover:text-blue-400 transition-colors">Home</Link>
-              <Link href="/products" className="text-gray-300 hover:text-blue-400 transition-colors">Products</Link>
-              <Link href="/services" className="text-gray-300 hover:text-blue-400 transition-colors">Services</Link>
-              <Link href="/offers" className="text-gray-300 hover:text-blue-400 transition-colors">Offers</Link>
-            </nav>
-          </div>
-          
-          <div className="space-y-4">
-            <h4 className="text-lg font-semibold text-blue-300">Company</h4>
-            <nav className="flex flex-col gap-2">
-              <Link href="/about" className="text-gray-300 hover:text-blue-400 transition-colors">About Us</Link>
-              <Link href="/about/business-info" className="text-gray-300 hover:text-blue-400 transition-colors">Business Info</Link>
-              <Link href="/contact" className="text-gray-300 hover:text-blue-400 transition-colors">Contact</Link>
-              <Link href="/info/policies/privacy" className="text-gray-300 hover:text-blue-400 transition-colors">Privacy Policy</Link>
-              <Link href="/info/policies/terms" className="text-gray-300 hover:text-blue-400 transition-colors">Terms of Service</Link>
-              <Link href="/info/policies/return" className="text-gray-300 hover:text-blue-400 transition-colors">Return Policy</Link>
-              <Link href="/info/policies/shipping" className="text-gray-300 hover:text-blue-400 transition-colors">Shipping Policy</Link>
-              <Link href="/info/policies/refund-cancellation" className="text-gray-300 hover:text-blue-400 transition-colors">Refund & Cancellation</Link>
-            </nav>
-            
-            {/* Business Documents */}
-            <div className="mt-4 pt-4 border-t border-gray-700">
-              <h5 className="text-sm font-semibold text-blue-300 mb-2">Official Documents</h5>
-              <div className="flex flex-col gap-1">
-                <a 
-                  href="/documents/COI.pdf" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-xs text-gray-400 hover:text-blue-400 transition-colors flex items-center gap-1"
-                >
-                  <FileText className="h-3 w-3" />
-                  Certificate of Incorporation
-                </a>
-                <a 
-                  href="/documents/GSTIN.pdf" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-xs text-gray-400 hover:text-blue-400 transition-colors flex items-center gap-1"
-                >
-                  <Shield className="h-3 w-3" />
-                  GST Registration
-                </a>
-              </div>
-            </div>
-          </div>
-          
-          <div className="space-y-4">
-            <h4 className="text-lg font-semibold text-blue-300">Support</h4>
-            <nav className="flex flex-col gap-2">
-              <a href={`mailto:${supportEmail}`} className="text-gray-300 hover:text-blue-400 transition-colors">Help Center</a>
-              <a href={`tel:${supportPhone.replace(/\s+/g,'')}`} className="text-gray-300 hover:text-blue-400 transition-colors">Call Support</a>
-              <a href={`https://wa.me/${supportPhone.replace(/\D/g,'')}`} className="text-gray-300 hover:text-blue-400 transition-colors">WhatsApp</a>
-              <Link href="/management" className="text-gray-300 hover:text-blue-400 transition-colors">Staff Portal</Link>
-            </nav>
+              <span className="font-tech font-bold text-3xl sm:text-4xl text-white tracking-wide">
+                TECBUNNY<span className="text-brand-cyan">.</span>
+              </span>
+            </Link>
+            <p className="text-slate-400 text-base leading-relaxed">
+              Transforming spaces into smart, secure sanctuaries. Goa&apos;s trusted partner for CCTV, IT infrastructure, and automation.
+            </p>
           </div>
 
-          <div className="space-y-4">
-            <h4 className="text-lg font-semibold text-blue-300">Connect</h4>
-            {activeSocialPlatforms.length > 0 ? (
-              <div className="flex gap-4 flex-wrap">
-                {activeSocialPlatforms.map(({ key, icon: Icon, label }) => (
-                  <a
-                    key={key}
-                    href={socialLinks[key]}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-gray-300 hover:text-blue-400 transition-all duration-300 hover:scale-110"
-                  >
-                    <Icon className="h-6 w-6" />
-                    <span className="sr-only">{label}</span>
-                  </a>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-gray-400">
-                Social media links will appear here once they&apos;re configured.
-              </p>
-            )}
-            {supportPhone && (
-              <a
-                href={`https://wa.me/${supportPhone.replace(/\D/g, '')}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 text-gray-300 hover:text-blue-400 transition-colors"
+          <div className="w-full lg:w-auto">
+            <h4 className="font-tech text-white text-lg font-bold mb-3 flex items-center gap-2">
+              <span className="text-brand-purple">SYSTEM UPDATES</span>
+            </h4>
+            <form className="flex flex-col sm:flex-row gap-3" onSubmit={handleSubscribe}>
+              <input
+                type="email"
+                placeholder="Enter secure email..."
+                value={subscribeEmail}
+                onChange={(event) => {
+                  setSubscribeEmail(event.target.value);
+                  if (subscribeStatus !== 'idle') {
+                    setSubscribeStatus('idle');
+                    setSubscribeMessage(null);
+                  }
+                }}
+                className="bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-base text-white focus:outline-none focus:border-brand-cyan/50 w-full sm:w-72 placeholder-slate-600"
+              />
+              <button
+                type="submit"
+                disabled={subscribeStatus === 'loading'}
+                className="px-6 py-3 bg-white/5 border border-white/10 hover:bg-brand-cyan hover:text-brand-dark hover:border-brand-cyan text-white text-base font-bold font-tech rounded-lg transition-all duration-300"
               >
-                <WhatsAppIcon className="h-5 w-5" />
-                <span className="text-sm">Chat with us on WhatsApp</span>
-              </a>
+                {subscribeStatus === 'loading' ? 'SUBSCRIBING...' : 'SUBSCRIBE'}
+              </button>
+            </form>
+            {subscribeMessage && (
+              <p
+                className={`mt-3 text-xs ${subscribeStatus === 'success' ? 'text-emerald-300' : 'text-rose-300'}`}
+                role="status"
+                aria-live="polite"
+              >
+                {subscribeMessage}
+              </p>
             )}
           </div>
         </div>
-        
-        <div className="mt-12 pt-8 border-t border-blue-200/30">
-          <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
-            <p className="text-gray-300 text-center sm:text-left">
-              © 2025 TecBunny. All rights reserved. Built with ❤️ and innovation.
-            </p>
-            <div className="flex gap-6 text-sm">
-              <Link href="/info/policies/privacy" className="text-gray-300 hover:text-blue-400 transition-colors">Privacy Policy</Link>
-              <Link href="/info/policies/terms" className="text-gray-300 hover:text-blue-400 transition-colors">Terms</Link>
-              <Link href="/info/policies/return" className="text-gray-300 hover:text-blue-400 transition-colors">Returns</Link>
-              <Link href="/info/policies/shipping" className="text-gray-300 hover:text-blue-400 transition-colors">Shipping</Link>
-              <Link href="/info/policies/refund-cancellation" className="text-gray-300 hover:text-blue-400 transition-colors">Refunds</Link>
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-12">
+          <div>
+            <h4 className="text-brand-cyan text-sm font-bold uppercase tracking-widest mb-6">Protocols</h4>
+            <ul className="space-y-3 text-base text-slate-300">
+              <li>
+                <Link href="/services" className="hover:text-white transition-colors flex items-center gap-2">
+                  <span className="w-1 h-1 rounded-full bg-brand-purple" /> CCTV Installation
+                </Link>
+              </li>
+              <li>
+                <Link href="/services" className="hover:text-white transition-colors flex items-center gap-2">
+                  <span className="w-1 h-1 rounded-full bg-brand-purple" /> Biometric Access
+                </Link>
+              </li>
+              <li>
+                <Link href="/webdev" className="hover:text-white transition-colors flex items-center gap-2">
+                  <span className="w-1 h-1 rounded-full bg-brand-purple" /> Web Development
+                </Link>
+              </li>
+              <li>
+                <Link href="/services" className="hover:text-white transition-colors flex items-center gap-2">
+                  <span className="w-1 h-1 rounded-full bg-brand-purple" /> Intruder Alarms
+                </Link>
+              </li>
+              <li>
+                <Link href="/services" className="hover:text-white transition-colors flex items-center gap-2">
+                  <span className="w-1 h-1 rounded-full bg-brand-purple" /> Video Door Phones
+                </Link>
+              </li>
+            </ul>
+          </div>
+
+          <div>
+            <h4 className="text-brand-cyan text-sm font-bold uppercase tracking-widest mb-6">Database</h4>
+            <ul className="space-y-3 text-base text-slate-300">
+              <li><Link href="/about" className="hover:text-white transition-colors">About Us</Link></li>
+              <li><Link href="/products" className="hover:text-white transition-colors">Products</Link></li>
+              <li><Link href="/info/policies/privacy" className="hover:text-white transition-colors">Privacy Policy</Link></li>
+              <li><Link href="/info/policies/terms" className="hover:text-white transition-colors">Terms of Service</Link></li>
+            </ul>
+          </div>
+
+          <div className="col-span-2 md:col-span-2 bg-white/[0.02] border border-white/5 rounded-2xl p-6 md:p-7 relative overflow-hidden group hover:border-brand-cyan/30 transition-colors">
+            <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+              <Globe className="h-16 w-16 text-brand-cyan" />
+            </div>
+
+            <h4 className="text-white font-bold font-tech text-xl mb-4">Transmission Hub</h4>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-base">
+              <div>
+                <span className="block text-xs text-slate-500 uppercase mb-1">Location</span>
+                <p className="text-slate-300">{address || 'Goa, India'}</p>
+              </div>
+              <div>
+                <span className="block text-xs text-slate-500 uppercase mb-1">Comms</span>
+                <p className="text-brand-cyan hover:text-white transition-colors">
+                  <a href={`tel:${supportPhone.replace(/\s+/g,'')}`}>{supportPhone}</a>
+                </p>
+                <p className="text-brand-cyan hover:text-white transition-colors">
+                  <a href={`mailto:${supportEmail}`}>{supportEmail}</a>
+                </p>
+              </div>
             </div>
           </div>
+        </div>
+
+        <div className="flex flex-col md:flex-row justify-between items-center gap-4 pt-8 border-t border-white/5 text-sm text-slate-400">
+          <div className="flex flex-col md:flex-row items-center gap-2 md:gap-6">
+            <p>© 2025 TecBunny. All rights reserved. Built with ❤️ and innovation.</p>
+            <span className="hidden md:inline text-white/10">|</span>
+            <p className="font-mono">CIN: U80200GA2025PTC017366</p>
+          </div>
+
+          {activeSocialPlatforms.length > 0 && (
+            <div className="flex gap-6">
+              {activeSocialPlatforms.map(({ key, icon: Icon, label }) => (
+                <a
+                  key={key}
+                  href={socialLinks[key]}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-brand-cyan transition-colors"
+                  onClick={() => handleSocialClick(label)}
+                >
+                  <Icon className="h-5 w-5" />
+                  <span className="sr-only">{label}</span>
+                </a>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </footer>

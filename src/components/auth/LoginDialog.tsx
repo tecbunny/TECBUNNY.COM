@@ -32,7 +32,7 @@ import { createClient } from '../../lib/supabase/client';
 import { logger } from '../../lib/logger';
 
 const loginSchema = z.object({
-  email: z.string().email({ message: 'Please enter a valid email address.' }),
+  identifier: z.string().min(3, { message: 'Email or mobile is required.' }),
   password: z.string().min(1, { message: 'Password is required.' }),
 });
 
@@ -58,7 +58,7 @@ export function LoginDialog({ children }: { children: React.ReactNode }) {
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      email: '',
+      identifier: '',
       password: '',
     },
   });
@@ -96,7 +96,7 @@ export function LoginDialog({ children }: { children: React.ReactNode }) {
 
     setIsSubmitting(true);
     try {
-      const loginResult = await login(data.email, data.password);
+      const loginResult = await login(data.identifier, data.password);
       
       if (!loginResult.success) {
         toast({
@@ -199,7 +199,7 @@ export function LoginDialog({ children }: { children: React.ReactNode }) {
               size="sm" 
               onClick={() => {
                 setOpen(false);
-                window.location.href = `/auth/verify-otp?email=${encodeURIComponent(data.email)}&type=email`;
+                window.location.href = `/auth/verify-otp?email=${encodeURIComponent(data.identifier)}&type=email`;
               }}
             >
               Verify Email
@@ -248,36 +248,37 @@ export function LoginDialog({ children }: { children: React.ReactNode }) {
         <DialogHeader>
           <DialogTitle className="text-2xl text-center">Login</DialogTitle>
           <DialogDescription className="text-center">
-            Enter your email below to login to your account.
+            Enter your email or mobile number to login.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
-            <form onSubmit={form.handleSubmit(handleLogin)} className="space-y-4">
+          <form onSubmit={form.handleSubmit(handleLogin)} className="space-y-4">
             <FormField
-                control={form.control}
-                name="email"
-                render={({ field }) => (
+              control={form.control}
+              name="identifier"
+              render={({ field }) => (
                 <FormItem>
-                    <FormLabel>Email</FormLabel>
-                    <FormControl>
-                    <Input placeholder="name@example.com" {...field} disabled={isSubmitting} />
-                    </FormControl>
-                    <FormMessage />
+                  <FormLabel>Email or Mobile</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Enter your email or mobile" {...field} disabled={isSubmitting} />
+                  </FormControl>
+                  <FormMessage />
                 </FormItem>
-                )}
+              )}
             />
+
             <FormField
-                control={form.control}
-                name="password"
-                render={({ field }) => (
+              control={form.control}
+              name="password"
+              render={({ field }) => (
                 <FormItem>
-                    <FormLabel>Password</FormLabel>
-                    <FormControl>
+                  <FormLabel>Password</FormLabel>
+                  <FormControl>
                     <Input type="password" placeholder="••••••••" {...field} disabled={isSubmitting} />
-                    </FormControl>
-                    <FormMessage />
+                  </FormControl>
+                  <FormMessage />
                 </FormItem>
-                )}
+              )}
             />
             
             <Button 
@@ -298,7 +299,7 @@ export function LoginDialog({ children }: { children: React.ReactNode }) {
                 />
               </div>
             )}
-            </form>
+          </form>
         </Form>
 
         {/* Remove old Turnstile component */}

@@ -28,6 +28,9 @@ export interface Product {
   warranty?: string;
   hsnCode?: string;
   gstRate?: number;
+  gst_rate?: number;
+  installation_applicable?: boolean;
+  installation_charge?: number;
   isSerialNumberCompulsory?: boolean;
   popularity: number;
   rating: number;
@@ -134,8 +137,35 @@ export interface CustomerOffer {
     created_at: string;
 }
 
-export type OrderStatus = 'Pending' | 'Awaiting Payment' | 'Payment Confirmed' | 'Confirmed' | 'Processing' | 'Ready to Ship' | 'Shipped' | 'Ready for Pickup' | 'Completed' | 'Delivered' | 'Cancelled' | 'Rejected';
-export type OrderType = 'Pickup' | 'Delivery' | 'Walk-in';
+// Orders can be retail/fulfillment or service/repair; keep one union so downstream consumers stay compatible.
+export type OrderStatus =
+  | 'Pending'
+  | 'Awaiting Payment'
+  | 'Payment Confirmed'
+  | 'Confirmed'
+  | 'Processing'
+  | 'Ready to Ship'
+  | 'Shipped'
+  | 'Ready for Pickup'
+  | 'Ready for Delivery'
+  | 'Delivered'
+  | 'Delivered/Picked Up'
+  | 'Completed'
+  | 'Cancelled'
+  | 'Rejected'
+  | 'On Hold'
+  | 'Visit Scheduled'
+  | 'Visit Completed'
+  | 'Diagnosis Done'
+  | 'Quote Sent'
+  | 'Awaiting Customer Approval'
+  | 'Approved'
+  | 'Parts Ordered'
+  | 'Work In Progress'
+  | 'Quality Check'
+  | 'Warranty/Support Active';
+
+export type OrderType = 'Pickup' | 'Delivery' | 'Walk-in' | 'Service' | 'Repair' | 'Installation' | 'Setup';
 
 export interface OrderItem {
   productId: string;
@@ -188,6 +218,7 @@ export interface Order {
   customer_type?: CustomerType;
   otp_verified?: boolean;
   otp_verified_at?: string;
+  pickup_code?: string; // OTP for Pickup Verification
   // Related data
   sales_agent?: SalesAgent;
   status_history?: OrderStatusHistory[];
@@ -279,7 +310,7 @@ export interface Service {
     title: string;
     description: string;
     features: string[];
-    badge?: 'Popular' | 'Recommended' | 'New' | null;
+    badge?: 'Popular' | 'Recommended' | 'New' | 'Featured' | null;
     is_active: boolean;
     price?: number;
     duration_days?: number;
@@ -357,7 +388,7 @@ export interface Purchase {
 
 export type ServiceStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled';
 export type ServicePriority = 'low' | 'medium' | 'high' | 'urgent';
-export type ServiceCategory = 'Support' | 'Protection' | 'Installation' | 'Trade' | 'Business' | 'CCTV' | 'Computer';
+export type ServiceCategory = 'Support' | 'Protection' | 'Installation' | 'Trade' | 'Business' | 'CCTV' | 'Computer' | 'Web Services';
 
 // Sales Agent Types
 export type SalesAgentStatus = 'pending' | 'approved' | 'rejected';
@@ -422,7 +453,7 @@ export interface AgentCommissionRule {
 }
 
 // OTP Verification Types
-export type OtpType = 'agent_order' | 'customer_verification';
+export type OtpType = 'agent_order' | 'customer_verification' | 'pickup';
 
 export interface OrderOtpVerification {
   id: string;
@@ -459,7 +490,14 @@ export interface ServiceEngineer {
 }
 
 // Enhanced Service Ticket Types
-export type ServiceTicketStatus = 'pending' | 'assigned' | 'in_progress' | 'completed' | 'cancelled' | 'on_hold';
+export type ServiceTicketStatus =
+  | 'created'
+  | 'accepted'
+  | 'rejected'
+  | 'under_process'
+  | 'hold_for_product_payment'
+  | 'rejected_by_customer'
+  | 'completed';
 export type ServiceTicketPriority = 'low' | 'medium' | 'high' | 'urgent';
 
 export interface ServiceTicket {

@@ -230,7 +230,7 @@ export function EditUserDialog({ isOpen, onClose, user, onUserUpdated }: EditUse
                         type="email"
                         value={formData.email}
                         disabled
-                        className="bg-gray-50"
+                        className="bg-white/5 border-white/10 text-slate-200"
                       />
                       <p className="text-xs text-muted-foreground">Email cannot be changed</p>
                     </div>
@@ -334,7 +334,7 @@ export function EditUserDialog({ isOpen, onClose, user, onUserUpdated }: EditUse
                     </Select>
                   </div>
 
-                  <div className="bg-gray-50 p-4 rounded-lg">
+                  <div className="bg-white/5 border border-white/10 p-4 rounded-lg">
                     <h4 className="font-medium mb-2">Role Permissions:</h4>
                     <div className="text-sm text-muted-foreground space-y-1">
                       {formData.role === 'customer' && (

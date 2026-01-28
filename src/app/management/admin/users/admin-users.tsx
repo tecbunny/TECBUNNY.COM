@@ -2,8 +2,9 @@
 'use client';
 
 import * as React from 'react';
+import Link from 'next/link';
 
-import { MoreHorizontal, Settings, Percent, Crown, Star, User as UserIcon, Shield, UserCog, Users, Briefcase, Headphones, RefreshCcw, ChevronLeft, ChevronRight } from 'lucide-react';
+import { MoreHorizontal, Settings, Percent, Crown, Star, User as UserIcon, Shield, UserCog, Users, Briefcase, Headphones, RefreshCcw, ChevronLeft, ChevronRight, Activity } from 'lucide-react';
 
 import {
   Card,
@@ -571,13 +572,20 @@ export default function UserManagementPage() {
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleEditUser(user)}
-                      >
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <Link href={`/management/admin/users/${user.id}/analytics`}>
+                          <Button variant="ghost" size="icon" title="View Analytics">
+                            <Activity className="h-4 w-4" />
+                          </Button>
+                        </Link>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleEditUser(user)}
+                        >
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))

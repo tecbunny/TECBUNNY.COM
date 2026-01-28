@@ -1,5 +1,7 @@
 import { redirect } from 'next/navigation';
+
 import { createServerClient } from '../../lib/supabase';
+
 import DashboardClient from './dashboard-client';
 
 export default async function ManagementPage() {

@@ -57,7 +57,7 @@ export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     const { data, error } = await supabase
       .from('products')
-      .select('id, hsn_code, hsnCode, hsn, hsn_sac, gst_rate, gstRate, gst_percentage')
+      .select('id, hsn_code, gst_rate, gst_percentage')
       .in('id', ids);
 
     if (error || !data) {
@@ -78,7 +78,7 @@ export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     });
 
     return items.map(item => {
-  const key = (item as any).productId || item.id;
+      const key = (item as any).productId || item.id;
       const productRecord = key ? productLookup.get(key) : undefined;
       if (!productRecord) {
         return item;

@@ -220,9 +220,9 @@ export default function OTPChannelSelector({
             <div className={cn(
               "flex items-center space-x-3 p-4 border rounded-lg cursor-pointer transition-colors",
               isChannelAvailable('sms') 
-                ? "hover:bg-gray-50 border-gray-200" 
-                : "opacity-50 cursor-not-allowed border-gray-100 bg-gray-50",
-              selectedChannel === 'sms' && isChannelAvailable('sms') && "border-blue-500 bg-blue-50"
+                ? "hover:bg-white/5 border-white/10" 
+                : "opacity-50 cursor-not-allowed border-white/5 bg-white/5",
+              selectedChannel === 'sms' && isChannelAvailable('sms') && "border-cyan-400/60 bg-cyan-500/10"
             )}>
               <RadioGroupItem 
                 value="sms" 
@@ -233,7 +233,7 @@ export default function OTPChannelSelector({
               <div className="flex-1">
                 <Label htmlFor="sms" className="cursor-pointer">
                   <div className="font-medium">SMS to Mobile</div>
-                  <div className="text-sm text-gray-500">
+                  <div className="text-sm text-slate-400">
                     {isPhoneValid ? formatPhoneDisplay(phone) : 'Enter mobile number above'}
                   </div>
                 </Label>
@@ -244,9 +244,9 @@ export default function OTPChannelSelector({
             <div className={cn(
               "flex items-center space-x-3 p-4 border rounded-lg cursor-pointer transition-colors",
               isChannelAvailable('email') 
-                ? "hover:bg-gray-50 border-gray-200" 
-                : "opacity-50 cursor-not-allowed border-gray-100 bg-gray-50",
-              selectedChannel === 'email' && isChannelAvailable('email') && "border-blue-500 bg-blue-50"
+                ? "hover:bg-white/5 border-white/10" 
+                : "opacity-50 cursor-not-allowed border-white/5 bg-white/5",
+              selectedChannel === 'email' && isChannelAvailable('email') && "border-cyan-400/60 bg-cyan-500/10"
             )}>
               <RadioGroupItem 
                 value="email" 
@@ -257,7 +257,7 @@ export default function OTPChannelSelector({
               <div className="flex-1">
                 <Label htmlFor="email-radio" className="cursor-pointer">
                   <div className="font-medium">Email</div>
-                  <div className="text-sm text-gray-500">
+                  <div className="text-sm text-slate-400">
                     {isEmailValid ? formatEmailDisplay(email) : 'Enter email address above'}
                   </div>
                 </Label>
@@ -268,9 +268,9 @@ export default function OTPChannelSelector({
             <div className={cn(
               "flex items-center space-x-3 p-4 border rounded-lg cursor-pointer transition-colors",
               isChannelAvailable('whatsapp') 
-                ? "hover:bg-gray-50 border-gray-200" 
-                : "opacity-50 cursor-not-allowed border-gray-100 bg-gray-50",
-              selectedChannel === 'whatsapp' && isChannelAvailable('whatsapp') && "border-blue-500 bg-blue-50"
+                ? "hover:bg-white/5 border-white/10" 
+                : "opacity-50 cursor-not-allowed border-white/5 bg-white/5",
+              selectedChannel === 'whatsapp' && isChannelAvailable('whatsapp') && "border-cyan-400/60 bg-cyan-500/10"
             )}>
               <RadioGroupItem 
                 value="whatsapp" 
@@ -281,7 +281,7 @@ export default function OTPChannelSelector({
               <div className="flex-1">
                 <Label htmlFor="whatsapp" className="cursor-pointer">
                   <div className="font-medium">WhatsApp</div>
-                  <div className="text-sm text-gray-500">
+                  <div className="text-sm text-slate-400">
                     {isPhoneValid ? formatPhoneDisplay(phone) : 'Enter mobile number above'}
                   </div>
                 </Label>
@@ -295,23 +295,23 @@ export default function OTPChannelSelector({
           <div className={cn(
             "p-4 rounded-lg border",
             deliveryStatus.success 
-              ? "bg-green-50 border-green-200" 
-              : "bg-red-50 border-red-200"
+              ? "bg-emerald-500/10 border-emerald-500/20" 
+              : "bg-red-500/10 border-red-500/20"
           )}>
             <div className="flex items-center space-x-2">
               {deliveryStatus.success ? (
-                <CheckCircle className="h-5 w-5 text-green-600" />
+                <CheckCircle className="h-5 w-5 text-emerald-300" />
               ) : (
-                <AlertCircle className="h-5 w-5 text-red-600" />
+                <AlertCircle className="h-5 w-5 text-red-300" />
               )}
               <div className="text-sm">
                 {deliveryStatus.success ? (
-                  <span className="text-green-800">
+                  <span className="text-emerald-200">
                     OTP sent successfully via {deliveryStatus.channel === 'sms' ? 'SMS' : deliveryStatus.channel === 'whatsapp' ? 'WhatsApp' : 'Email'}
                     {deliveryStatus.fallbackUsed && ' (using fallback method)'}
                   </span>
                 ) : (
-                  <span className="text-red-800">
+                  <span className="text-red-200">
                     Failed to send OTP: {deliveryStatus.error}
                   </span>
                 )}

@@ -91,7 +91,8 @@ const settingsSchema = z.object({
   categoryGstRates: z.record(z.string(), z.coerce.number().min(0).max(100).optional()).optional(),
 });
 
-type SettingsFormValues = z.infer<typeof settingsSchema>;
+type SettingsFormInput = z.input<typeof settingsSchema>;
+type SettingsFormValues = z.output<typeof settingsSchema>;
 
 const DEFAULT_CATEGORY_GST_RATES: Record<string, number> = {
   Electronics: 18,
@@ -152,7 +153,7 @@ export default function SiteSettingsPage() {
   const [faviconPreview, setFaviconPreview] = React.useState('');
   const [products, setProducts] = React.useState<any[]>([]);
 
-  const form = useForm<SettingsFormValues>({
+  const form = useForm<SettingsFormInput, any, SettingsFormValues>({
     resolver: zodResolver(settingsSchema),
     defaultValues: createDefaultSettings(),
   });

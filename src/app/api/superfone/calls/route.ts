@@ -91,13 +91,10 @@ export async function POST(request: NextRequest) {
 }
 
 /**
- * GET /api/superfone/calls/[callId]
+ * GET /api/superfone/calls?callId=...
  * Get call status
  */
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { callId: string } }
-) {
+export async function GET(request: NextRequest) {
   try {
     const correlationId = request.headers.get('x-correlation-id') || null;
     const supabase = await createClient();
@@ -108,7 +105,8 @@ export async function GET(
       return apiError('UNAUTHORIZED', { correlationId });
     }
 
-    const { callId } = params;
+    const url = new URL(request.url);
+    const callId = url.searchParams.get('callId') || '';
 
     if (!callId) {
       return apiError('VALIDATION_ERROR', { correlationId });

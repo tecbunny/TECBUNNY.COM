@@ -7,7 +7,7 @@ import { getServerAuthState, roleMatches, type RoleCheckOptions } from '../../..
 import SalesLayoutClient from './SalesLayoutClient';
 
 const SALES_ACCESS: RoleCheckOptions = {
-  allowedRoles: ['sales', 'manager'],
+  allowedRoles: ['sales', 'manager', 'service_engineer'],
   minimumRole: 'admin'
 };
 

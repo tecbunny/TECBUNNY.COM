@@ -8,6 +8,7 @@ import type { User, UserRole } from '../lib/types';
 import { createClient } from '../lib/supabase/client';
 import { logger } from '../lib/logger';
 import { SessionManager, SESSION_EXPIRED_EVENT } from '../lib/session-manager';
+import { useAnalytics } from '../hooks/use-analytics';
 
 const ROLE_SET: ReadonlySet<UserRole> = new Set([
   'customer',
@@ -106,6 +107,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const supabase = useMemo(() => createClient(), []);
   const sessionManager = SessionManager.getInstance();
   const firstLoginAttemptedRef = useRef<Set<string>>(new Set());
+  const { trackEvent } = useAnalytics();
+
+  const buildFallbackProfile = useCallback((supabaseUser: SupabaseUser): User => {
+    const appMetadataRole = extractRoleFromMetadata(supabaseUser.app_metadata as Record<string, unknown> | undefined);
+    const userMetadataRole = extractRoleFromMetadata(supabaseUser.user_metadata as Record<string, unknown> | undefined);
+    const resolvedRole = appMetadataRole ?? userMetadataRole ?? 'customer';
+
+    return {
+      id: supabaseUser.id,
+      name: supabaseUser.user_metadata?.name || supabaseUser.email?.split('@')[0] || 'User',
+      email: supabaseUser.email || '',
+      mobile: supabaseUser.user_metadata?.mobile || '',
+      role: resolvedRole,
+      emailVerified: Boolean(supabaseUser.email_confirmed_at),
+      email_confirmed_at: supabaseUser.email_confirmed_at ?? null,
+      first_login_whatsapp_sent: false,
+      first_login_notified_at: null
+    };
+  }, []);
 
   const triggerFirstLoginWhatsApp = useCallback(async (profile?: User | null) => {
     if (!profile || !profile.id || !profile.mobile || profile.first_login_whatsapp_sent) {
@@ -189,21 +209,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [setUser]);
 
   const fetchUserProfile = useCallback(async (supabaseUser: SupabaseUser) => {
-    // Pre-compute metadata-derived fields so we always have a usable profile
+    const fallbackProfile = buildFallbackProfile(supabaseUser);
     const appMetadataRole = extractRoleFromMetadata(supabaseUser.app_metadata as Record<string, unknown> | undefined);
     const userMetadataRole = extractRoleFromMetadata(supabaseUser.user_metadata as Record<string, unknown> | undefined);
     const resolvedRole = appMetadataRole ?? userMetadataRole ?? 'customer';
-    const fallbackProfile: User = {
-      id: supabaseUser.id,
-      name: supabaseUser.user_metadata?.name || supabaseUser.email?.split('@')[0] || 'User',
-      email: supabaseUser.email || '',
-      mobile: supabaseUser.user_metadata?.mobile || '',
-      role: resolvedRole,
-      emailVerified: Boolean(supabaseUser.email_confirmed_at),
-      email_confirmed_at: supabaseUser.email_confirmed_at ?? null,
-      first_login_whatsapp_sent: false,
-      first_login_notified_at: null
-    };
 
     try {
       const { data: profile, error } = await supabase
@@ -298,7 +307,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       logger.error('Unexpected error in fetchUserProfile', { error: err, userId: supabaseUser?.id });
       return fallbackProfile;
     }
-  }, [supabase]);
+  }, [buildFallbackProfile, supabase]);
 
   useEffect(() => {
     let mounted = true;
@@ -317,6 +326,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
         
           if (session?.user && mounted) {
+            const fallbackProfile = buildFallbackProfile(session.user);
+            setUser(fallbackProfile);
+            setLoading(false);
+
             const profile = await fetchUserProfile(session.user);
             // Merge email verification information from auth session
             const emailConfirmedAt = session.user.email_confirmed_at ?? null;
@@ -326,10 +339,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 emailVerified: Boolean(emailConfirmedAt || profile.email_confirmed_at),
                 email_confirmed_at: emailConfirmedAt ?? profile.email_confirmed_at
               };
-              setUser(normalizedProfile);
-              void triggerFirstLoginWhatsApp(normalizedProfile);
+              if (mounted) {
+                setUser(normalizedProfile);
+                void triggerFirstLoginWhatsApp(normalizedProfile);
+              }
             } else {
-              setUser(null);
+              if (mounted) {
+                setUser(null);
+              }
             }
 
             if (typeof window !== 'undefined') {
@@ -340,11 +357,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
           } else if (mounted) {
             setUser(null);
+            setLoading(false);
           }
-        
-        if (mounted) {
-          setLoading(false);
-        }
       } catch (err) {
         logger.error('Session retrieval error', { error: err });
         if (mounted) {
@@ -364,11 +378,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
       
-      if (event === 'SIGNED_IN' && session?.user) {
-        const profile = await fetchUserProfile(session.user);
+      if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user) {
+        const fallbackProfile = buildFallbackProfile(session.user);
         if (mounted) {
-          setUser(profile);
+          setUser(fallbackProfile);
           setLoading(false);
+        }
+
+        const profile = await fetchUserProfile(session.user);
+        if (mounted && profile) {
+          setUser(profile);
           void triggerFirstLoginWhatsApp(profile);
         }
 
@@ -391,14 +410,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       mounted = false;
       subscription?.unsubscribe();
     };
-  }, [supabase.auth, fetchUserProfile, sessionManager, triggerFirstLoginWhatsApp]);
+  }, [supabase.auth, fetchUserProfile, sessionManager, triggerFirstLoginWhatsApp, buildFallbackProfile]);
 
-  const login = async (email: string, password: string): Promise<AuthResponse> => {
+  const login = async (identifier: string, password: string): Promise<AuthResponse> => {
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      const normalized = identifier.trim();
+      const isEmail = normalized.includes('@');
+      const { data, error } = isEmail
+        ? await supabase.auth.signInWithPassword({ email: normalized, password })
+        : await supabase.auth.signInWithPassword({ phone: normalized.replace(/\D/g, ''), password });
       
       if (error) {
-        logger.error('Supabase login error', { error, email });
+        logger.error('Supabase login error', { error, identifier: normalized });
         
         if (error.message.includes('Email not confirmed')) {
           return {
@@ -416,7 +439,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       
       if (!data || !data.session) {
-        logger.error('Supabase login: No session returned', { data, email });
+        logger.error('Supabase login: No session returned', { data, identifier: normalized });
         return {
           success: false,
           message: 'No session returned from server',
@@ -428,6 +451,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const profile = await fetchUserProfile(data.session.user);
         setUser(profile);
         void triggerFirstLoginWhatsApp(profile);
+        trackEvent('login', { userId: profile.id, email: profile.email });
 
         if (typeof window !== 'undefined') {
           const lastSignInAtRaw = data.session.user.last_sign_in_at;
@@ -450,7 +474,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         data: { user: data.user, session: data.session }
       };
     } catch (error) {
-      logger.error('Login error', { error, email });
+      logger.error('Login error', { error, identifier });
       return {
         success: false,
         message: error instanceof Error ? error.message : 'An unexpected error occurred',

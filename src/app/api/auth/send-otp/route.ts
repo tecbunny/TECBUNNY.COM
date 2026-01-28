@@ -1,17 +1,17 @@
 import { NextRequest } from 'next/server';
 
-import { otpManager } from '../../../../lib/otp-manager';
+import MultiChannelOTPManager from '../../../../lib/multi-channel-otp-manager';
 import { logger } from '../../../../lib/logger';
 import { apiError, apiSuccess } from '../../../../lib/errors';
 import { verifyCaptcha } from '../../../../lib/captcha/captcha-service';
-import { sendSms } from '../../../../lib/sms/twofactor';
 
 export async function POST(request: NextRequest) {
   const correlationId = request.headers.get('x-correlation-id');
+  const otpManager = new MultiChannelOTPManager();
   try {
     let body: any;
     try { body = await request.json(); } catch { return apiError('VALIDATION_ERROR', { overrideMessage: 'Invalid JSON body', correlationId }); }
-  const { email, mobile, type = 'signup', captchaToken } = body || {};
+    const { email, mobile, type = 'signup', captchaToken } = body || {};
 
     logger.info('send_otp_start', { correlationId });
 
@@ -37,46 +37,33 @@ export async function POST(request: NextRequest) {
       logger.debug('send_otp_captcha_bypassed', { correlationId, identifier: email || mobile, ip });
     }
 
-    let result;
-    
-    if (mobile && !email) {
-      // Mobile OTP request
-      try {
-        const smsResult = await sendSms({
-          to: mobile,
-          message: `Your TecBunny Store verification code is: {otp}`,
-          vars: { otp: 'XXXXXX' },
-          flowId: type === 'recovery' ? 'RESET_OTP' : 'SIGNUP_OTP'
-        });
-        
-        if (smsResult.success) {
-          const otp = otpManager.generateOTP();
-          const stored = await otpManager.storeOTP(mobile, otp, type);
-          if (stored) {
-            result = { success: true, message: 'OTP sent to mobile', waitTime: 0 };
-          }
-        }
-      } catch (smsError) {
-        logger.warn('send_otp_sms_failed', { correlationId, error: (smsError as Error).message });
-      }
-    }
-    
-    // If mobile failed or email is provided, send email OTP
-    if (!result || !result.success) {
-      if (email) {
-        result = await otpManager.sendOTP(email, type);
-      } else {
-        return apiError('SERVICE_UNAVAILABLE', { overrideMessage: 'Unable to send OTP. Please try again.', correlationId });
-      }
-    }
-    
-    if (result.success) {
-      logger.info('send_otp_success', { correlationId });
-      return apiSuccess({ message: result.message, waitTime: result.waitTime }, correlationId);
-    } else {
+    const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : undefined;
+    const normalizedMobile = mobile ? String(mobile).replace(/\D/g, '') : undefined;
+
+    const purpose = type === 'recovery' ? 'password_reset' : 'registration';
+
+    // Prefer SMS when mobile is provided, otherwise email
+    const preferredChannel = normalizedMobile ? 'sms' : 'email';
+
+    const result = await otpManager.generateOTP({
+      phone: normalizedMobile,
+      email: normalizedEmail,
+      purpose,
+      preferredChannel
+    });
+
+    if (!result.success) {
       logger.warn('send_otp_failed', { correlationId, reason: result.message });
-      return apiError('RATE_LIMITED', { overrideMessage: result.message, correlationId, details: { waitTime: result.waitTime } });
+      return apiError('SERVICE_UNAVAILABLE', { overrideMessage: result.message || 'Failed to send OTP', correlationId });
     }
+
+    logger.info('send_otp_success', { correlationId, channel: result.channel, provider: result.provider });
+    return apiSuccess({
+      message: result.message || 'OTP sent successfully',
+      otpId: result.otpId,
+      channel: result.channel,
+      provider: result.provider
+    }, correlationId);
   } catch (error) {
     logger.error('send_otp_unhandled', { correlationId, error: (error as Error).message });
     return apiError('INTERNAL_ERROR', { overrideMessage: 'Failed to send OTP', correlationId });

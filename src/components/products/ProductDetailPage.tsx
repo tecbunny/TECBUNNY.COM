@@ -1,23 +1,19 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
-// Use native img for detail page to avoid Next.js loader issues
-// import Image from 'next/image';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Share2, Star, Truck, Shield, RefreshCw } from 'lucide-react';
+import { ArrowLeft, RefreshCw, Share2, Shield, Truck } from 'lucide-react';
 import DOMPurify from 'dompurify';
 
-import { logger } from '../../lib/logger';
-
-import { Button } from '../../components/ui/button';
-import { Badge } from '../../components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { AddToCartButton } from '../../components/cart/AddToCartButton';
+import { Button } from '../../components/ui/button';
+import { Card, CardContent } from '../../components/ui/card';
 import { WishlistButton } from '../../components/wishlist/WishlistButton';
-
+import { logger } from '../../lib/logger';
 import { createClient } from '../../lib/supabase/client';
 import type { Product } from '../../lib/types';
-
+import { useAnalytics } from '../../hooks/use-analytics';
+import { useToast } from '../../hooks/use-toast';
 import { StarRating } from './StarRating';
 
 interface ProductDetailPageProps {
@@ -26,9 +22,13 @@ interface ProductDetailPageProps {
 
 export function ProductDetailPage({ productId }: ProductDetailPageProps) {
   const router = useRouter();
+  const { trackEvent } = useAnalytics();
+  const { toast } = useToast();
+  const isMountedRef = useRef(true);
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedImage, setSelectedImage] = useState(0);
+  const [activeTab, setActiveTab] = useState<'specs' | 'description' | 'warranty'>('specs');
   const supabase = createClient();
   const displayName = product?.title || product?.name || 'Product';
 
@@ -37,44 +37,37 @@ export function ProductDetailPage({ productId }: ProductDetailPageProps) {
     return product.handle || product.barcode || product.id;
   }, [product]);
 
-  // Prepare product images (main + additional) - moved before early returns
   const productImages = useMemo(() => {
     if (!product) return [];
-    
+
     const images: string[] = [];
-    
-    // Always start with the main image if it exists
+
     if (product.image) {
       images.push(product.image);
     }
-    
-    // Add images from the images array if present
+
     const normalizedArray: string[] = Array.isArray((product as any).images)
       ? (product as any).images.map((img: any) => (typeof img === 'string' ? img : img?.url || '')).filter(Boolean)
       : [];
     images.push(...normalizedArray);
-    
-    // Add additional_images if available
+
     if ((product as any).additional_images && Array.isArray((product as any).additional_images)) {
       const additionalNormalized = (product as any).additional_images
         .map((img: any) => (typeof img === 'string' ? img : img?.url || ''))
         .filter(Boolean);
       images.push(...additionalNormalized);
     }
-    
-    // Remove duplicates
+
     const uniqueImages = [...new Set(images)];
-    
-    // Helper to coerce any placeholder/SVG into a safe PNG URL
-    const toPngPlaceholder = (size: string = '600x600') => `https://placehold.co/${size}/0066cc/ffffff.png?text=Product+Image`;
+
+    const toPngPlaceholder = (size: string = '600x600') =>
+      `https://placehold.co/${size}/0066cc/ffffff.png?text=Product+Image`;
     const ensurePng = (url: string): string => {
       if (!url) return toPngPlaceholder();
       try {
-        // Block SVGs and data SVGs outright
         if (url.endsWith('.svg') || url.includes('image/svg+xml') || url.startsWith('data:image/svg+xml')) {
           return toPngPlaceholder();
         }
-        // Normalize placehold.co without explicit raster extension to .png
         if (url.includes('placehold.co')) {
           const u = new URL(url);
           const hasRasterExt = /\.(png|jpg|jpeg|webp)$/i.test(u.pathname);
@@ -85,15 +78,12 @@ export function ProductDetailPage({ productId }: ProductDetailPageProps) {
         }
         return url;
       } catch {
-        // On malformed URLs fall back to PNG placeholder
         return toPngPlaceholder();
       }
     };
 
-    // Ensure at least one placeholder (use PNG to avoid Next/Image SVG block)
     const finalized = uniqueImages.length === 0 ? [toPngPlaceholder()] : uniqueImages;
 
-    // Sanitize all URLs to avoid SVGs
     return finalized.map(ensurePng);
   }, [product]);
 
@@ -102,7 +92,7 @@ export function ProductDetailPage({ productId }: ProductDetailPageProps) {
       return '';
     }
 
-  const fallbackText = `Experience the best in ${product.category} technology with the ${displayName}. This premium product combines cutting-edge features with exceptional build quality to deliver outstanding performance and reliability. Perfect for both professionals and enthusiasts who demand the very best.`;
+    const fallbackText = `Experience the best in ${product.category} technology with the ${displayName}. This premium product combines cutting-edge features with exceptional build quality to deliver outstanding performance and reliability. Perfect for both professionals and enthusiasts who demand the very best.`;
 
     const rawDescription = (product.description && product.description.trim().length > 0)
       ? product.description
@@ -134,19 +124,37 @@ export function ProductDetailPage({ productId }: ProductDetailPageProps) {
     };
   }, [product]);
 
+  const highlightSpecs = useMemo(() => {
+    if (!product?.specifications) return [] as Array<[string, string]>;
+    return Object.entries(product.specifications).slice(0, 3) as Array<[string, string]>;
+  }, [product]);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
   useEffect(() => {
     const fetchProduct = async () => {
-      setLoading(true);
+      if (isMountedRef.current) {
+        setLoading(true);
+      }
       const { data, error } = await supabase
         .from('products')
         .select('*')
         .eq('id', productId)
         .single();
 
+      if (!isMountedRef.current) {
+        return;
+      }
+
       if (error) {
         logger.error('Error fetching product:', { error });
       } else {
-        logger.info('Fetched product data:', { 
+        logger.info('Fetched product data:', {
           id: data.id,
           image: data.image,
           additional_images: data.additional_images,
@@ -155,8 +163,7 @@ export function ProductDetailPage({ productId }: ProductDetailPageProps) {
           hasAdditionalImages: Array.isArray(data.additional_images),
           additionalImagesLength: Array.isArray(data.additional_images) ? data.additional_images.length : 'not array'
         });
-        
-        // Handle PostgreSQL array format if needed
+
         if (data.additional_images && typeof data.additional_images === 'string') {
           try {
             data.additional_images = JSON.parse(data.additional_images);
@@ -165,7 +172,7 @@ export function ProductDetailPage({ productId }: ProductDetailPageProps) {
             logger.warn('Failed to parse additional_images string:', { error: e });
           }
         }
-        
+
         const resolvedTitle = [data.title, data.name]
           .map((value) => (typeof value === 'string' ? value.trim() : ''))
           .find((value) => value.length > 0) || 'Product';
@@ -208,18 +215,60 @@ export function ProductDetailPage({ productId }: ProductDetailPageProps) {
     fetchProduct();
   }, [productId, supabase]);
 
+  const handleShare = async () => {
+    if (!product) return;
+    const url = window.location.href;
+    trackEvent('product_share', { productId: product.id, productName: displayName });
+
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: displayName,
+          text: `Check out ${displayName} on TecBunny`,
+          url,
+        });
+        return;
+      }
+
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+        toast({
+          title: 'Link copied',
+          description: 'Product link copied to clipboard.',
+        });
+        return;
+      }
+
+      toast({
+        title: 'Share this link',
+        description: url,
+      });
+    } catch (error) {
+      logger.error('product_share_failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      toast({
+        variant: 'destructive',
+        title: 'Share failed',
+        description: 'Please try again or copy the URL manually.',
+      });
+    }
+  };
+
   if (loading) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="animate-pulse">
-          <div className="h-8 w-32 bg-gray-200 rounded mb-8"></div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <div className="aspect-square bg-gray-200 rounded-lg"></div>
-            <div className="space-y-4">
-              <div className="h-8 bg-gray-200 rounded w-3/4"></div>
-              <div className="h-4 bg-gray-200 rounded w-1/2"></div>
-              <div className="h-6 bg-gray-200 rounded w-1/4"></div>
-              <div className="h-20 bg-gray-200 rounded"></div>
+      <div className="bg-[#030712] text-slate-200">
+        <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+          <div className="animate-pulse">
+            <div className="h-6 w-40 rounded bg-white/10 mb-8"></div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              <div className="h-[420px] rounded-2xl bg-white/5"></div>
+              <div className="space-y-4">
+                <div className="h-8 rounded bg-white/10 w-3/4"></div>
+                <div className="h-4 rounded bg-white/10 w-1/2"></div>
+                <div className="h-12 rounded bg-white/10 w-2/3"></div>
+                <div className="h-32 rounded bg-white/5"></div>
+              </div>
             </div>
           </div>
         </div>
@@ -229,291 +278,296 @@ export function ProductDetailPage({ productId }: ProductDetailPageProps) {
 
   if (!product) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center py-16">
-          <h2 className="text-2xl font-semibold mb-4">Product Not Found</h2>
-          <p className="text-muted-foreground mb-8">
-            The product you're looking for doesn't exist or has been removed.
-          </p>
-          <Button type="button" onClick={() => router.push('/products')}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Products
-          </Button>
+      <div className="bg-[#030712] text-slate-200">
+        <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
+          <div className="text-center">
+            <h2 className="text-2xl font-semibold text-white mb-4">Product Not Found</h2>
+            <p className="text-slate-400 mb-8">
+              The product you're looking for doesn't exist or has been removed.
+            </p>
+            <Button type="button" onClick={() => router.push('/products')}>
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Products
+            </Button>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      {/* Breadcrumb */}
-      <nav className="flex items-center gap-2 text-sm text-muted-foreground mb-8">
-        <Button 
-          variant="ghost" 
-          size="sm"
-          onClick={() => router.push('/products')}
-          className="text-blue-600 hover:text-blue-800"
-        >
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Products
-        </Button>
-        <span>/</span>
-        <span className="text-blue-600">{product.category}</span>
-  <span>/</span>
-  <span className="text-foreground">{displayName}</span>
-      </nav>
+    <div className="bg-[#030712] text-slate-200">
+      <style jsx global>{`
+        @keyframes scanVertical {
+          0% { top: 0%; opacity: 0; }
+          10% { opacity: 1; }
+          90% { opacity: 1; }
+          100% { top: 100%; opacity: 0; }
+        }
+        .product-scan-line {
+          position: absolute;
+          left: 0;
+          width: 100%;
+          height: 2px;
+          background: #06b6d4;
+          box-shadow: 0 0 10px #06b6d4;
+          animation: scanVertical 3s linear infinite;
+        }
+      `}</style>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-        {/* Product Images */}
-        <div className="space-y-4">
-          <div className="aspect-square overflow-hidden rounded-xl bg-gradient-to-br from-gray-50 to-gray-100 shadow-harsh flex items-center justify-center">
-            <img
-              src={productImages[selectedImage]}
-              alt={displayName}
-              className="w-full h-full object-contain p-8 transition-transform duration-300 hover:scale-105"
-              loading="lazy"
-              onError={(e) => {
-                const target = e.target as HTMLImageElement;
-                target.src = `https://placehold.co/600x600/e5e7eb/6b7280.png?text=${encodeURIComponent(displayName)}`;
-              }}
-            />
-          </div>
-          
-          {/* Image Thumbnails */}
-          <div className="grid grid-cols-4 gap-2">
-            {productImages.map((image, index) => (
-              <button
-                key={index}
-                onClick={() => setSelectedImage(index)}
-                className={`aspect-square overflow-hidden rounded-lg transition-all duration-200 bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center ${
-                  selectedImage === index 
-                    ? 'ring-2 ring-blue-500 ring-offset-2' 
-                    : 'hover:opacity-75'
-                }`}
-              >
-                  <img
-                    src={image}
-                    alt={`${displayName} view ${index + 1}`}
-                    className="w-full h-full object-contain p-2"
-                    loading="lazy"
-                    onError={(e) => {
-                      const target = e.target as HTMLImageElement;
-                      target.src = `https://placehold.co/150x150/e5e7eb/6b7280.png?text=View+${index + 1}`;
-                    }}
-                  />
-              </button>
-            ))}
-          </div>
-        </div>
+      <div className="relative">
+        <div className="absolute inset-0 bg-[url('/noise.svg')] opacity-5 pointer-events-none"></div>
+        <div className="mx-auto max-w-7xl px-4 pb-16 pt-10 sm:px-6 lg:px-8 relative z-10">
+          <nav className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
+            <button
+              type="button"
+              onClick={() => router.push('/products')}
+              className="inline-flex items-center gap-2 text-slate-400 hover:text-cyan-300 transition-colors"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Products
+            </button>
+            <span>/</span>
+            <span className="hover:text-cyan-300 transition-colors">{product.category}</span>
+            <span>/</span>
+            <span className="text-white">{displayName}</span>
+          </nav>
 
-        {/* Product Details */}
-        <div className="space-y-6">
-          {/* Header */}
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <Badge variant="secondary" className="bg-blue-100 text-blue-800">
-                {product.category}
-              </Badge>
-              <Badge variant="outline">In Stock</Badge>
-              {product.brand && (
-                <Badge variant="secondary" className="bg-purple-100 text-purple-800">
-                  {product.brand}
-                </Badge>
-              )}
-            </div>
-            <h1 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-2">
-              {displayName}
-            </h1>
-            
-            {/* Brand and Model Info */}
-            <div className="flex items-center gap-4 mb-3">
-              {product.brand_logo && (
-                <img 
-                  src={product.brand_logo} 
-                  alt={`${product.brand} logo`}
-                  className="w-8 h-8 object-contain"
+          <section className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-12">
+            <div className="space-y-4">
+              <div className="relative bg-slate-900/60 border border-white/10 rounded-2xl p-6 h-[500px] flex items-center justify-center overflow-hidden group">
+                <div className="absolute inset-0 z-10 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-500">
+                  <div className="product-scan-line"></div>
+                  <div className="absolute inset-0 bg-cyan-400/5"></div>
+                </div>
+
+                <img
+                  src={productImages[selectedImage]}
+                  alt={displayName}
+                  width={900}
+                  height={900}
+                  className="max-w-full max-h-full object-contain relative z-0 transition-transform duration-500 group-hover:scale-105"
+                  loading="lazy"
                   onError={(e) => {
                     const target = e.target as HTMLImageElement;
-                    target.style.display = 'none';
+                    target.src = `https://placehold.co/600x600/0f172a/94a3b8.png?text=${encodeURIComponent(displayName)}`;
                   }}
                 />
-              )}
-              {product.model_number && (
-                <span className="text-sm text-muted-foreground">
-                  Model: <span className="font-medium">{product.model_number}</span>
-                </span>
-              )}
-              {product.product_url && (
-                <a 
-                  href={product.product_url} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-sm text-blue-600 hover:text-blue-800 underline"
-                >
-                  View Details ↗
-                </a>
-              )}
-            </div>
-            
-            <div className="flex items-center gap-4">
-              <StarRating rating={product.rating} size="lg" />
-              <span className="text-sm text-muted-foreground">
-                ({product.reviewCount} reviews)
-              </span>
-            </div>
-          </div>
 
-          {/* Price */}
-          {pricing && (
-            <div className="flex items-baseline gap-4">
-              <span className="text-4xl font-bold text-blue-600">
-                ₹{pricing.salePrice.toFixed(2)}
-              </span>
-              {pricing.hasDiscount && (
-                <>
-                  <span className="text-lg text-muted-foreground line-through">
-                    ₹{pricing.mrp.toFixed(2)}
+                <div className="absolute top-4 left-4 z-20">
+                  <span className="bg-cyan-400 text-slate-900 text-xs font-bold px-2 py-1 rounded shadow-lg shadow-cyan-400/40">
+                    IN STOCK
                   </span>
-                  {pricing.percentageOff > 0 && (
-                    <Badge variant="destructive">{pricing.percentageOff}% OFF</Badge>
+                </div>
+              </div>
+
+              <div className="flex gap-3 overflow-x-auto pb-2">
+                {productImages.map((image, index) => (
+                  <button
+                    key={index}
+                    onClick={() => setSelectedImage(index)}
+                    className={`w-16 h-16 sm:w-20 sm:h-20 rounded-lg bg-white/5 border p-2 flex-shrink-0 transition-colors ${
+                      selectedImage === index ? 'border-cyan-400/70' : 'border-white/10 hover:border-cyan-400/40'
+                    }`}
+                  >
+                    <img
+                      src={image}
+                      alt={`${displayName} view ${index + 1}`}
+                      width={160}
+                      height={160}
+                      className="w-full h-full object-cover rounded opacity-80 hover:opacity-100 transition-opacity"
+                      loading="lazy"
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        target.src = `https://placehold.co/150x150/0f172a/94a3b8.png?text=View+${index + 1}`;
+                      }}
+                    />
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex flex-col">
+              <h1 className="text-3xl md:text-4xl font-semibold text-white mb-2">
+                {displayName}
+              </h1>
+
+              <div className="flex flex-wrap items-center gap-4 mb-6 text-sm text-slate-400">
+                {product.model_number && (
+                  <span>Model: <span className="text-slate-200">{product.model_number}</span></span>
+                )}
+                {skuValue && (
+                  <span>SKU: <span className="text-slate-200">{skuValue}</span></span>
+                )}
+                <div className="flex items-center gap-2">
+                  <StarRating rating={product.rating} size="sm" />
+                  <span className="text-xs">({product.reviewCount} reviews)</span>
+                </div>
+              </div>
+
+              <div className="bg-white/5 border border-white/10 rounded-xl p-6 mb-8 backdrop-blur-sm">
+                {pricing && (
+                  <div className="flex flex-wrap items-end gap-3 mb-2">
+                    <span className="text-4xl font-bold text-cyan-300">₹{pricing.salePrice.toFixed(2)}</span>
+                    {pricing.hasDiscount && (
+                      <>
+                        <span className="text-lg text-slate-500 line-through">₹{pricing.mrp.toFixed(2)}</span>
+                        {pricing.percentageOff > 0 && (
+                          <span className="text-xs font-bold text-emerald-300 bg-emerald-400/10 px-2 py-0.5 rounded">
+                            {pricing.percentageOff}% OFF
+                          </span>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+                <p className="text-sm text-slate-400">Price inclusive of all taxes. Installation charges separate.</p>
+              </div>
+
+              <div className="prose prose-invert prose-sm mb-8 text-slate-300">
+                <div dangerouslySetInnerHTML={{ __html: descriptionHtml }} />
+                {highlightSpecs.length > 0 && (
+                  <ul className="list-none pl-0 space-y-2 mt-4">
+                    {highlightSpecs.map(([key, value]) => (
+                      <li key={key} className="flex items-center gap-3">
+                        <span className="h-2 w-2 rounded-full bg-cyan-400"></span>
+                        <span className="text-slate-200">{key}:</span>
+                        <span className="text-slate-400">{value}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              <div className="mt-auto space-y-4">
+                <div className="flex flex-wrap gap-3">
+                  <AddToCartButton
+                    product={product}
+                    className="flex-1 min-w-[220px] h-12 text-base bg-cyan-400 hover:bg-white text-slate-900 font-semibold shadow-lg shadow-cyan-400/20"
+                    size="lg"
+                  />
+                  <WishlistButton
+                    product={product}
+                    className="h-12 w-12 flex-shrink-0 border border-white/10 bg-white/5 hover:bg-white/10"
+                  />
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    className="h-12 w-12 flex-shrink-0 border-white/10 bg-white/5 hover:bg-white/10"
+                    onClick={handleShare}
+                    aria-label={`Share ${displayName}`}
+                  >
+                    <Share2 className="h-4 w-4" />
+                  </Button>
+                </div>
+
+                <div className="flex flex-wrap gap-3">
+                  <Button
+                    variant="outline"
+                    className="flex-1 border-white/10 bg-white/5 hover:bg-white/10"
+                    onClick={() => trackEvent('amc_inquiry', { productId: product.id, productName: displayName })}
+                  >
+                    <Shield className="mr-2 h-4 w-4" />
+                    Request AMC Quote
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="flex-1 border-white/10 bg-white/5 hover:bg-white/10"
+                    onClick={() => trackEvent('installation_inquiry', { productId: product.id, productName: displayName })}
+                  >
+                    <Truck className="mr-2 h-4 w-4" />
+                    Installation Inquiry
+                  </Button>
+                </div>
+
+                <p className="text-xs text-center text-slate-500">
+                  <Shield className="inline-block h-3.5 w-3.5 mr-1" />
+                  {product.warranty ? `${product.warranty} included.` : '2-Year Manufacturer Warranty included.'}
+                </p>
+              </div>
+            </div>
+          </section>
+
+          <section className="mt-12 border-t border-white/5 bg-black/20 rounded-2xl">
+            <div className="px-4 py-10 sm:px-6 lg:px-8">
+              <div className="flex gap-8 border-b border-white/10 mb-8 overflow-x-auto">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('specs')}
+                  className={`px-4 py-3 text-sm font-semibold border-b-2 whitespace-nowrap transition-all ${
+                    activeTab === 'specs'
+                      ? 'border-cyan-400 text-white'
+                      : 'border-transparent text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Specifications
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('description')}
+                  className={`px-4 py-3 text-sm font-semibold border-b-2 whitespace-nowrap transition-all ${
+                    activeTab === 'description'
+                      ? 'border-cyan-400 text-white'
+                      : 'border-transparent text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Description
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('warranty')}
+                  className={`px-4 py-3 text-sm font-semibold border-b-2 whitespace-nowrap transition-all ${
+                    activeTab === 'warranty'
+                      ? 'border-cyan-400 text-white'
+                      : 'border-transparent text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Warranty Info
+                </button>
+              </div>
+
+              {activeTab === 'specs' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-4 text-sm">
+                  {product.specifications && Object.keys(product.specifications).length > 0 ? (
+                    Object.entries(product.specifications).map(([key, value]) => (
+                      <div key={key} className="flex justify-between py-3 border-b border-white/5">
+                        <span className="text-slate-500">{key}</span>
+                        <span className="text-white font-mono">{value}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-slate-400">Specifications will be updated soon.</div>
                   )}
-                </>
+                </div>
               )}
-            </div>
-          )}
 
-          {pricing?.hasDiscount && pricing.savingsAmount > 0 && (
-            <div className="text-sm text-muted-foreground">
-              You save ₹{pricing.savingsAmount.toFixed(2)} on this product.
-            </div>
-          )}
+              {activeTab === 'description' && (
+                <div className="prose prose-invert max-w-none text-slate-300">
+                  <div dangerouslySetInnerHTML={{ __html: descriptionHtml }} />
+                </div>
+              )}
 
-          {/* Description */}
-          <div className="space-y-4">
-            <h3 className="text-lg font-semibold">Product Description</h3>
-            <div
-              className="prose prose-slate max-w-none text-muted-foreground leading-relaxed"
-              dangerouslySetInnerHTML={{ __html: descriptionHtml }}
-            />
-          </div>
-
-          {/* Specifications */}
-          {product.specifications && Object.keys(product.specifications).length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Specifications</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {Object.entries(product.specifications).map(([key, value]) => (
-                    <div key={key} className="flex justify-between items-center py-2 border-b border-gray-100 last:border-b-0">
-                      <span className="font-medium text-gray-700">{key}</span>
-                      <span className="text-gray-600">{value}</span>
+              {activeTab === 'warranty' && (
+                <Card className="bg-white/5 border-white/10">
+                  <CardContent className="p-6 text-sm text-slate-300 space-y-3">
+                    <p>
+                      {product.warranty
+                        ? `${product.warranty} coverage provided by manufacturer.`
+                        : '2-Year Manufacturer Warranty included with purchase.'}
+                    </p>
+                    <div className="flex items-center gap-3">
+                      <RefreshCw className="h-4 w-4 text-cyan-300" />
+                      <span>Hassle-free replacement for eligible defects.</span>
                     </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Additional Product Info */}
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            {skuValue && (
-              <div>
-                <span className="font-medium">SKU:</span> 
-                <span className="text-muted-foreground ml-1">{skuValue}</span>
-              </div>
-            )}
-            <div>
-              <span className="font-medium">Category:</span> 
-              <span className="text-muted-foreground ml-1">{product.category}</span>
-            </div>
-            {product.warranty && (
-              <div className="col-span-2">
-                <span className="font-medium">Warranty:</span> 
-                <span className="text-muted-foreground ml-1">{product.warranty}</span>
-              </div>
-            )}
-          </div>
-
-          {/* Features */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Key Features</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex items-center gap-3">
-                <Shield className="h-5 w-5 text-blue-600" />
-                <span>1 Year Warranty</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <Truck className="h-5 w-5 text-blue-600" />
-                <span>Free Shipping Nationwide</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <RefreshCw className="h-5 w-5 text-blue-600" />
-                <span>7 Days Return Policy</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <Star className="h-5 w-5 text-blue-600" />
-                <span>Premium Quality Guaranteed</span>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Actions */}
-          <div className="space-y-4">
-            <div className="flex gap-4">
-              <div className="flex-1">
-                <AddToCartButton 
-                  product={product} 
-                  className="w-full h-12 text-lg bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 shadow-button"
-                />
-              </div>
-              <WishlistButton 
-                product={product}
-                className="h-12 w-12 flex-shrink-0"
-              />
-              <Button 
-                variant="outline" 
-                size="lg"
-                className="h-12 w-12 flex-shrink-0"
-              >
-                <Share2 className="h-4 w-4" />
-              </Button>
-            </div>
-            
-            <div className="grid grid-cols-2 gap-4 text-sm text-muted-foreground">
-              {skuValue && (
-                <div>
-                  <span className="font-medium">SKU:</span> {skuValue}
-                </div>
+                    <div className="flex items-center gap-3">
+                      <Shield className="h-4 w-4 text-cyan-300" />
+                      <span>Support available via Tecbunny help desk.</span>
+                    </div>
+                  </CardContent>
+                </Card>
               )}
-              <div>
-                <span className="font-medium">Category:</span> {product.category}
-              </div>
             </div>
-          </div>
-
-          {/* Trust Indicators */}
-          <Card className="bg-blue-50 border-blue-200">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-center gap-8 text-sm text-blue-700">
-                <div className="flex items-center gap-2">
-                  <Shield className="h-4 w-4" />
-                  <span>Secure Payment</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Truck className="h-4 w-4" />
-                  <span>Fast Delivery</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Star className="h-4 w-4" />
-                  <span>Quality Assured</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          </section>
         </div>
       </div>
     </div>

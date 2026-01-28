@@ -48,7 +48,16 @@ export interface SecurityAlert {
  * Enhanced WhatsApp Business API Service for TecBunny Transactional Notifications
  * Handles order updates, service notifications, payment confirmations, and security alerts
  */
-export class WhatsAppNotificationService extends WhatsAppService {
+export class WhatsAppNotificationService {
+  private whatsAppService: WhatsAppService;
+
+  constructor() {
+    this.whatsAppService = new WhatsAppService();
+  }
+
+  protected async sendMessage(to: string, message: string, type: 'text' | 'template' = 'text'): Promise<any> {
+    return this.whatsAppService.sendMessage(to, message, type);
+  }
   
   /**
    * Send enhanced order confirmation notification
@@ -142,6 +151,7 @@ export class WhatsAppNotificationService extends WhatsAppService {
   async sendPaymentConfirmation(notification: PaymentNotification): Promise<boolean> {
     try {
       const message = this.createPaymentConfirmationMessage(notification);
+      // Use the internal sendMessage helper (which delegates to the composed service)
       await this.sendMessage(notification.customerPhone, message, 'text');
       
       logger.info('Payment confirmation WhatsApp sent', {
@@ -208,7 +218,7 @@ ${itemsList}
 
 ${notification.expectedDelivery ? `📅 *Expected Delivery:* ${notification.expectedDelivery}` : ''}
 
-📞 For any queries, contact us at: +91 94296 94995
+📞 For any queries, contact us at: +91 96041 36010
 
 Thank you for choosing TecBunny Solutions! 🚀`;
   }
@@ -253,7 +263,7 @@ Your order ${orderId} has been ${statusText[status as keyof typeof statusText]}.
       message += `\n📅 *Estimated Delivery:* ${estimatedDelivery}`;
     }
 
-    message += `\n\n📞 For any queries, contact us at: +91 94296 94995`;
+    message += `\n\n📞 For any queries, contact us at: +91 96041 36010`;
 
     return message;
   }
@@ -294,7 +304,7 @@ Service: ${notification.serviceName}`;
       message += `\nAppointment: ${notification.appointmentDate}`;
     }
 
-    message += `\n\n📞 For any queries, contact us at: +91 94296 94995`;
+    message += `\n\n📞 For any queries, contact us at: +91 96041 36010`;
 
     return message;
   }
@@ -318,7 +328,7 @@ ${notification.orderId ? `Order ID: ${notification.orderId}` : ''}
 
 ✅ *Payment Status:* Confirmed
 
-📞 For any queries, contact us at: +91 94296 94995
+📞 For any queries, contact us at: +91 96041 36010
 
 Thank you for your business! 🙏`;
   }
@@ -355,7 +365,7 @@ Time: ${alert.timestamp}`;
       message += `\nDetails: ${alert.details}`;
     }
 
-    message += `\n\n⚠️ If this wasn't you, please contact us immediately at: +91 94296 94995
+    message += `\n\n⚠️ If this wasn't you, please contact us immediately at: +91 96041 36010
 
 🔒 Your account security is our priority.`;
 

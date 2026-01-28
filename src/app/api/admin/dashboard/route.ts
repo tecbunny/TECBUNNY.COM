@@ -25,11 +25,7 @@ function coerceCurrency(order: Record<string, unknown>): number {
 
 export async function GET(_request: NextRequest) {
   if (!isSupabaseServiceConfigured) {
-    logger.error('admin_dashboard.misconfigured_supabase');
-    return NextResponse.json(
-      { error: 'Service configuration missing. Please set SUPABASE_SERVICE_ROLE_KEY.' },
-      { status: 503 }
-    );
+    logger.warn('admin_dashboard.misconfigured_supabase');
   }
 
   try {
@@ -37,89 +33,112 @@ export async function GET(_request: NextRequest) {
 
     logger.info('admin_dashboard.fetch_start', { userId: user.id, role });
 
-    // Fetch auth users count via Admin API to reflect all users
+    // Fetch users count from profiles (fast, avoids admin pagination)
     let totalUserCount = 0;
-    let nextPage: number | null | undefined = 1;
+    const { count: usersCount, error: usersCountError } = await serviceSupabase
+      .from('profiles')
+      .select('*', { count: 'exact', head: true });
 
-    while (nextPage) {
-      const { data: userPage, error: usersError } = await serviceSupabase.auth.admin.listUsers({
-        page: nextPage,
-        perPage: 1000,
-      });
-
-      if (usersError) {
-        logger.error('admin_dashboard.users_count_error', { error: usersError.message, code: usersError.code, page: nextPage });
-        throw usersError;
-      }
-
-      totalUserCount += userPage?.users?.length ?? 0;
-      nextPage = userPage?.nextPage ?? null;
+    if (usersCountError) {
+      logger.warn('admin_dashboard.users_count_error', { error: usersCountError.message, code: usersCountError.code });
+    } else {
+      totalUserCount = usersCount ?? 0;
     }
 
     // Fetch product count
-    const { count: productCount, error: productsError } = await serviceSupabase
+    let productCount = 0;
+    const { count: productCountRaw, error: productsError } = await serviceSupabase
       .from('products')
       .select('*', { count: 'exact', head: true });
 
     if (productsError) {
-      logger.error('admin_dashboard.products_count_error', { error: productsError.message, code: productsError.code });
-      throw productsError;
-    }
-
-    // Fetch orders with totals
-    const { data: orders, error: ordersError } = await serviceSupabase
-      .from('orders')
-      .select('id, total, created_at, status')
-      .order('created_at', { ascending: false });
-
-    if (ordersError) {
-      logger.error('admin_dashboard.orders_fetch_error', { error: ordersError.message, code: ordersError.code });
-      throw ordersError;
+      logger.warn('admin_dashboard.products_count_error', { error: productsError.message, code: productsError.code });
+    } else {
+      productCount = productCountRaw ?? 0;
     }
 
     const now = new Date();
-    const currentMonth = now.getMonth();
     const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
+    const startOfMonth = new Date(currentYear, currentMonth, 1);
+    const startOfNextMonth = new Date(currentYear, currentMonth + 1, 1);
+    const startOfLastMonth = new Date(currentYear, currentMonth - 1, 1);
 
-    const monthlyOrders = (orders ?? []).filter(order => {
-      if (!order.created_at) return false;
-      const orderDate = new Date(order.created_at as string);
-      return orderDate.getFullYear() === currentYear &&
-        orderDate.getMonth() === currentMonth &&
-        order.status !== 'cancelled';
-    });
+    // Fetch total orders count
+    let totalOrders = 0;
+    const { count: totalOrdersRaw, error: ordersCountError } = await serviceSupabase
+      .from('orders')
+      .select('*', { count: 'exact', head: true });
 
-    const monthlyRevenue = monthlyOrders.reduce((total, order) => total + coerceCurrency(order), 0);
+    if (ordersCountError) {
+      logger.warn('admin_dashboard.orders_count_error', { error: ordersCountError.message, code: ordersCountError.code });
+    } else {
+      totalOrders = totalOrdersRaw ?? 0;
+    }
 
-    const lastMonthDate = new Date(currentYear, currentMonth - 1, 1);
-    const lastMonth = lastMonthDate.getMonth();
-    const lastMonthYear = lastMonthDate.getFullYear();
+    // Fetch current month orders (for count + revenue)
+    let monthlyOrdersCount = 0;
+    let monthlyOrdersData: Array<Record<string, unknown>> = [];
+    const { data: monthlyOrdersDataRaw, count: monthlyOrdersCountRaw, error: monthlyOrdersError } = await serviceSupabase
+      .from('orders')
+      .select('total, created_at, status', { count: 'exact' })
+      .gte('created_at', startOfMonth.toISOString())
+      .lt('created_at', startOfNextMonth.toISOString())
+      .neq('status', 'cancelled');
 
-    const lastMonthOrders = (orders ?? []).filter(order => {
-      if (!order.created_at) return false;
-      const orderDate = new Date(order.created_at as string);
-      return orderDate.getFullYear() === lastMonthYear &&
-        orderDate.getMonth() === lastMonth &&
-        order.status !== 'cancelled';
-    });
+    if (monthlyOrdersError) {
+      logger.warn('admin_dashboard.monthly_orders_error', { error: monthlyOrdersError.message, code: monthlyOrdersError.code });
+    } else {
+      monthlyOrdersCount = monthlyOrdersCountRaw ?? 0;
+      monthlyOrdersData = (monthlyOrdersDataRaw as Array<Record<string, unknown>>) ?? [];
+    }
 
-    const recentActivity = (orders ?? [])
-      .slice(0, 5)
-      .map(order => ({
-        id: order.id,
-        type: 'order',
-        description: `Order #${formatOrderNumber(order.id)} - ₹${coerceCurrency(order).toLocaleString('en-IN')}`,
-        date: order.created_at,
-        status: order.status
-      }));
+    const monthlyRevenue = (monthlyOrdersData ?? []).reduce((total, order) => total + coerceCurrency(order), 0);
+
+    // Fetch last month orders count (no need to fetch all rows)
+    let lastMonthOrdersCount = 0;
+    const { count: lastMonthOrdersCountRaw, error: lastMonthOrdersError } = await serviceSupabase
+      .from('orders')
+      .select('*', { count: 'exact', head: true })
+      .gte('created_at', startOfLastMonth.toISOString())
+      .lt('created_at', startOfMonth.toISOString())
+      .neq('status', 'cancelled');
+
+    if (lastMonthOrdersError) {
+      logger.warn('admin_dashboard.last_month_orders_error', { error: lastMonthOrdersError.message, code: lastMonthOrdersError.code });
+    } else {
+      lastMonthOrdersCount = lastMonthOrdersCountRaw ?? 0;
+    }
+
+    // Fetch recent activity (last 5 orders only)
+    let recentOrders: Array<Record<string, unknown>> = [];
+    const { data: recentOrdersRaw, error: recentOrdersError } = await serviceSupabase
+      .from('orders')
+      .select('id, total, created_at, status')
+      .order('created_at', { ascending: false })
+      .limit(5);
+
+    if (recentOrdersError) {
+      logger.warn('admin_dashboard.recent_orders_error', { error: recentOrdersError.message, code: recentOrdersError.code });
+    } else {
+      recentOrders = (recentOrdersRaw as Array<Record<string, unknown>>) ?? [];
+    }
+
+    const recentActivity = (recentOrders ?? []).map(order => ({
+      id: String(order.id ?? ''),
+      type: 'order',
+      description: `Order #${formatOrderNumber(String(order.id ?? ''))} - ₹${coerceCurrency(order).toLocaleString('en-IN')}`,
+      date: String(order.created_at ?? ''),
+      status: String(order.status ?? '')
+    }));
 
     const stats = {
-  totalUsers: totalUserCount,
+      totalUsers: totalUserCount ?? 0,
       totalProducts: productCount ?? 0,
-      totalOrders: orders?.length ?? 0,
+      totalOrders: totalOrders ?? 0,
       monthlyRevenue,
-      monthlyOrders: monthlyOrders.length,
-      lastMonthOrders: lastMonthOrders.length,
+      monthlyOrders: monthlyOrdersCount ?? 0,
+      lastMonthOrders: lastMonthOrdersCount ?? 0,
       recentActivity
     };
 
@@ -131,12 +150,26 @@ export async function GET(_request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
 
+    let message = error instanceof Error ? error.message : String(error);
+    if (message === '[object Object]' && error && typeof error === 'object') {
+      const maybeMessage = (error as { message?: string }).message;
+      if (typeof maybeMessage === 'string' && maybeMessage) {
+        message = maybeMessage;
+      } else {
+        try {
+          message = JSON.stringify(error);
+        } catch {
+          message = 'Failed to fetch dashboard statistics';
+        }
+      }
+    }
+
     logger.error('admin_dashboard.unhandled_error', {
-      error: error instanceof Error ? error.message : String(error)
+      error: message
     });
 
     return NextResponse.json(
-      { error: 'Failed to fetch dashboard statistics' },
+      { error: message || 'Failed to fetch dashboard statistics' },
       { status: 500 }
     );
   }

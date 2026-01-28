@@ -7,6 +7,7 @@ import { useToast } from '../hooks/use-toast';
 import { offerDiscountService } from '../lib/offer-discount-service';
 import { useAuth } from '../lib/hooks';
 import { logger } from '../lib/logger';
+import { useAnalytics } from '../hooks/use-analytics';
 
 interface CartPricing {
   subtotal: number;
@@ -95,6 +96,7 @@ export const CartProvider: React.FC<{
   });
   const { toast } = useToast();
   const { user } = useAuth();
+  const { trackEvent } = useAnalytics();
   const [isHydrated, setIsHydrated] = useState(false);
 
   // Check if guest session is expired
@@ -362,7 +364,8 @@ export const CartProvider: React.FC<{
                 image: item.image,
               })),
               restoreCartUrl: `${process.env.NEXT_PUBLIC_SITE_URL || ''}/cart`,
-              minutesSinceAbandoned: Math.floor(minutesSinceUpdate)
+              minutesSinceAbandoned: Math.floor(minutesSinceUpdate),
+              phone: user.mobile
             }),
           }).then(() => {
             localStorage.setItem(abandonedEmailKey, 'true');
@@ -394,23 +397,33 @@ export const CartProvider: React.FC<{
       return;
     }
 
+    const isServiceItem = item.product_type === 'service' || item.id?.startsWith('service-') || item.id?.startsWith('pricing-');
+    const normalizedQuantity = isServiceItem ? 1 : quantity;
+
     setCartItems((prevItems) => {
       const existingItem = prevItems.find((cartItem) => cartItem.id === item.id);
       if (existingItem) {
         return prevItems.map((cartItem) =>
           cartItem.id === item.id
-            ? normalizeCartItem({ ...cartItem, quantity: cartItem.quantity + quantity })
+            ? normalizeCartItem({ ...cartItem, quantity: isServiceItem ? 1 : cartItem.quantity + normalizedQuantity })
             : cartItem
         );
       }
-      return [...prevItems, normalizeCartItem({ ...item, quantity })];
+      return [...prevItems, normalizeCartItem({ ...item, quantity: normalizedQuantity })];
     });
     
+    trackEvent('add_to_cart', { 
+      productId: item.id, 
+      productName: item.name, 
+      price: item.price, 
+      quantity: normalizedQuantity 
+    });
+
     toast({
       title: "Added to cart",
       description: `${item.name} has been added to your cart.`,
     });
-  }, [toast, user, isGuestSessionExpired]);
+  }, [toast, user, isGuestSessionExpired, trackEvent]);
 
   const removeFromCart = useCallback((itemId: string) => {
     // Check session expiry for guest users
@@ -419,12 +432,20 @@ export const CartProvider: React.FC<{
       return;
     }
 
+    const itemToRemove = cartItems.find(item => item.id === itemId);
+    if (itemToRemove) {
+      trackEvent('remove_from_cart', { 
+        productId: itemToRemove.id, 
+        productName: itemToRemove.name 
+      });
+    }
+
     setCartItems((prevItems) => prevItems.filter((item) => item.id !== itemId));
     toast({
       title: "Item removed",
       description: "The item has been removed from your cart.",
     });
-  }, [toast, user, isGuestSessionExpired]);
+  }, [toast, user, isGuestSessionExpired, cartItems, trackEvent]);
 
   const updateQuantity = useCallback((itemId: string, quantity: number) => {
     // Check session expiry for guest users
@@ -437,7 +458,12 @@ export const CartProvider: React.FC<{
       removeFromCart(itemId);
     } else {
       setCartItems((prevItems) =>
-        prevItems.map((item) => (item.id === itemId ? normalizeCartItem({ ...item, quantity }) : item))
+        prevItems.map((item) => {
+          if (item.id !== itemId) return item;
+          const isServiceItem = item.product_type === 'service' || item.id?.startsWith('service-') || item.id?.startsWith('pricing-');
+          const nextQuantity = isServiceItem ? 1 : quantity;
+          return normalizeCartItem({ ...item, quantity: nextQuantity });
+        })
       );
     }
   }, [removeFromCart, user, isGuestSessionExpired]);

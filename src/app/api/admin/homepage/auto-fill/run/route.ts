@@ -61,6 +61,19 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Fetch analytics data for AI scoring
+    const analyticsMap = new Map<string, any>();
+    try {
+      const { data: analyticsData } = await service.from('product_analytics_view').select('*');
+      if (analyticsData) {
+        analyticsData.forEach((item: any) => {
+          analyticsMap.set(item.id, item);
+        });
+      }
+    } catch (err) {
+      logger.warn('Failed to fetch analytics for auto-fill', { err });
+    }
+
     const allProducts = (products || []).map(p => ({
       id: p.id,
       title: p.title ?? p.name ?? p.id,
@@ -81,7 +94,7 @@ export async function POST(request: NextRequest) {
       // preserve other fields if present
       ...(p as any),
     } as any));
-    const suggestions = computeAutoFill(allProducts, salesCountMap, { limit });
+    const suggestions = computeAutoFill(allProducts, salesCountMap, { limit, analyticsData: analyticsMap });
 
     // Persist suggestions to settings
     const serviceUpsert = async (key: string, values: string[]) => {

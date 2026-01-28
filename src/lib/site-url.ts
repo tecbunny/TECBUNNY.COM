@@ -1,9 +1,9 @@
 // Central helper to resolve canonical site URL(s).
-// Supports comma-separated values in NEXT_PUBLIC_SITE_URL (e.g., "https://tecbunny.com,https://tecbunny.store").
+// Supports comma-separated values in NEXT_PUBLIC_SITE_URL (e.g., "https://www.tecbunny.com,https://tecbunny.com").
 
 export function getDefaultSiteUrls(): string[] {
   const env = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_APP_URL || '';
-  if (!env) return ['https://tecbunny.com'];
+  if (!env) return ['https://www.tecbunny.com'];
   return env.split(',').map(s => s.trim()).filter(Boolean);
 }
 

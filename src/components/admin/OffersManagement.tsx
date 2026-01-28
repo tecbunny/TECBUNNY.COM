@@ -688,11 +688,11 @@ export default function OffersManagement({ initialTab = 'offers' }: OffersManage
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <div className="min-h-screen bg-transparent p-6 text-slate-200">
       <div className="max-w-7xl mx-auto space-y-6">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Offers & Discounts Hub</h1>
-          <p className="text-gray-600">Create, monitor, and optimise every promotion from one screen.</p>
+          <h1 className="text-3xl font-bold text-white">Offers & Discounts Hub</h1>
+          <p className="text-slate-400">Create, monitor, and optimise every promotion from one screen.</p>
         </div>
 
         <Tabs
@@ -708,8 +708,8 @@ export default function OffersManagement({ initialTab = 'offers' }: OffersManage
           <TabsContent value="offers" className="space-y-6">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div>
-                <h2 className="text-2xl font-semibold text-gray-900">Promotional Offers</h2>
-                <p className="text-sm text-gray-600">Run banners, flash deals, and targeted incentives.</p>
+                <h2 className="text-2xl font-semibold text-white">Promotional Offers</h2>
+                <p className="text-sm text-slate-400">Run banners, flash deals, and targeted incentives.</p>
               </div>
               <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
                 <DialogTrigger asChild>
@@ -974,10 +974,10 @@ export default function OffersManagement({ initialTab = 'offers' }: OffersManage
               <Card>
                 <CardContent className="p-6">
                   <div className="flex items-center">
-                    <Gift className="h-8 w-8 text-blue-600" />
+                    <Gift className="h-8 w-8 text-cyan-300" />
                     <div className="ml-4">
-                      <p className="text-sm font-medium text-gray-600">Total Offers</p>
-                      <p className="text-2xl font-bold text-gray-900">{offers.length}</p>
+                      <p className="text-sm font-medium text-slate-400">Total Offers</p>
+                      <p className="text-2xl font-bold text-white">{offers.length}</p>
                     </div>
                   </div>
                 </CardContent>
@@ -985,10 +985,10 @@ export default function OffersManagement({ initialTab = 'offers' }: OffersManage
               <Card>
                 <CardContent className="p-6">
                   <div className="flex items-center">
-                    <TrendingUp className="h-8 w-8 text-green-600" />
+                    <TrendingUp className="h-8 w-8 text-emerald-300" />
                     <div className="ml-4">
-                      <p className="text-sm font-medium text-gray-600">Active Offers</p>
-                      <p className="text-2xl font-bold text-gray-900">
+                      <p className="text-sm font-medium text-slate-400">Active Offers</p>
+                      <p className="text-2xl font-bold text-white">
                         {offers.filter(o => o.is_active && new Date(o.end_date) > new Date()).length}
                       </p>
                     </div>
@@ -998,10 +998,10 @@ export default function OffersManagement({ initialTab = 'offers' }: OffersManage
               <Card>
                 <CardContent className="p-6">
                   <div className="flex items-center">
-                    <Tag className="h-8 w-8 text-purple-600" />
+                    <Tag className="h-8 w-8 text-purple-300" />
                     <div className="ml-4">
-                      <p className="text-sm font-medium text-gray-600">Featured Offers</p>
-                      <p className="text-2xl font-bold text-gray-900">
+                      <p className="text-sm font-medium text-slate-400">Featured Offers</p>
+                      <p className="text-2xl font-bold text-white">
                         {offers.filter(o => o.is_featured).length}
                       </p>
                     </div>
@@ -1011,10 +1011,10 @@ export default function OffersManagement({ initialTab = 'offers' }: OffersManage
               <Card>
                 <CardContent className="p-6">
                   <div className="flex items-center">
-                    <Users className="h-8 w-8 text-orange-600" />
+                    <Users className="h-8 w-8 text-amber-300" />
                     <div className="ml-4">
-                      <p className="text-sm font-medium text-gray-600">Total Usage</p>
-                      <p className="text-2xl font-bold text-gray-900">
+                      <p className="text-sm font-medium text-slate-400">Total Usage</p>
+                      <p className="text-2xl font-bold text-white">
                         {offers.reduce((sum, o) => sum + o.usage_count, 0)}
                       </p>
                     </div>
@@ -1073,7 +1073,7 @@ export default function OffersManagement({ initialTab = 'offers' }: OffersManage
                           <TableCell>
                             <div>
                               <div className="font-medium">{offer.title}</div>
-                              <div className="text-sm text-gray-500 line-clamp-1">
+                              <div className="text-sm text-slate-400 line-clamp-1">
                                 {offer.description}
                               </div>
                               <div className="mt-1 flex space-x-1">
@@ -1096,13 +1096,13 @@ export default function OffersManagement({ initialTab = 'offers' }: OffersManage
                                 {offer.offer_code}
                               </code>
                             ) : (
-                              <span className="text-gray-400">Auto-apply</span>
+                              <span className="text-slate-500">Auto-apply</span>
                             )}
                           </TableCell>
                           <TableCell>
                             <div className="text-sm">
                               <div>{new Date(offer.start_date).toLocaleDateString()}</div>
-                              <div className="text-gray-500">to {new Date(offer.end_date).toLocaleDateString()}</div>
+                              <div className="text-slate-400">to {new Date(offer.end_date).toLocaleDateString()}</div>
                             </div>
                           </TableCell>
                           <TableCell>{getStatusBadge(offer)}</TableCell>
@@ -1110,7 +1110,7 @@ export default function OffersManagement({ initialTab = 'offers' }: OffersManage
                             <div className="text-sm">
                               <div>{offer.usage_count}</div>
                               {offer.usage_limit && (
-                                <div className="text-gray-500">of {offer.usage_limit}</div>
+                                <div className="text-slate-400">of {offer.usage_limit}</div>
                               )}
                             </div>
                           </TableCell>
@@ -1151,8 +1151,8 @@ export default function OffersManagement({ initialTab = 'offers' }: OffersManage
           <TabsContent value="discounts" className="space-y-6">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div>
-                <h2 className="text-2xl font-semibold text-gray-900">Auto Discounts & Coupons</h2>
-                <p className="text-sm text-gray-600">Cart rules, bulk savings, and coupon codes live together here.</p>
+                <h2 className="text-2xl font-semibold text-white">Auto Discounts & Coupons</h2>
+                <p className="text-sm text-slate-400">Cart rules, bulk savings, and coupon codes live together here.</p>
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button variant="outline" onClick={fetchDiscounts} disabled={discountLoading}>

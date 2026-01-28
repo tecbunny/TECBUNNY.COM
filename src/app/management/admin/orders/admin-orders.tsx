@@ -24,8 +24,21 @@ const STATUS_VARIANT: Record<OrderStatus, 'default' | 'destructive' | 'outline' 
   'Ready to Ship': 'default',
   'Shipped': 'secondary',
   'Ready for Pickup': 'default',
-  'Completed': 'outline',
+  'Ready for Delivery': 'default',
   'Delivered': 'outline',
+  'Delivered/Picked Up': 'outline',
+  'Completed': 'outline',
+  'On Hold': 'outline',
+  'Visit Scheduled': 'default',
+  'Visit Completed': 'default',
+  'Diagnosis Done': 'default',
+  'Quote Sent': 'default',
+  'Awaiting Customer Approval': 'default',
+  'Approved': 'default',
+  'Parts Ordered': 'default',
+  'Work In Progress': 'default',
+  'Quality Check': 'default',
+  'Warranty/Support Active': 'default',
   'Cancelled': 'destructive',
   'Rejected': 'destructive',
 };
@@ -34,6 +47,10 @@ const TYPE_BADGE_CLASS: Record<OrderType, string> = {
   Delivery: 'bg-blue-100 text-blue-800',
   Pickup: 'bg-amber-100 text-amber-800',
   'Walk-in': 'bg-emerald-100 text-emerald-800',
+  Service: 'bg-cyan-100 text-cyan-800',
+  Repair: 'bg-fuchsia-100 text-fuchsia-800',
+  Installation: 'bg-indigo-100 text-indigo-800',
+  Setup: 'bg-teal-100 text-teal-800',
 };
 
 type TypeFilter = 'all' | OrderType;
@@ -176,6 +193,10 @@ export default function AdminOrders() {
               <SelectItem value="Delivery">Delivery</SelectItem>
               <SelectItem value="Pickup">Pickup</SelectItem>
               <SelectItem value="Walk-in">Walk-in</SelectItem>
+              <SelectItem value="Service">Service</SelectItem>
+              <SelectItem value="Repair">Repair</SelectItem>
+              <SelectItem value="Installation">Installation</SelectItem>
+              <SelectItem value="Setup">Setup</SelectItem>
             </SelectContent>
           </Select>
           <Button

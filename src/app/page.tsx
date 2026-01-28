@@ -3,21 +3,29 @@ import { Suspense } from 'react';
 import type { Metadata } from 'next';
 
 import HomePage from '../components/home-page';
+import { createPageMetadata } from '../lib/metadata';
 
 // Force dynamic rendering for homepage as requested
 export const dynamic = 'force-dynamic';
 
 // Homepage metadata for SEO
-export const metadata: Metadata = {
-  title: 'TecBunny Store - Premium Electronics & Technology',
-  description: 'Discover cutting-edge technology and premium electronics at TecBunny Store. Shop the latest gadgets, electronics, and tech accessories with fast delivery and excellent customer service.',
-  keywords: ['electronics', 'technology', 'gadgets', 'tech store', 'premium electronics', 'TecBunny'],
-  openGraph: {
-    title: 'TecBunny Store - Premium Electronics & Technology',
-    description: 'Your one-stop destination for cutting-edge technology and premium electronics.',
-    type: 'website',
-  },
-};
+export const metadata: Metadata = createPageMetadata({
+  title: 'TecBunny Solutions | CCTV, Computers & AMC Services in Goa',
+  description:
+    'TecBunny Solutions provides CCTV installation, computer hardware, AMC services, and custom tech setups across Goa. Trusted installation, maintenance, and support.',
+  keywords: [
+    'CCTV Goa',
+    'computer hardware Goa',
+    'AMC services',
+    'security systems',
+    'tech services',
+    'networking',
+    'biometric systems',
+    'TecBunny',
+  ],
+  path: '/',
+  image: '/brand.png',
+});
 
 function HomePageSkeleton() {
   return (

@@ -6,6 +6,8 @@ import { Package, Search, Calendar, MapPin, CreditCard, Eye } from 'lucide-react
 
 import { formatOrderNumber } from '../../lib/order-utils';
 
+import { ORDER_STATUS_FLOW, SERVICE_ORDER_STATUS_FLOW } from '../../lib/data';
+
 import { useOrder } from '../../context/OrderProvider';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -55,23 +57,45 @@ export default function OrdersListPage() {
 
   const getStatusColor = (status: OrderStatus) => {
     switch (status) {
-      case 'Pending': return 'bg-yellow-100 text-yellow-800';
-      case 'Confirmed': return 'bg-blue-100 text-blue-800';
-      case 'Processing': return 'bg-purple-100 text-purple-800';
-      case 'Shipped': return 'bg-indigo-100 text-indigo-800';
-      case 'Delivered': return 'bg-green-100 text-green-800';
-      case 'Cancelled': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case 'Pending': return 'bg-yellow-500/15 text-yellow-200 border border-yellow-500/30';
+      case 'Awaiting Payment': return 'bg-amber-500/15 text-amber-200 border border-amber-500/30';
+      case 'Payment Confirmed': return 'bg-cyan-500/15 text-cyan-200 border border-cyan-500/30';
+      case 'Confirmed': return 'bg-blue-500/15 text-blue-200 border border-blue-500/30';
+      case 'Processing': return 'bg-purple-500/15 text-purple-200 border border-purple-500/30';
+      case 'Ready to Ship': return 'bg-indigo-500/15 text-indigo-200 border border-indigo-500/30';
+      case 'Shipped': return 'bg-indigo-500/15 text-indigo-200 border border-indigo-500/30';
+      case 'Ready for Pickup': return 'bg-sky-500/15 text-sky-200 border border-sky-500/30';
+      case 'Ready for Delivery': return 'bg-sky-500/15 text-sky-200 border border-sky-500/30';
+      case 'Delivered':
+      case 'Delivered/Picked Up':
+        return 'bg-emerald-500/15 text-emerald-200 border border-emerald-500/30';
+      case 'Completed': return 'bg-emerald-600/15 text-emerald-200 border border-emerald-500/30';
+      case 'On Hold': return 'bg-orange-500/15 text-orange-200 border border-orange-500/30';
+      case 'Visit Scheduled':
+      case 'Visit Completed': return 'bg-teal-500/15 text-teal-200 border border-teal-500/30';
+      case 'Diagnosis Done': return 'bg-blue-500/15 text-blue-200 border border-blue-500/30';
+      case 'Quote Sent':
+      case 'Awaiting Customer Approval': return 'bg-cyan-500/15 text-cyan-200 border border-cyan-500/30';
+      case 'Approved': return 'bg-emerald-500/15 text-emerald-200 border border-emerald-500/30';
+      case 'Parts Ordered': return 'bg-indigo-500/15 text-indigo-200 border border-indigo-500/30';
+      case 'Work In Progress': return 'bg-purple-500/15 text-purple-200 border border-purple-500/30';
+      case 'Quality Check': return 'bg-fuchsia-500/15 text-fuchsia-200 border border-fuchsia-500/30';
+      case 'Warranty/Support Active': return 'bg-lime-500/15 text-lime-200 border border-lime-500/30';
+      case 'Cancelled': return 'bg-red-500/15 text-red-200 border border-red-500/30';
+      case 'Rejected': return 'bg-rose-500/15 text-rose-200 border border-rose-500/30';
+      default: return 'bg-slate-700/40 text-slate-200 border border-white/10';
     }
   };
 
+  const statusOptions = Array.from(new Set([...ORDER_STATUS_FLOW, ...SERVICE_ORDER_STATUS_FLOW]));
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 py-8">
+      <div className="min-h-screen bg-slate-950 py-8">
         <div className="max-w-6xl mx-auto px-4">
           <div className="text-center py-12">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading your orders...</p>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-400 mx-auto mb-4"></div>
+            <p className="text-slate-300">Loading your orders...</p>
           </div>
         </div>
       </div>
@@ -79,12 +103,12 @@ export default function OrdersListPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
+    <div className="min-h-screen bg-slate-950 py-8">
       <div className="max-w-6xl mx-auto px-4">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Your Orders</h1>
-          <p className="text-gray-600">Track and manage your order history</p>
+          <h1 className="text-3xl font-bold text-white mb-2">Your Orders</h1>
+          <p className="text-slate-300">Track and manage your order history</p>
         </div>
 
         {/* Filters */}
@@ -93,7 +117,7 @@ export default function OrdersListPage() {
             <div className="flex flex-col md:flex-row gap-4">
               <div className="flex-1">
                 <div className="relative">
-                  <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                  <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
                   <Input
                     placeholder="Search by order ID, customer name, or product..."
                     value={searchTerm}
@@ -109,12 +133,9 @@ export default function OrdersListPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Orders</SelectItem>
-                    <SelectItem value="Pending">Pending</SelectItem>
-                    <SelectItem value="Confirmed">Confirmed</SelectItem>
-                    <SelectItem value="Processing">Processing</SelectItem>
-                    <SelectItem value="Shipped">Shipped</SelectItem>
-                    <SelectItem value="Delivered">Delivered</SelectItem>
-                    <SelectItem value="Cancelled">Cancelled</SelectItem>
+                    {statusOptions.map((status) => (
+                      <SelectItem key={status} value={status}>{status}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -126,11 +147,11 @@ export default function OrdersListPage() {
         {filteredOrders.length === 0 ? (
           <Card>
             <CardContent className="text-center py-12">
-              <Package className="h-16 w-16 mx-auto text-gray-400 mb-4" />
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">
+              <Package className="h-16 w-16 mx-auto text-slate-400 mb-4" />
+              <h3 className="text-xl font-semibold text-white mb-2">
                 {orders.length === 0 ? 'No Orders Yet' : 'No Orders Found'}
               </h3>
-              <p className="text-gray-600 mb-6">
+              <p className="text-slate-300 mb-6">
                 {orders.length === 0 
                   ? 'You haven\'t placed any orders yet. Start shopping to see your orders here.'
                   : 'Try adjusting your search or filter criteria.'
@@ -139,7 +160,7 @@ export default function OrdersListPage() {
               {orders.length === 0 && (
                 <Button 
                   onClick={() => window.location.href = '/products'}
-                  className="bg-blue-600 hover:bg-blue-700"
+                  className="bg-cyan-500 hover:bg-cyan-400 text-slate-900"
                 >
                   Start Shopping
                 </Button>
@@ -149,7 +170,7 @@ export default function OrdersListPage() {
         ) : (
           <div className="space-y-4">
             {filteredOrders.map((order) => (
-              <Card key={order.id} className="hover:shadow-md transition-shadow">
+              <Card key={order.id} className="border-white/10 bg-slate-900/40 hover:shadow-md transition-shadow">
                 <CardContent className="p-6">
                   <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
                     <div className="space-y-3">
@@ -162,7 +183,7 @@ export default function OrdersListPage() {
                         </Badge>
                       </div>
                       
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm text-gray-600">
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm text-slate-300">
                         <div className="flex items-center gap-2">
                           <Calendar className="h-4 w-4" />
                           {new Date(order.created_at).toLocaleDateString('en-IN')}
@@ -189,11 +210,11 @@ export default function OrdersListPage() {
 
                       <div className="space-y-1">
                         <p className="font-medium text-sm">Customer: {order.customer_name}</p>
-                        <p className="text-sm text-gray-600">
+                        <p className="text-sm text-slate-300">
                           Items: {order.items.map(item => item.name).join(', ')}
                         </p>
                         {order.delivery_address && (
-                          <p className="text-sm text-gray-600">
+                          <p className="text-sm text-slate-300">
                             Delivery: {order.delivery_address}
                           </p>
                         )}
@@ -214,7 +235,7 @@ export default function OrdersListPage() {
                         <Button
                           variant="outline"
                           size="sm"
-                          className="text-red-600 hover:text-red-700 border-red-200 hover:border-red-300"
+                          className="text-red-300 hover:text-red-200 border-red-500/30 hover:border-red-500/50"
                         >
                           Cancel Order
                         </Button>
@@ -229,33 +250,33 @@ export default function OrdersListPage() {
 
         {/* Summary Stats */}
         {orders.length > 0 && (
-          <Card className="mt-8">
+          <Card className="mt-8 border-white/10 bg-slate-900/40">
             <CardHeader>
               <CardTitle>Order Summary</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
                 <div>
-                  <p className="text-2xl font-bold text-blue-600">{orders.length}</p>
-                  <p className="text-sm text-gray-600">Total Orders</p>
+                  <p className="text-2xl font-bold text-cyan-300">{orders.length}</p>
+                  <p className="text-sm text-slate-300">Total Orders</p>
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-green-600">
+                  <p className="text-2xl font-bold text-emerald-300">
                     {orders.filter(o => o.status === 'Delivered').length}
                   </p>
-                  <p className="text-sm text-gray-600">Delivered</p>
+                  <p className="text-sm text-slate-300">Delivered</p>
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-yellow-600">
+                  <p className="text-2xl font-bold text-amber-300">
                     {orders.filter(o => ['Pending', 'Confirmed', 'Processing', 'Shipped'].includes(o.status)).length}
                   </p>
-                  <p className="text-sm text-gray-600">In Progress</p>
+                  <p className="text-sm text-slate-300">In Progress</p>
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-purple-600">
+                  <p className="text-2xl font-bold text-violet-300">
                     ₹{orders.reduce((total, order) => total + order.total, 0).toFixed(2)}
                   </p>
-                  <p className="text-sm text-gray-600">Total Spent</p>
+                  <p className="text-sm text-slate-300">Total Spent</p>
                 </div>
               </div>
             </CardContent>

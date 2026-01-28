@@ -32,58 +32,20 @@ export interface PaymentMethod {
 }
 
 export interface PaymentSettings {
-  razorpay: PaymentMethod;
-  stripe: PaymentMethod;
-  phonepe: PaymentMethod;
-  paytm: PaymentMethod;
   payu: PaymentMethod;
-  cashfree: PaymentMethod;
   cod: PaymentMethod;
   upi: PaymentMethod;
 }
 
 const defaultPaymentSettings: PaymentSettings = {
-  razorpay: {
-    id: 'razorpay',
-    name: 'Razorpay',
-    type: 'online',
-    enabled: false,
-    config: {}
-  },
-  stripe: {
-    id: 'stripe',
-    name: 'Stripe',
-    type: 'online',
-    enabled: false,
-    config: {}
-  },
-  phonepe: {
-    id: 'phonepe',
-    name: 'PhonePe',
-    type: 'online',
-    enabled: false,
-    config: {}
-  },
-  paytm: {
-    id: 'paytm',
-    name: 'Paytm',
-    type: 'online',
-    enabled: false,
-    config: {}
-  },
   payu: {
     id: 'payu',
     name: 'PayU',
     type: 'online',
-    enabled: false,
-    config: {}
-  },
-  cashfree: {
-    id: 'cashfree',
-    name: 'Cashfree',
-    type: 'online',
-    enabled: false,
-    config: {}
+    enabled: true,
+    config: {
+      environment: 'test' // Configure via VS Code: 'test' or 'production'
+    }
   },
   cod: {
     id: 'cod',
@@ -107,74 +69,23 @@ export function usePaymentMethods() {
   const [error, setError] = useState<string | null>(null);
 
   const fetchPaymentSettings = async () => {
-    try {
-      setLoading(true);
-      
-      const response = await fetch('/api/admin/payment-settings');
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      
-      if (data.paymentSettings) {
-        setPaymentMethods(data.paymentSettings);
-      } else {
-        setPaymentMethods(defaultPaymentSettings);
-      }
-    } catch (err) {
-      logger.error('Error fetching payment settings:', { error: err });
-      setError(err instanceof Error ? err.message : 'Failed to fetch payment settings');
-      setPaymentMethods(defaultPaymentSettings);
-    } finally {
-      setLoading(false);
-    }
+    // Settings are now managed via code (VS Code)
+    // We simulate a fetch by just setting the default (hardcoded) settings
+    setLoading(false);
+    setPaymentMethods(defaultPaymentSettings);
   };
 
   const updatePaymentMethod = async (methodId: string, updates: Partial<PaymentMethod>) => {
-    try {
-      setLoading(true);
-      
-      const response = await fetch('/api/admin/payment-settings', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ methodId, updates })
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      
-      if (data.success && data.method) {
-        // Update local state
-        setPaymentMethods(prev => ({
-          ...prev,
-          [methodId]: data.method
-        }));
-      }
-
-      return { success: true };
-    } catch (err) {
-      logger.error('Error updating payment method:', { error: err });
-      setError(err instanceof Error ? err.message : 'Failed to update payment method');
-      return { success: false, error: err instanceof Error ? err.message : 'Update failed' };
-    } finally {
-      setLoading(false);
-    }
+    console.warn('Payment settings are managed via code. Updates via UI are disabled.');
+    return { success: false, error: 'Settings are managed via code' };
   };
 
   const getEnabledPaymentMethods = () => {
-    return Object.values(paymentMethods).filter(method => method.enabled && method.id !== 'razorpay');
+    return Object.values(paymentMethods).filter(method => method.enabled);
   };
 
   const getOnlinePaymentMethods = () => {
-    return Object.values(paymentMethods).filter(method => method.enabled && method.type === 'online' && method.id !== 'razorpay');
+    return Object.values(paymentMethods).filter(method => method.enabled && method.type === 'online');
   };
 
   const getOfflinePaymentMethods = () => {

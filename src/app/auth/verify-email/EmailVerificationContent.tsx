@@ -65,22 +65,22 @@ export default function EmailVerificationContent() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen flex items-center justify-center bg-slate-950 py-12 px-4 sm:px-6 lg:px-8 text-slate-100">
       <div className="max-w-md w-full space-y-8">
         <div className="text-center">
-          <CheckCircle className="mx-auto h-12 w-12 text-green-500" />
-          <h2 className="mt-6 text-3xl font-extrabold text-gray-900">
+          <CheckCircle className="mx-auto h-12 w-12 text-emerald-300" />
+          <h2 className="mt-6 text-3xl font-extrabold text-white">
             Check your email
           </h2>
-          <p className="mt-2 text-sm text-gray-600">
+          <p className="mt-2 text-sm text-slate-300">
             We've sent a verification link to your email address
           </p>
         </div>
         
-        <Card>
+        <Card className="border-white/10 bg-slate-900/60">
           <CardHeader className="text-center">
-            <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-blue-100">
-              <Mail className="h-6 w-6 text-blue-600" />
+            <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-cyan-500/10">
+              <Mail className="h-6 w-6 text-cyan-300" />
             </div>
             <CardTitle className="text-xl">Verify your email address</CardTitle>
             <CardDescription>
@@ -93,7 +93,7 @@ export default function EmailVerificationContent() {
           </CardHeader>
           
           <CardContent className="space-y-4">
-            <div className="text-sm text-gray-600 space-y-2">
+            <div className="text-sm text-slate-300 space-y-2">
               <p>To complete your registration:</p>
               <ol className="list-decimal list-inside space-y-1 ml-4">
                 <li>Check your email inbox</li>
@@ -103,16 +103,16 @@ export default function EmailVerificationContent() {
             </div>
             
             {resendStatus === 'success' && (
-              <div className="bg-green-50 border border-green-200 rounded-md p-3">
-                <p className="text-sm text-green-700">
+              <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-md p-3">
+                <p className="text-sm text-emerald-200">
                   ✓ Verification email sent successfully!
                 </p>
               </div>
             )}
             
             {resendStatus === 'error' && (
-              <div className="bg-red-50 border border-red-200 rounded-md p-3">
-                <p className="text-sm text-red-700">
+              <div className="bg-red-500/10 border border-red-500/20 rounded-md p-3">
+                <p className="text-sm text-red-200">
                   Failed to send verification email. Please try again.
                 </p>
               </div>

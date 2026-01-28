@@ -19,25 +19,30 @@ const AUTO_CANCEL_REASON = 'Automatically cancelled after 24 hours without payme
 
 export async function POST(_request: NextRequest) {
   try {
-    const supabase = await createServerClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const authHeader = _request.headers.get('authorization');
+    const isCron = process.env.CRON_SECRET && authHeader === `Bearer ${process.env.CRON_SECRET}`;
+    
+    if (!isCron) {
+      const supabase = await createServerClient();
+      const { data: { user } } = await supabase.auth.getUser();
 
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+      if (!user) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
 
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .maybeSingle();
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .maybeSingle();
 
-    const role = (profile?.role as UserRole | undefined)
-      ?? ((user.app_metadata as Record<string, unknown> | undefined)?.role as UserRole | undefined)
-      ?? 'customer';
+      const role = (profile?.role as UserRole | undefined)
+        ?? ((user.app_metadata as Record<string, unknown> | undefined)?.role as UserRole | undefined)
+        ?? 'customer';
 
-    if (!isAtLeast(role, 'manager')) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      if (!isAtLeast(role, 'manager')) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
     }
 
     const serviceClient = createServiceClient();
@@ -45,7 +50,7 @@ export async function POST(_request: NextRequest) {
 
     const { data: staleOrders, error: fetchError } = await serviceClient
       .from('orders')
-      .select('id')
+      .select('id, items')
       .in('status', STALE_STATUSES)
       .lte('created_at', cutoffIso)
       .or(
@@ -88,8 +93,50 @@ export async function POST(_request: NextRequest) {
       return NextResponse.json({ error: 'Failed to cancel stale orders' }, { status: 500 });
     }
 
-    logger.info('orders_auto_cancel_success', { count: staleIds.length });
-    return NextResponse.json({ success: true, cancelled: staleIds.length });
+    // Restore stock for cancelled orders
+    let restoredCount = 0;
+    for (const order of staleOrders) {
+      const items = (order.items as any)?.cart_items || [];
+      if (Array.isArray(items)) {
+        for (const item of items) {
+          const productId = item.id || item.productId;
+          const quantity = Number(item.quantity);
+          
+          if (productId && quantity > 0) {
+            // Attempt to restore stock using RPC
+            const { error: stockError } = await serviceClient.rpc('increment_product_stock', {
+              p_product_id: productId,
+              p_quantity: quantity
+            });
+
+            if (stockError) {
+               logger.error('orders_auto_cancel_stock_restore_error', { 
+                 error: stockError.message, 
+                 orderId: order.id,
+                 productId 
+               });
+               // Fallback: Try direct update if RPC fails (e.g. function not deployed yet)
+               // Note: This is less safe but better than losing stock
+               try {
+                 const { data: prod } = await serviceClient.from('products').select('stock_quantity').eq('id', productId).single();
+                 if (prod) {
+                   await serviceClient.from('products')
+                     .update({ stock_quantity: (prod.stock_quantity || 0) + quantity })
+                     .eq('id', productId);
+                 }
+               } catch (e) {
+                 logger.error('orders_auto_cancel_stock_fallback_error', { error: e });
+               }
+            } else {
+              restoredCount++;
+            }
+          }
+        }
+      }
+    }
+
+    logger.info('orders_auto_cancel_success', { count: staleIds.length, restoredItems: restoredCount });
+    return NextResponse.json({ success: true, cancelled: staleIds.length, restoredItems: restoredCount });
   } catch (error) {
     logger.error('orders_auto_cancel_unhandled', { error });
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

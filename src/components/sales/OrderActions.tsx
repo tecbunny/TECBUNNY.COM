@@ -44,6 +44,8 @@ import { useAuth } from '../../lib/hooks';
 import { isManagerClient, isSalesClient } from '../../lib/permissions-client';
 import type { Order, OrderStatus } from '../../lib/types';
 
+const SERVICE_TYPE_SET = new Set(['Service', 'Repair', 'Installation', 'Setup']);
+
 const ADMIN_NOTIFICATION_EMAIL = (() => {
   const envValue = (process.env.NEXT_PUBLIC_ORDER_ADMIN_EMAIL || '').trim();
   return envValue || 'tecbunnysolution@gmail.com';
@@ -109,6 +111,7 @@ export function OrderActions({ order, onStatusUpdate, variant = 'dropdown' }: Or
   const hasPermission = order.type === 'Pickup' ? canManagePickupOrders : canManageOrders;
 
   const isPickupLikeOrder = order.type === 'Pickup' || order.type === 'Walk-in';
+  const isServiceOrder = SERVICE_TYPE_SET.has(order.type);
 
   React.useEffect(() => {
     setPaymentReference(order.payment_reference ?? '');
@@ -116,7 +119,8 @@ export function OrderActions({ order, onStatusUpdate, variant = 'dropdown' }: Or
 
   const notifyStatusChange = async (status: OrderStatus) => {
     const notifyPickupCustomer = async () => {
-      if (!order.customer_email) {
+      // Changed to check phone for WhatsApp notification
+      if (!order.customer_phone) {
         return;
       }
 
@@ -128,7 +132,8 @@ export function OrderActions({ order, onStatusUpdate, variant = 'dropdown' }: Or
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            to: order.customer_email,
+            // to: order.customer_email, // Deprecated in favor of phone
+            phone: order.customer_phone,
             orderData: {
               id: order.id,
               customer_name: order.customer_name,
@@ -142,10 +147,10 @@ export function OrderActions({ order, onStatusUpdate, variant = 'dropdown' }: Or
         });
 
         if (!response.ok) {
-          throw new Error(`pickup email failed with status ${response.status}`);
+          throw new Error(`pickup notification failed with status ${response.status}`);
         }
       } catch (error) {
-        logger.warn('pickup_notification_email_failed', {
+        logger.warn('pickup_notification_failed', {
           error: error instanceof Error ? error.message : String(error),
           orderId: order.id
         });
@@ -339,109 +344,181 @@ export function OrderActions({ order, onStatusUpdate, variant = 'dropdown' }: Or
       action: () => updateOrderStatus(isPickupLikeOrder ? 'Ready for Pickup' : 'Ready to Ship')
     };
 
-    switch (order.status) {
-      case 'Awaiting Payment':
-        actions.push({
-          label: 'Confirm Payment',
-          icon: <CreditCard className="h-4 w-4" />,
-          action: () => {
-            setPaymentReference(order.payment_reference ?? '');
-            setPaymentDialog(prev => ({ 
-              ...prev, 
+    const pushPaymentConfirmation = () => {
+      actions.push({
+        label: 'Confirm Payment',
+        icon: <CreditCard className="h-4 w-4" />,
+        action: () => {
+          setPaymentReference(order.payment_reference ?? '');
+          setPaymentDialog(prev => ({
+            ...prev,
+            isOpen: true,
+            onConfirm: () => handlePaymentConfirmation(true),
+            onReject: () => handlePaymentConfirmation(false),
+            onClose: () => setPaymentDialog(prev => ({ ...prev, isOpen: false }))
+          }));
+        }
+      });
+    };
+
+    if (isServiceOrder) {
+      switch (order.status) {
+        case 'Awaiting Payment':
+          pushPaymentConfirmation();
+          break;
+        case 'Pending':
+        case 'Payment Confirmed':
+          actions.push({ label: 'Schedule Visit', icon: <Clock className="h-4 w-4" />, action: () => updateOrderStatus('Visit Scheduled') });
+          if (order.status === 'Pending') {
+            actions.push({ label: 'Confirm Order', icon: <CheckCircle className="h-4 w-4" />, action: () => setConfirmDialog(prev => ({
+              ...prev,
               isOpen: true,
-              onConfirm: () => handlePaymentConfirmation(true),
-              onReject: () => handlePaymentConfirmation(false),
-              onClose: () => setPaymentDialog(prev => ({ ...prev, isOpen: false }))
-            }));
+              onAccept: () => handleOrderConfirmation(true),
+              onReject: () => handleOrderConfirmation(false),
+              onClose: () => setConfirmDialog(prev => ({ ...prev, isOpen: false }))
+            })) });
           }
-        });
-        break;
+          break;
+        case 'Visit Scheduled':
+          actions.push({ label: 'Mark Visit Completed', icon: <CheckCircle className="h-4 w-4" />, action: () => updateOrderStatus('Visit Completed') });
+          break;
+        case 'Visit Completed':
+          actions.push({ label: 'Mark Diagnosis Done', icon: <CheckCircle className="h-4 w-4" />, action: () => updateOrderStatus('Diagnosis Done') });
+          break;
+        case 'Diagnosis Done':
+          actions.push({ label: 'Send Quote', icon: <CheckCircle className="h-4 w-4" />, action: () => updateOrderStatus('Quote Sent') });
+          break;
+        case 'Quote Sent':
+          actions.push({ label: 'Await Customer Approval', icon: <Clock className="h-4 w-4" />, action: () => updateOrderStatus('Awaiting Customer Approval') });
+          break;
+        case 'Awaiting Customer Approval':
+          actions.push({ label: 'Approve Quote', icon: <CheckCircle className="h-4 w-4" />, action: () => updateOrderStatus('Approved') });
+          actions.push({ label: 'Reject Quote', icon: <XCircle className="h-4 w-4" />, action: () => updateOrderStatus('Rejected') });
+          break;
+        case 'Approved':
+          actions.push({ label: 'Order Parts', icon: <Package className="h-4 w-4" />, action: () => updateOrderStatus('Parts Ordered') });
+          actions.push({ label: 'Start Work', icon: <Package className="h-4 w-4" />, action: () => updateOrderStatus('Work In Progress') });
+          actions.push({ label: 'Put On Hold', icon: <Clock className="h-4 w-4" />, action: () => updateOrderStatus('On Hold') });
+          break;
+        case 'Parts Ordered':
+          actions.push({ label: 'Start Work', icon: <Package className="h-4 w-4" />, action: () => updateOrderStatus('Work In Progress') });
+          actions.push({ label: 'Put On Hold', icon: <Clock className="h-4 w-4" />, action: () => updateOrderStatus('On Hold') });
+          break;
+        case 'On Hold':
+          actions.push({ label: 'Resume Work', icon: <Package className="h-4 w-4" />, action: () => updateOrderStatus('Work In Progress') });
+          break;
+        case 'Work In Progress':
+          actions.push({ label: 'Move to QC', icon: <CheckCircle className="h-4 w-4" />, action: () => updateOrderStatus('Quality Check') });
+          break;
+        case 'Quality Check':
+          actions.push({ label: 'Ready for Pickup', icon: <Clock className="h-4 w-4" />, action: () => updateOrderStatus('Ready for Pickup') });
+          actions.push({ label: 'Ready for Delivery', icon: <Truck className="h-4 w-4" />, action: () => updateOrderStatus('Ready for Delivery') });
+          break;
+        case 'Ready for Pickup':
+        case 'Ready for Delivery':
+          actions.push({ label: 'Mark Delivered/Picked Up', icon: <CheckCircle className="h-4 w-4" />, action: () => updateOrderStatus('Delivered/Picked Up') });
+          break;
+        case 'Delivered/Picked Up':
+          actions.push({ label: 'Close as Completed', icon: <CheckCircle className="h-4 w-4" />, action: () => updateOrderStatus('Completed') });
+          break;
+        case 'Completed':
+          actions.push({ label: 'Start Warranty/Support', icon: <CheckCircle className="h-4 w-4" />, action: () => updateOrderStatus('Warranty/Support Active') });
+          break;
+        default:
+          break;
+      }
+    } else {
+      switch (order.status) {
+        case 'Awaiting Payment':
+          pushPaymentConfirmation();
+          break;
 
-      case 'Pending':
-        actions.push({
-          label: 'Confirm Order',
-          icon: <CheckCircle className="h-4 w-4" />,
-          action: () => setConfirmDialog(prev => ({
-            ...prev,
-            isOpen: true,
-            onAccept: () => handleOrderConfirmation(true),
-            onReject: () => handleOrderConfirmation(false),
-            onClose: () => setConfirmDialog(prev => ({ ...prev, isOpen: false }))
-          }))
-        });
-        break;
-
-      case 'Payment Confirmed':
-        actions.push({
-          label: 'Confirm Order',
-          icon: <CheckCircle className="h-4 w-4" />,
-          action: () => setConfirmDialog(prev => ({
-            ...prev,
-            isOpen: true,
-            onAccept: () => handleOrderConfirmation(true),
-            onReject: () => handleOrderConfirmation(false),
-            onClose: () => setConfirmDialog(prev => ({ ...prev, isOpen: false }))
-          }))
-        });
-        actions.push(readyAction);
-        break;
-
-      case 'Confirmed':
-        actions.push(readyAction);
-        actions.push({
-          label: 'Start Processing',
-          icon: <Package className="h-4 w-4" />,
-          action: () => updateOrderStatus('Processing')
-        });
-        break;
-
-      case 'Processing':
-        if (isPickupLikeOrder) {
+        case 'Pending':
           actions.push({
-            label: 'Ready for Pickup',
-            icon: <Clock className="h-4 w-4" />,
-            action: () => updateOrderStatus('Ready for Pickup')
-          });
-        } else {
-          actions.push({
-            label: 'Ready to Ship',
-            icon: <Clock className="h-4 w-4" />,
-            action: () => updateOrderStatus('Ready to Ship')
-          });
-        }
-        break;
-
-      case 'Ready to Ship':
-        if (order.type !== 'Pickup') {
-          actions.push({
-            label: 'Mark as Shipped',
-            icon: <Truck className="h-4 w-4" />,
-            action: () => updateOrderStatus('Shipped')
-          });
-        }
-        break;
-
-      case 'Shipped':
-        if (order.type !== 'Pickup') {
-          actions.push({
-            label: 'Mark as Delivered',
+            label: 'Confirm Order',
             icon: <CheckCircle className="h-4 w-4" />,
-            action: () => updateOrderStatus('Delivered')
+            action: () => setConfirmDialog(prev => ({
+              ...prev,
+              isOpen: true,
+              onAccept: () => handleOrderConfirmation(true),
+              onReject: () => handleOrderConfirmation(false),
+              onClose: () => setConfirmDialog(prev => ({ ...prev, isOpen: false }))
+            }))
           });
-        }
-        break;
+          break;
 
-      case 'Ready for Pickup':
-        actions.push({
-          label: 'Mark as Completed',
-          icon: <CheckCircle className="h-4 w-4" />,
-          action: () => updateOrderStatus('Completed')
-        });
-        break;
+        case 'Payment Confirmed':
+          actions.push({
+            label: 'Confirm Order',
+            icon: <CheckCircle className="h-4 w-4" />,
+            action: () => setConfirmDialog(prev => ({
+              ...prev,
+              isOpen: true,
+              onAccept: () => handleOrderConfirmation(true),
+              onReject: () => handleOrderConfirmation(false),
+              onClose: () => setConfirmDialog(prev => ({ ...prev, isOpen: false }))
+            }))
+          });
+          actions.push(readyAction);
+          break;
+
+        case 'Confirmed':
+          actions.push(readyAction);
+          actions.push({
+            label: 'Start Processing',
+            icon: <Package className="h-4 w-4" />,
+            action: () => updateOrderStatus('Processing')
+          });
+          break;
+
+        case 'Processing':
+          if (isPickupLikeOrder) {
+            actions.push({
+              label: 'Ready for Pickup',
+              icon: <Clock className="h-4 w-4" />,
+              action: () => updateOrderStatus('Ready for Pickup')
+            });
+          } else {
+            actions.push({
+              label: 'Ready to Ship',
+              icon: <Clock className="h-4 w-4" />,
+              action: () => updateOrderStatus('Ready to Ship')
+            });
+          }
+          break;
+
+        case 'Ready to Ship':
+          if (order.type !== 'Pickup') {
+            actions.push({
+              label: 'Mark as Shipped',
+              icon: <Truck className="h-4 w-4" />,
+              action: () => updateOrderStatus('Shipped')
+            });
+          }
+          break;
+
+        case 'Shipped':
+          if (order.type !== 'Pickup') {
+            actions.push({
+              label: 'Mark as Delivered',
+              icon: <CheckCircle className="h-4 w-4" />,
+              action: () => updateOrderStatus('Delivered')
+            });
+          }
+          break;
+
+        case 'Ready for Pickup':
+          actions.push({
+            label: 'Mark as Completed',
+            icon: <CheckCircle className="h-4 w-4" />,
+            action: () => updateOrderStatus('Completed')
+          });
+          break;
+      }
     }
 
     // Cancellation option (except for completed/cancelled orders)
-    if (!['Delivered', 'Cancelled', 'Rejected'].includes(order.status)) {
+    if (!['Delivered', 'Delivered/Picked Up', 'Warranty/Support Active', 'Cancelled', 'Rejected'].includes(order.status)) {
       actions.push({
         label: 'Cancel Order',
         icon: <Ban className="h-4 w-4" />,
@@ -464,10 +541,23 @@ export function OrderActions({ order, onStatusUpdate, variant = 'dropdown' }: Or
       case 'Payment Confirmed': return 'default';
       case 'Confirmed': return 'default';
       case 'Processing': return 'default';
-  case 'Ready for Pickup': return 'default';
+      case 'Ready for Pickup': return 'default';
+      case 'Ready for Delivery': return 'default';
       case 'Ready to Ship': return 'default';
       case 'Shipped': return 'secondary';
       case 'Delivered': return 'outline';
+      case 'Delivered/Picked Up': return 'outline';
+      case 'Visit Scheduled': return 'default';
+      case 'Visit Completed': return 'default';
+      case 'Diagnosis Done': return 'default';
+      case 'Quote Sent': return 'default';
+      case 'Awaiting Customer Approval': return 'default';
+      case 'Approved': return 'default';
+      case 'Parts Ordered': return 'default';
+      case 'Work In Progress': return 'default';
+      case 'Quality Check': return 'default';
+      case 'On Hold': return 'outline';
+      case 'Warranty/Support Active': return 'outline';
       case 'Cancelled': case 'Rejected': return 'destructive';
       default: return 'outline';
     }

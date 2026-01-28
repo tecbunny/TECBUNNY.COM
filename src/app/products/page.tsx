@@ -1,7 +1,17 @@
 import { Suspense } from 'react';
 
+import type { Metadata } from 'next';
+
 import { ShopPageContent } from '../../components/products/ShopPageContent';
-import HeroCarousel from '../../components/HeroCarousel';
+import { createPageMetadata } from '../../lib/metadata';
+
+export const metadata: Metadata = createPageMetadata({
+  title: 'Shop Products - TecBunny Store',
+  description: 'Browse CCTV systems, computers, accessories, and AMC-ready hardware curated by TecBunny.',
+  keywords: ['shop', 'products', 'CCTV', 'computers', 'accessories', 'TecBunny'],
+  path: '/products',
+  image: '/brand.png',
+});
 
 function ProductsPageSkeleton() {
   return (
@@ -30,10 +40,7 @@ function ProductsPageSkeleton() {
 export default function Page() {
   return (
     <Suspense fallback={<ProductsPageSkeleton />}>
-      <div className="space-y-8">
-        <HeroCarousel pageKey="products" />
-        <ShopPageContent />
-      </div>
+      <ShopPageContent />
     </Suspense>
   );
 }

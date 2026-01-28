@@ -323,7 +323,7 @@ export default function UPIPaymentPage() {
                 <Smartphone className="mr-2 h-4 w-4" />
                 Pay with UPI App
               </Button>
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-slate-300">
                 This will open your UPI app with pre-filled payment details
               </p>
             </div>
@@ -333,22 +333,23 @@ export default function UPIPaymentPage() {
             {/* Manual UPI Transfer */}
             <div className="space-y-2">
               <h4 className="font-medium">Option 2: Manual Transfer</h4>
-              <div className="bg-gray-50 p-4 rounded-lg">
+              <div className="bg-white/5 border border-white/10 p-4 rounded-lg">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-gray-600">UPI ID:</p>
+                    <p className="text-sm text-slate-300">UPI ID:</p>
                     <p className="font-mono font-medium">{UPI_ID}</p>
                   </div>
                   <Button 
                     variant="outline" 
                     size="sm" 
                     onClick={copyUPIId}
+                    aria-label="Copy UPI ID"
                   >
                     {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                   </Button>
                 </div>
               </div>
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-slate-300">
                 Transfer ₹{order.total.toFixed(2)} to the above UPI ID with reference: Order {formatOrderNumber(order.id)}
               </p>
             </div>
@@ -358,7 +359,7 @@ export default function UPIPaymentPage() {
             {/* QR Code Section */}
             <div className="space-y-2">
               <h4 className="font-medium">Option 3: Scan QR Code</h4>
-              <div className="flex items-center justify-center bg-gray-50 p-8 rounded-lg">
+              <div className="flex items-center justify-center bg-white/5 border border-white/10 p-8 rounded-lg">
                 <div className="text-center">
                   {qrCodeUrl ? (
                     <div className="space-y-2">
@@ -369,14 +370,14 @@ export default function UPIPaymentPage() {
                         width={200}
                         height={200}
                       />
-                      <p className="text-sm text-gray-600">
+                      <p className="text-sm text-slate-300">
                         Scan with any UPI app to pay ₹{order?.total.toFixed(2)}
                       </p>
                     </div>
                   ) : (
                     <div>
-                      <QrCode className="h-24 w-24 mx-auto text-gray-400 mb-2 animate-pulse" />
-                      <p className="text-sm text-gray-600">Generating QR Code...</p>
+                      <QrCode className="h-24 w-24 mx-auto text-slate-400 mb-2 animate-pulse" />
+                      <p className="text-sm text-slate-300">Generating QR Code...</p>
                     </div>
                   )}
                 </div>
@@ -416,7 +417,7 @@ export default function UPIPaymentPage() {
               >
                 {paymentStatus === 'paid' ? 'Payment Confirmed' : 'I have completed the payment'}
               </Button>
-              <p className="text-xs text-gray-500 text-center">
+              <p className="text-xs text-slate-400 text-center">
                 By clicking above, you confirm that you have successfully completed the payment.
                 Please ensure you have a valid transaction receipt.
               </p>

@@ -41,7 +41,7 @@ const addUserSchema = z.object({
   password: z.string().min(6, { message: 'Password must be at least 6 characters.' }).optional(),
   confirmPassword: z.string().min(6, { message: 'Please confirm your password.' }).optional(),
   role: z.enum(['customer', 'admin', 'manager', 'sales', 'accounts'], {
-    required_error: 'Please select a role.',
+    message: 'Please select a role.',
   }),
 }).refine((data) => {
   if (!data.password && !data.confirmPassword) return true; // both optional

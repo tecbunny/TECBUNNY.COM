@@ -1,14 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { createClient } from '../../../../../lib/supabase/server';
-import { sendWhatsAppNotification } from '../../../../../lib/whatsapp-service';
+import { sendWhatsAppNotification, sendShipmentNotification } from '../../../../../lib/whatsapp-service';
 import { logger } from '../../../../../lib/logger';
 
 // Generic order shipped webhook handler
 export async function POST(request: NextRequest) {
+  let body: any = {};
   try {
     const supabase = await createClient();
-    const body = await request.json();
+    try {
+      body = await request.json();
+    } catch (e) {
+      logger.error('Failed to parse webhook body');
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    }
     
     logger.info('Order shipped webhook received:', { body: JSON.stringify(body) });
 
@@ -29,7 +35,7 @@ export async function POST(request: NextRequest) {
     
     try {
       const supabase = await createClient();
-      await logWebhookEvent(supabase, 'order_shipped', await request.json(), 'unknown', false, error.message);
+      await logWebhookEvent(supabase, 'order_shipped', body, 'unknown', false, error.message);
     } catch (logError: any) {
       logger.error('Failed to log webhook error:', { error: logError.message });
     }
@@ -149,42 +155,20 @@ async function processOrderShipped(supabase: any, data: any, source: string) {
 
 async function sendOrderShippedWhatsApp(phoneNumber: string, orderData: any) {
   try {
-    const deliveryInfo = orderData.estimatedDelivery 
-      ? `📅 Expected delivery: ${new Date(orderData.estimatedDelivery).toLocaleDateString('en-IN')}`
-      : '📅 Delivery date will be updated soon';
+    const estimatedDelivery = orderData.estimatedDelivery 
+      ? new Date(orderData.estimatedDelivery).toLocaleDateString('en-IN')
+      : 'Soon';
 
-    const trackingInfo = orderData.trackingNumber 
-      ? `📦 Tracking: ${orderData.trackingNumber}${orderData.carrier ? ` (${orderData.carrier})` : ''}`
-      : '📦 Tracking number will be provided soon';
+    await sendShipmentNotification(phoneNumber, {
+      orderNumber: orderData.orderId,
+      customerName: orderData.customerName,
+      carrier: orderData.carrier || 'Courier',
+      trackingNumber: orderData.trackingNumber || 'Pending'
+    });
 
-    const message = `
-🚚 Order Shipped - TecBunny Store
-
-${orderData.customerName ? `Hi ${orderData.customerName}! ` : ''}Great news! Your order is on its way! 🎉
-
-📦 Order: ${orderData.orderId}
-${trackingInfo}
-${deliveryInfo}
-
-${orderData.trackingUrl ? `🔍 Track your order: ${orderData.trackingUrl}` : ''}
-
-${orderData.shippingAddress ? `📍 Shipping to: ${orderData.shippingAddress}` : ''}
-
-💡 Delivery Tips:
-• Keep your phone handy for delivery updates
-• Someone should be available to receive the package
-• Check package contents upon delivery
-
-Questions? Reply to this message or call +91 9429694995
-
-Thank you for choosing TecBunny! 🚀
-    `.trim();
-
-    await sendWhatsAppNotification(phoneNumber, message);
-    logger.info('Order shipped WhatsApp sent:', { 
+    logger.info('Order shipped WhatsApp sent (Template):', { 
       phoneNumber, 
-      orderId: orderData.orderId,
-      trackingNumber: orderData.trackingNumber
+      orderId: orderData.orderId 
     });
   } catch (error: any) {
     logger.error('Failed to send order shipped WhatsApp:', { error: error.message });
@@ -233,6 +217,8 @@ function validateWebhookSignature(signature: string | null, body: any, source: s
     return false;
   }
 
+  // TODO: Implement actual HMAC signature validation for production
+  // This currently allows any request with a signature header
   return true;
 }
 

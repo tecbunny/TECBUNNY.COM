@@ -7,7 +7,7 @@ import { SupabaseClient, User } from '@supabase/supabase-js';
 
 export async function isUserAdmin(user: User, supabase: SupabaseClient): Promise<boolean> {
   // First check app_metadata (secure, admin-only editable)
-  if (user.app_metadata?.role === 'admin') {
+  if (user.app_metadata?.role === 'admin' || user.app_metadata?.role === 'superadmin') {
     return true;
   }
 
@@ -19,7 +19,7 @@ export async function isUserAdmin(user: User, supabase: SupabaseClient): Promise
       .eq('id', user.id)
       .single();
 
-    return profile?.role === 'admin';
+    return profile?.role === 'admin' || profile?.role === 'superadmin';
   } catch (error) {
     console.error('Error checking admin role:', error);
     return false;

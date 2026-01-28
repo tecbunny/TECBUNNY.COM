@@ -6,28 +6,27 @@ import { useRouter } from 'next/navigation';
 
 // Force dynamic rendering for auth page
 export const dynamic = 'force-dynamic';
-import { Mail, Lock, User, Phone, Eye, EyeOff, CheckCircle, AlertCircle, MessageCircle } from 'lucide-react';
+import { Mail, User, Phone, Eye, EyeOff, CheckCircle, AlertCircle, MessageCircle } from 'lucide-react';
 
 import Link from 'next/link';
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../../components/ui/card';
-import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import { Label } from '../../../components/ui/label';
 
 import { useToast } from '../../../hooks/use-toast';
 import { logger } from '../../../lib/logger';
+import { cn } from '../../../lib/utils';
 
 export default function SignUpPage() {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
-    mobile: '',
+    mobile: '+91',
     password: '',
     confirmPassword: ''
   });
-  type PreferredChannel = 'email' | 'whatsapp';
-  const [preferredChannel, setPreferredChannel] = useState<PreferredChannel>('email');
+  type PreferredChannel = 'whatsapp';
+  const [preferredChannel, setPreferredChannel] = useState<PreferredChannel>('whatsapp');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -83,7 +82,7 @@ export default function SignUpPage() {
     if (name === 'mobile') {
       const digitsOnly = value.replace(/\D/g, '');
       if (digitsOnly.length < 10) {
-        setPreferredChannel('email');
+        setPreferredChannel('whatsapp');
       }
     }
   };
@@ -101,12 +100,17 @@ export default function SignUpPage() {
       setError('Name is required');
       return false;
     }
-    if (!formData.email.trim()) {
-      setError('Email is required');
+    if (formData.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      setError('Please enter a valid email address');
       return false;
     }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      setError('Please enter a valid email address');
+    const normalizedMobile = formData.mobile.replace(/\D/g, '');
+    if (!normalizedMobile || normalizedMobile.length < 10) {
+      setError('Mobile number is required');
+      return false;
+    }
+    if (!mobileSupportsMessaging) {
+      setError('A valid WhatsApp mobile number is required');
       return false;
     }
     if (!formData.password) {
@@ -149,11 +153,11 @@ export default function SignUpPage() {
     headers,
         body: JSON.stringify({
           name: formData.name,
-          email: formData.email,
+          email: formData.email.trim() || undefined,
           mobile: formData.mobile,
           password: formData.password,
-      channel: preferredChannel,
-      captchaToken,
+          channel: preferredChannel,
+          captchaToken,
         }),
       });
 
@@ -215,7 +219,7 @@ export default function SignUpPage() {
       // Persist signup session (email, name, mobile, password) for OTP verification and account creation
       try {
         const signupData = {
-          email: formData.email,
+          email: formData.email.trim() || undefined,
           name: formData.name,
           mobile: formData.mobile,
           password: formData.password,
@@ -236,10 +240,12 @@ export default function SignUpPage() {
       setTimeout(() => {
         // Redirect to OTP verification page for signup
         const query = new URLSearchParams({
-          email: formData.email,
           otpId: data.otpId,
           channel: resolvedChannel,
         });
+        if (formData.email.trim()) {
+          query.set('email', formData.email.trim());
+        }
         if (formData.mobile) {
           query.set('mobile', formData.mobile);
         }
@@ -258,213 +264,211 @@ export default function SignUpPage() {
 
   if (success) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-        <Card className="w-full max-w-md">
-          <CardHeader className="text-center">
-            <div className="mx-auto w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mb-4">
-              <CheckCircle className="h-6 w-6 text-green-600" />
-            </div>
-            <CardTitle className="text-2xl font-bold text-gray-900">
-              Account Created!
-            </CardTitle>
-            <CardDescription>
-              {dispatchedChannel
-                ? `Verification code sent via ${getChannelLabel(dispatchedChannel)}.`
-                : "We're preparing your verification details."}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-gray-600 text-center">
-              {`${getVerificationPrompt(dispatchedChannel ?? undefined)} Redirecting to verification page...`}
-            </p>
-          </CardContent>
-        </Card>
+      <div className="min-h-screen bg-[#030712] text-slate-200 flex items-center justify-center px-4 py-16">
+        <style jsx global>{`
+          .signup-card {
+            background: rgba(15, 23, 42, 0.65);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 0 40px rgba(139, 92, 246, 0.15);
+          }
+        `}</style>
+        <div className="absolute inset-0 bg-[url('/noise.svg')] opacity-10" />
+        <div className="absolute top-1/2 right-1/2 translate-x-1/2 -translate-y-1/2 w-[520px] h-[520px] bg-purple-400/10 rounded-full blur-[100px] animate-pulse pointer-events-none" />
+
+        <div className="relative w-full max-w-md signup-card rounded-2xl p-8 text-center">
+          <div className="mx-auto w-12 h-12 bg-emerald-400/10 rounded-full flex items-center justify-center mb-4">
+            <CheckCircle className="h-6 w-6 text-emerald-300" />
+          </div>
+          <h2 className="text-2xl font-bold text-white">Account Created!</h2>
+          <p className="mt-2 text-sm text-slate-400">
+            {dispatchedChannel
+              ? `Verification code sent via ${getChannelLabel(dispatchedChannel)}.`
+              : "We're preparing your verification details."}
+          </p>
+          <p className="mt-4 text-sm text-slate-500">
+            {`${getVerificationPrompt(dispatchedChannel ?? undefined)} Redirecting to verification page...`}
+          </p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-[#030712] text-slate-200 flex items-center justify-center px-4 py-16">
+      <style jsx global>{`
+        .signup-card {
+          background: rgba(15, 23, 42, 0.65);
+          backdrop-filter: blur(20px);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          box-shadow: 0 0 40px rgba(139, 92, 246, 0.15);
+        }
+        .floating-label input:focus ~ label,
+        .floating-label input:not(:placeholder-shown) ~ label {
+          top: -0.5rem;
+          left: 0.75rem;
+          font-size: 0.75rem;
+          color: #8b5cf6;
+          background-color: #0f172a;
+          padding: 0 0.25rem;
+        }
+      `}</style>
+
+      <div className="absolute inset-0 bg-[url('/noise.svg')] opacity-10" />
+      <div className="absolute top-1/2 right-1/2 translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-purple-400/10 rounded-full blur-[100px] animate-pulse pointer-events-none" />
+
       {captchaDisabled && (
-        <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-2 rounded-md z-50">
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-amber-500/10 border border-amber-500/30 text-amber-200 px-4 py-2 rounded-md z-50">
           Captcha is disabled in this development environment
         </div>
       )}
-      <Card className="w-full max-w-4xl">
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold text-gray-900">
-            Create Account
-          </CardTitle>
-          <CardDescription>
-            Join TecBunny Store and start shopping today
-          </CardDescription>
-        </CardHeader>
-        
-        <CardContent>
-          <form onSubmit={handleSubmit}>
-            <div className="grid gap-6 md:grid-cols-2">
-              <div className="space-y-2">
-              <Label htmlFor="name">Full Name</Label>
-              <div className="relative">
-                <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+
+      <div className="relative w-full max-w-2xl">
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-slate-900/60 border border-white/10 mb-6 shadow-lg shadow-purple-400/10">
+            <User className="h-8 w-8 text-purple-300" />
+          </div>
+          <h1 className="text-3xl font-bold text-white tracking-wide">NEW NODE ENTRY</h1>
+          <p className="text-slate-400 text-sm mt-2">Initialize your identity to join the secured network.</p>
+        </div>
+
+        <div className="signup-card rounded-2xl p-8">
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="grid gap-5 md:grid-cols-2">
+              <div className="floating-label relative">
                 <Input
                   id="name"
                   name="name"
                   type="text"
                   value={formData.name}
                   onChange={handleInputChange}
-                  placeholder="Enter your full name"
-                  className="pl-10"
+                  placeholder="Name"
+                  className="peer w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white outline-none focus:border-purple-400 transition-colors placeholder-transparent"
                   required
                 />
-              </div>
-            </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="email">Email Address</Label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                  <Input
-                    id="email"
-                    name="email"
-                    type="email"
-                    value={formData.email}
-                    onChange={handleInputChange}
-                    placeholder="Enter your email"
-                    className="pl-10"
-                    required
-                  />
-                </div>
+                <Label htmlFor="name" className="absolute left-4 top-3 text-slate-500 text-sm transition-all pointer-events-none">Full Name</Label>
+                <User className="absolute right-4 top-3.5 h-4 w-4 text-slate-500" />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="mobile">Mobile Number (Optional)</Label>
-                <div className="relative">
-                  <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                  <Input
-                    id="mobile"
-                    name="mobile"
-                    type="tel"
-                    value={formData.mobile}
-                    onChange={handleInputChange}
-                    placeholder="Enter your mobile number"
-                    className="pl-10"
-                  />
-                </div>
+              <div className="floating-label relative">
+                <Input
+                  id="email"
+                  name="email"
+                  type="email"
+                  value={formData.email}
+                  onChange={handleInputChange}
+                  placeholder="Email"
+                  className="peer w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white outline-none focus:border-purple-400 transition-colors placeholder-transparent"
+                />
+                <Label htmlFor="email" className="absolute left-4 top-3 text-slate-500 text-sm transition-all pointer-events-none">Email Address (Optional)</Label>
+                <Mail className="absolute right-4 top-3.5 h-4 w-4 text-slate-500" />
+              </div>
+
+              <div className="floating-label relative">
+                <Input
+                  id="mobile"
+                  name="mobile"
+                  type="tel"
+                  value={formData.mobile}
+                  onChange={handleInputChange}
+                  placeholder="Mobile"
+                  className="peer w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white outline-none focus:border-purple-400 transition-colors placeholder-transparent"
+                  required
+                />
+                <Label htmlFor="mobile" className="absolute left-4 top-3 text-slate-500 text-sm transition-all pointer-events-none">Mobile Number (Required)</Label>
+                <Phone className="absolute right-4 top-3.5 h-4 w-4 text-slate-500" />
               </div>
 
               <div className="space-y-2 md:col-span-2">
-                <Label>Verification Method</Label>
+                <Label className="text-sm text-slate-400">Verification Method</Label>
                 <div className="grid gap-3">
-                <label className={`flex items-center justify-between rounded-lg border p-3 text-sm ${preferredChannel === 'email' ? 'border-blue-500 ring-1 ring-blue-200' : 'border-gray-200'}`}>
-                  <span className="flex items-center gap-3">
-                    <Mail className="h-4 w-4" />
-                    <span className="flex flex-col">
-                      <span className="font-medium">Email</span>
-                      <span className="text-xs text-gray-500">Send code to your email address</span>
+                  <label className={cn('flex items-center justify-between rounded-lg border p-3 text-sm', preferredChannel === 'whatsapp' ? 'border-purple-400/60 bg-purple-400/10' : 'border-white/10 bg-white/5', !mobileSupportsMessaging && 'opacity-60')}>
+                    <span className="flex items-center gap-3">
+                      <MessageCircle className="h-4 w-4 text-emerald-300" />
+                      <span className="flex flex-col">
+                        <span className="font-medium text-white">WhatsApp</span>
+                        <span className="text-xs text-slate-500">Send code via WhatsApp</span>
+                      </span>
                     </span>
-                  </span>
-                  <input
-                    type="radio"
-                    name="verification-channel"
-                    value="email"
-                    checked={preferredChannel === 'email'}
-                    onChange={() => handleChannelChange('email')}
-                    className="h-4 w-4"
-                  />
-                </label>
-
-                <label className={`flex items-center justify-between rounded-lg border p-3 text-sm ${preferredChannel === 'whatsapp' ? 'border-blue-500 ring-1 ring-blue-200' : 'border-gray-200'} ${!mobileSupportsMessaging ? 'opacity-60' : ''}`}>
-                  <span className="flex items-center gap-3">
-                    <MessageCircle className="h-4 w-4" />
-                    <span className="flex flex-col">
-                      <span className="font-medium">WhatsApp</span>
-                      <span className="text-xs text-gray-500">Send code via WhatsApp</span>
-                    </span>
-                  </span>
-                  <input
-                    type="radio"
-                    name="verification-channel"
-                    value="whatsapp"
-                    checked={preferredChannel === 'whatsapp'}
-                    onChange={() => handleChannelChange('whatsapp')}
-                    className="h-4 w-4"
-                    disabled={!mobileSupportsMessaging}
-                  />
-                </label>
-              </div>
-              {!mobileSupportsMessaging && (
-                <p className="text-xs text-gray-500">Add a valid mobile number to enable WhatsApp verification.</p>
-              )}
-            </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                  <Input
-                    id="password"
-                    name="password"
-                    type={showPassword ? 'text' : 'password'}
-                    value={formData.password}
-                    onChange={handleInputChange}
-                    placeholder="Create a password"
-                    className="pl-10 pr-10"
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                  >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
+                    <input
+                      type="radio"
+                      name="verification-channel"
+                      value="whatsapp"
+                      checked={preferredChannel === 'whatsapp'}
+                      onChange={() => handleChannelChange('whatsapp')}
+                      className="h-4 w-4 accent-purple-400"
+                      disabled={!mobileSupportsMessaging}
+                    />
+                  </label>
                 </div>
+                {!mobileSupportsMessaging && (
+                  <p className="text-xs text-slate-500">Add a valid WhatsApp number to enable verification.</p>
+                )}
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="confirmPassword">Confirm Password</Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                  <Input
-                    id="confirmPassword"
-                    name="confirmPassword"
-                    type={showConfirmPassword ? 'text' : 'password'}
-                    value={formData.confirmPassword}
-                    onChange={handleInputChange}
-                    placeholder="Confirm your password"
-                    className="pl-10 pr-10"
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                  >
-                    {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
+              <div className="floating-label relative">
+                <Input
+                  id="password"
+                  name="password"
+                  type={showPassword ? 'text' : 'password'}
+                  value={formData.password}
+                  onChange={handleInputChange}
+                  placeholder="Password"
+                  className="peer w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white outline-none focus:border-purple-400 transition-colors placeholder-transparent pr-12"
+                  required
+                />
+                <Label htmlFor="password" className="absolute left-4 top-3 text-slate-500 text-sm transition-all pointer-events-none">Create Password</Label>
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-4 top-3.5 text-slate-500 hover:text-purple-300 transition-colors"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+
+              <div className="floating-label relative">
+                <Input
+                  id="confirmPassword"
+                  name="confirmPassword"
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  value={formData.confirmPassword}
+                  onChange={handleInputChange}
+                  placeholder="Confirm"
+                  className="peer w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white outline-none focus:border-purple-400 transition-colors placeholder-transparent pr-12"
+                  required
+                />
+                <Label htmlFor="confirmPassword" className="absolute left-4 top-3 text-slate-500 text-sm transition-all pointer-events-none">Confirm Password</Label>
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-4 top-3.5 text-slate-500 hover:text-purple-300 transition-colors"
+                  aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
               </div>
 
               {error && (
-                <div className="md:col-span-2 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center space-x-2">
-                  <AlertCircle className="h-4 w-4 text-red-600" />
-                  <span className="text-sm text-red-700">{error}</span>
+                <div className="md:col-span-2 p-3 bg-red-500/10 border border-red-500/30 rounded-lg flex items-center space-x-2">
+                  <AlertCircle className="h-4 w-4 text-red-300" />
+                  <span className="text-sm text-red-200">{error}</span>
                 </div>
               )}
 
               {turnstileSiteKey && !captchaDisabled && (
                 <div className="space-y-2 md:col-span-2">
-                  <Label>Security Check</Label>
+                  <Label className="text-sm text-slate-400">Security Check</Label>
                   <div className="mt-1">
                     <Turnstile
                       sitekey={turnstileSiteKey}
                       onVerify={(token: string) => setCaptchaToken(token)}
                       onExpire={() => setCaptchaToken(null)}
                       onError={() => setCaptchaToken(null)}
-                      options={{ 
+                      options={{
                         action: 'signup',
-                        theme: 'light',
+                        theme: 'dark',
                         size: 'normal'
                       }}
                     />
@@ -473,27 +477,28 @@ export default function SignUpPage() {
               )}
 
               <div className="md:col-span-2 flex flex-col gap-4">
-                <Button
+                <button
                   type="submit"
-                  className="w-full"
+                  className="group relative w-full py-3 bg-purple-400 hover:bg-white text-slate-900 font-bold tracking-wide rounded-lg transition-colors flex items-center justify-center gap-3 shadow-[0_0_20px_rgba(139,92,246,0.3)] hover:shadow-[0_0_30px_rgba(139,92,246,0.5)] overflow-hidden"
                   disabled={isLoading}
                 >
-                  {isLoading ? 'Creating Account...' : 'Create Account'}
-                </Button>
+                  <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/30 to-transparent group-hover:translate-x-full transition-transform duration-700" />
+                  {isLoading ? 'Creating Account...' : 'Initialize'}
+                </button>
 
                 <div className="text-center">
-                  <p className="text-sm text-gray-600">
+                  <p className="text-sm text-slate-500">
                     Already have an account?{' '}
-                    <Link href="/auth/signin" className="font-medium text-blue-600 hover:text-blue-500">
-                      Sign in
+                    <Link href="/auth/signin" className="font-medium text-cyan-300 hover:text-white">
+                      Access Existing Node
                     </Link>
                   </p>
                 </div>
               </div>
             </div>
           </form>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }

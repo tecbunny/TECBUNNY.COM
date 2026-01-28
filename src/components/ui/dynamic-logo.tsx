@@ -51,9 +51,9 @@ function extractLogoUrl(record: SettingsPayload | null): string | null {
   return null;
 }
 
-async function fetchLogoSetting(key: string): Promise<string | null> {
+async function fetchLogoSetting(key: string, signal?: AbortSignal): Promise<string | null> {
   try {
-    const response = await fetch(`/api/settings?key=${encodeURIComponent(key)}`, { cache: 'no-store' });
+    const response = await fetch(`/api/settings?key=${encodeURIComponent(key)}`, { cache: 'no-store', signal });
     if (!response.ok) {
       if (response.status !== 404) {
         logger.warn('Failed to fetch logo setting', { key, status: response.status, context: 'DynamicLogo.fetchLogoSetting' });
@@ -82,12 +82,13 @@ export function DynamicLogo({
 
   React.useEffect(() => {
     let isMounted = true;
+    const controller = new AbortController();
 
     async function resolveLogo() {
       try {
-        let resolved = await fetchLogoSetting('logoUrl');
+        let resolved = await fetchLogoSetting('logoUrl', controller.signal);
         if (!resolved) {
-          resolved = await fetchLogoSetting('site_branding');
+          resolved = await fetchLogoSetting('site_branding', controller.signal);
         }
 
         if (isMounted) {
@@ -115,6 +116,7 @@ export function DynamicLogo({
 
     return () => {
       isMounted = false;
+      controller.abort();
     };
   }, []);
 

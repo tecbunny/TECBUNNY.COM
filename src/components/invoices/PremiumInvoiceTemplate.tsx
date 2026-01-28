@@ -39,7 +39,7 @@ export default function PremiumInvoiceTemplate() {
   const [invoiceData, setInvoiceData] = useState<InvoiceData>({
     companyName: 'TecBunny Solutions',
     companyAddress: 'H NO 11 NHAYGINWADA, PARSE, Parxem, Pernem, North Goa- 403512, Goa',
-    companyPhone: '+91 94296 94995',
+    companyPhone: '+91 96041 36010',
     companyEmail: 'support@tecbunny.com',
     companyGST: '30AAMCT1608G1ZO',
     invoiceNumber: 'INV-2025-001',

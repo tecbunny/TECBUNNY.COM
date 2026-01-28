@@ -404,7 +404,7 @@ export default function SuperfoneIntegrationPage() {
                       id="from_number"
                       value={callForm.from_number}
                       onChange={(e) => setCallForm(prev => ({ ...prev, from_number: e.target.value }))}
-                      placeholder="+919429694995"
+                      placeholder="+919604136010"
                     />
                   </div>
                   <div className="space-y-2">

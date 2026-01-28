@@ -1,7 +1,8 @@
 import type { User } from '@supabase/supabase-js';
 
-import { createClient, createServiceClient } from '../../lib/supabase/server';
+import { createClient, createServiceClient, isSupabaseServiceConfigured } from '../../lib/supabase/server';
 import { logger } from '../../lib/logger';
+import { ROLE_HIERARCHY, type UserRole } from '../../lib/roles';
 
 type AdminRole = 'admin' | 'manager' | 'superadmin';
 
@@ -24,6 +25,52 @@ function isAdminRole(role: unknown): role is AdminRole {
   return role === 'admin' || role === 'manager' || role === 'superadmin';
 }
 
+const METADATA_ROLE_KEYS = ['role', 'default_role', 'app_role', 'user_role'] as const;
+const METADATA_ROLE_ARRAY_KEYS = ['roles', 'app_roles'] as const;
+
+const normalizeRole = (value: unknown): UserRole | null => {
+  if (typeof value !== 'string' || !value) {
+    return null;
+  }
+
+  const normalized = value.trim().toLowerCase() as UserRole;
+  return normalized in ROLE_HIERARCHY ? normalized : null;
+};
+
+const extractRoleFromMetadata = (metadata: Record<string, unknown> | undefined | null): UserRole | null => {
+  if (!metadata || typeof metadata !== 'object') return null;
+
+  for (const key of METADATA_ROLE_KEYS) {
+    if (key in metadata) {
+      const parsed = normalizeRole((metadata as Record<string, unknown>)[key]);
+      if (parsed) return parsed;
+    }
+  }
+
+  for (const key of METADATA_ROLE_ARRAY_KEYS) {
+    const value = (metadata as Record<string, unknown>)[key];
+    if (Array.isArray(value)) {
+      for (const entry of value) {
+        const parsed = normalizeRole(entry);
+        if (parsed) return parsed;
+      }
+    }
+  }
+
+  return null;
+};
+
+const pickHighestRole = (...roles: Array<UserRole | null | undefined>): UserRole => {
+  let best: UserRole = 'customer';
+  for (const role of roles) {
+    if (!role) continue;
+    if (ROLE_HIERARCHY[role] > ROLE_HIERARCHY[best]) {
+      best = role;
+    }
+  }
+  return best;
+};
+
 export async function requireAdminContext(): Promise<AdminContext> {
   const supabase = await createClient();
   const {
@@ -39,7 +86,8 @@ export async function requireAdminContext(): Promise<AdminContext> {
     throw new AdminAuthError(401, 'Authentication required');
   }
 
-  const serviceSupabase = createServiceClient();
+  const serviceSupabase = isSupabaseServiceConfigured ? createServiceClient() : supabase;
+
   const { data: profile, error: profileError } = await serviceSupabase
     .from('profiles')
     .select('role')
@@ -51,16 +99,27 @@ export async function requireAdminContext(): Promise<AdminContext> {
       error: profileError.message,
       code: profileError.code,
     });
-    throw new AdminAuthError(500, 'Failed to verify admin profile');
+    if (!isSupabaseServiceConfigured) {
+      // Continue with metadata role if service key is unavailable
+      logger.warn('admin_auth_profile_fallback_metadata');
+    } else {
+      throw new AdminAuthError(500, 'Failed to verify admin profile');
+    }
   }
 
-  if (!profile || !isAdminRole(profile.role)) {
+  const metadataRole =
+    extractRoleFromMetadata(user.app_metadata as Record<string, unknown> | undefined) ??
+    extractRoleFromMetadata(user.user_metadata as Record<string, unknown> | undefined);
+  const profileRole = normalizeRole(profile?.role);
+  const resolvedRole = pickHighestRole(metadataRole, profileRole);
+
+  if (!isAdminRole(resolvedRole)) {
     throw new AdminAuthError(403, 'Insufficient permissions');
   }
 
   return {
     user,
-    role: profile.role,
+    role: resolvedRole,
     serviceSupabase,
   };
 }

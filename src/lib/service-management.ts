@@ -75,7 +75,7 @@ export class ServiceManagementService {
           customer_address: request.customer_address,
           issue_description: request.issue_description,
           priority: request.priority || 'medium',
-          status: 'pending'
+          status: 'created'
         }])
         .select()
         .single();
@@ -202,7 +202,7 @@ export class ServiceManagementService {
         updated_at: new Date().toISOString()
       };
 
-      if (status === 'in_progress') {
+      if (status === 'under_process') {
         updateData.started_at = new Date().toISOString();
       } else if (status === 'completed') {
         updateData.completed_at = new Date().toISOString();

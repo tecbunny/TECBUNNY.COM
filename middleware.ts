@@ -1,5 +1,4 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { randomUUID } from 'crypto'
 import { createServerClient } from '@supabase/ssr'
 
 export async function middleware(request: NextRequest) {
@@ -27,7 +26,7 @@ export async function middleware(request: NextRequest) {
 
   const requestHeaders = new Headers(request.headers)
   // Correlation ID
-  let correlationId = requestHeaders.get('x-correlation-id') || randomUUID()
+  let correlationId = requestHeaders.get('x-correlation-id') || crypto.randomUUID()
   requestHeaders.set('x-correlation-id', correlationId)
 
   const pathname = request.nextUrl.pathname
@@ -43,13 +42,9 @@ export async function middleware(request: NextRequest) {
           return request.cookies.getAll()
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => request.cookies.set(name, value))
-          response = NextResponse.next({
-            request,
-          })
-          cookiesToSet.forEach(({ name, value, options }) =>
+          cookiesToSet.forEach(({ name, value, options }) => {
             response.cookies.set(name, value, options)
-          )
+          })
         },
       },
     }
@@ -69,6 +64,16 @@ export async function middleware(request: NextRequest) {
       response.headers.set('Cache-Control', 'no-cache, no-store, max-age=0, must-revalidate')
       response.headers.set('Pragma', 'no-cache')
       response.headers.set('Expires', '0')
+    }
+
+    if (
+      pathname.startsWith('/management') ||
+      pathname.startsWith('/auth') ||
+      pathname.startsWith('/checkout') ||
+      pathname.startsWith('/cart') ||
+      pathname.startsWith('/profile')
+    ) {
+      response.headers.set('X-Robots-Tag', 'noindex, nofollow')
     }
 
     // Global security headers (basic hardening)

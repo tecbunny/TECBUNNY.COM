@@ -6,6 +6,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Mail, MessageCircle } from 'lucide-react';
+import Link from 'next/link';
 
 import { Button } from '../../components/ui/button';
 import {
@@ -29,6 +30,7 @@ import { Separator } from '../../components/ui/separator';
 import { useAuth } from '../../lib/hooks';
 import { useToast } from '../../hooks/use-toast';
 import { logger } from '../../lib/logger';
+import { Checkbox } from '../../components/ui/checkbox';
 
 type OTPChannel = 'email' | 'sms' | 'whatsapp';
 type PreferredChannel = 'email' | 'whatsapp';
@@ -39,6 +41,9 @@ const signupSchema = z.object({
   mobile: z.string().min(10, { message: 'Please enter a valid mobile number.' }),
   password: z.string().min(6, { message: 'Password must be at least 6 characters.' }),
   confirmPassword: z.string().min(6, { message: 'Please confirm your password.' }),
+  privacyConsent: z.boolean().refine((val) => val === true, {
+    message: 'Please accept the Privacy Policy and Terms to continue.',
+  }),
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Passwords don't match",
   path: ["confirmPassword"],
@@ -73,13 +78,15 @@ export function SignupDialog({ children }: { children: React.ReactNode }) {
     defaultValues: {
       name: '',
       email: '',
-      mobile: '',
+      mobile: '+91',
       password: '',
       confirmPassword: '',
+      privacyConsent: false,
     },
   });
 
   const watchedMobile = form.watch('mobile');
+  const privacyAccepted = form.watch('privacyConsent');
   const sanitizedMobile = useMemo(() => watchedMobile.replace(/\D/g, ''), [watchedMobile]);
   const phoneEnabled = sanitizedMobile.length >= 10;
 
@@ -261,14 +268,14 @@ export function SignupDialog({ children }: { children: React.ReactNode }) {
                       onClick={() => !disabled && setPreferredChannel(option)}
                       disabled={disabled}
                       className={`flex w-full flex-col rounded-lg border p-3 text-left transition ${
-                        preferredChannel === option ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 bg-white'
-                      } ${disabled ? 'opacity-60 cursor-not-allowed' : 'hover:border-blue-300 hover:bg-blue-50'}`}
+                        preferredChannel === option ? 'border-cyan-400/60 bg-cyan-500/10 text-cyan-200' : 'border-white/10 bg-white/5 text-slate-200'
+                      } ${disabled ? 'opacity-60 cursor-not-allowed' : 'hover:border-cyan-400/50 hover:bg-white/5'}`}
                     >
                       <span className="flex items-center gap-2 text-sm font-medium">
                         {option === 'email' ? <Mail className="h-4 w-4" /> : <MessageCircle className="h-4 w-4" />}
                         {option === 'email' ? 'Email' : 'WhatsApp'}
                       </span>
-                      <span className="text-xs text-gray-500">
+                      <span className="text-xs text-slate-400">
                         {option === 'email' && 'Send code to your email address'}
                         {option === 'whatsapp' && 'Send code via WhatsApp'}
                       </span>
@@ -277,7 +284,7 @@ export function SignupDialog({ children }: { children: React.ReactNode }) {
                 })}
               </div>
               {!phoneEnabled && watchedMobile && (
-                <p className="text-xs text-gray-500">Add at least 10 digits to enable WhatsApp verification.</p>
+                <p className="text-xs text-slate-400">Add at least 10 digits to enable WhatsApp verification.</p>
               )}
             </div>
             
@@ -308,11 +315,40 @@ export function SignupDialog({ children }: { children: React.ReactNode }) {
                 </FormItem>
               )}
             />
+
+            <FormField
+              control={form.control}
+              name="privacyConsent"
+              render={({ field }) => (
+                <FormItem className="flex items-start gap-3 rounded-lg border border-slate-200/20 p-3">
+                  <FormControl>
+                    <Checkbox
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                      disabled={isSubmitting}
+                      className="mt-1"
+                    />
+                  </FormControl>
+                  <div className="space-y-1 text-sm text-slate-600">
+                    <FormLabel className="text-sm font-medium text-slate-900">Privacy & terms</FormLabel>
+                    <p className="text-xs text-slate-500">
+                      I agree to the
+                      {' '}
+                      <Link href="/info/policies/privacy" className="text-cyan-700 hover:text-cyan-900 underline">Privacy Policy</Link>
+                      {' '}and
+                      {' '}
+                      <Link href="/info/policies/terms" className="text-cyan-700 hover:text-cyan-900 underline">Terms of Service</Link>.
+                    </p>
+                    <FormMessage />
+                  </div>
+                </FormItem>
+              )}
+            />
             
             <div className="flex flex-col space-y-4 pt-4">
               <Button 
                 type="submit" 
-                disabled={isSubmitting || (!!turnstileSiteKey && !captchaDisabled && !captchaToken)} 
+                disabled={isSubmitting || (!privacyAccepted) || (!!turnstileSiteKey && !captchaDisabled && !captchaToken)} 
                 className="w-full"
               >
                 {isSubmitting ? 'Creating Account...' : 'Create Account'}
