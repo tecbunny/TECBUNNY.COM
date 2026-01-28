@@ -3,9 +3,9 @@ import { createServerClient } from '@supabase/ssr'
 
 export async function middleware(request: NextRequest) {
   // Define public API routes that don't require authentication
-  // Note: Maintain this list carefully to avoid exposing private endpoints.
-  // TODO: Consider migrating to a route handling convention (e.g. /api/public/*) to automate this.
+  // Note: Maintain this list carefully. All other /api/* routes will be protected by default (Fail-Closed).
   const publicApiRoutes = [
+    '/api/auth',     // Auth endpoints (signin, callback, etc)
     '/api/settings',
     '/api/page-content',
     '/api/auto-offers',
@@ -17,17 +17,6 @@ export async function middleware(request: NextRequest) {
   const isPublicApiRoute = publicApiRoutes.some(route => 
     request.nextUrl.pathname.startsWith(route)
   )
-  
-  // Hardening: Block sensitive management or bulk export routes if they were accidentally matched above
-  // (e.g. if someone added /api/products/export to public list, we explicitly block it if not authenticated below)
-  // However, the logic below handles "If it's a public route, allow".
-  // So we must ensure the list above ONLY contains naturally public safe routes.
-  // We removed explicit bulk export routes from the 'public' definition to stay safe by default.
-  
-  // If it's a public API route, allow access without authentication
-  if (isPublicApiRoute) {
-    return NextResponse.next()
-  }
 
   const requestHeaders = new Headers(request.headers)
   // Correlation ID
@@ -57,6 +46,17 @@ export async function middleware(request: NextRequest) {
 
   // Refresh session if expired
   const { data: { user } } = await supabase.auth.getUser()
+
+  // SECURITY: Fail-Closed API Protection
+  // If we are hitting an API route, and it is NOT explicitly public, require a user.
+  if (pathname.startsWith('/api')) {
+    if (!isPublicApiRoute && !user) {
+      return NextResponse.json(
+        { error: 'Unauthorized', message: 'Authentication required for this endpoint' },
+        { status: 401 }
+      )
+    }
+  }
 
   // Protect Management Routes
   if (pathname.startsWith('/management') && !user) {
