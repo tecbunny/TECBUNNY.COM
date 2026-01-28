@@ -83,10 +83,12 @@ export async function POST(request: NextRequest) {
     This route now only creates or updates the target admin account. 
     Manual removal of other admins should be done via the Supabase dashboard if necessary.
     */
-    const toDelete: { id: string }[] = []; 
-    // Logic for bulk deletion has been disabled for safety.
     
-    return NextResponse.json({ ok: true, adminUserId: newAdminUserId, removed: toDelete.length });
+    return NextResponse.json({ 
+      ok: true, 
+      adminUserId: newAdminUserId, 
+      message: 'Admin account updated/created successfully. No other accounts were modified.' 
+    });
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Unknown error';
     return NextResponse.json({ error: msg }, { status: 500 });
