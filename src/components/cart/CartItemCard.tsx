@@ -81,7 +81,14 @@ export function CartItemCard({ item }: CartItemCardProps) {
         <p className="inline-flex items-center gap-1 text-[10px] text-slate-200 bg-white/10 px-2 py-[4px] rounded-full">
           {item.category || 'Tecbunny Essentials'}
         </p>
-        <span className="block text-cyan-300 font-semibold text-sm">₹{unitPrice.toFixed(2)}</span>
+        {!isServiceItem && typeof item.mrp === 'number' && item.mrp > unitPrice ? (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-500 line-through">₹{item.mrp.toFixed(2)}</span>
+            <span className="text-cyan-300 font-semibold text-sm">₹{unitPrice.toFixed(2)}</span>
+          </div>
+        ) : (
+          <span className="block text-cyan-300 font-semibold text-sm">₹{unitPrice.toFixed(2)}</span>
+        )}
         {isServiceItem && (
           <span className="mt-0.5 inline-flex text-[9px] uppercase font-bold text-slate-200 bg-purple-500/15 px-1.5 py-[3px] rounded">
             Service Item

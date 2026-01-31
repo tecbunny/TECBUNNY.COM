@@ -319,6 +319,41 @@ export interface Service {
     created_at: string;
     updated_at: string;
 }
+
+export interface InnovationModeItem {
+  icon: string;
+  text: string;
+  accent: string;
+}
+
+export interface InnovationMode {
+  id: string;
+  key: string;
+  label: string;
+  sub: string;
+  title: string;
+  description: string;
+  icon: string;
+  rec_id: string;
+  items: InnovationModeItem[];
+  is_active: boolean;
+  display_order: number;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface InnovationDevice {
+  id: string;
+  title: string;
+  description: string;
+  accent: string;
+  icon: string;
+  chips: string[];
+  is_active: boolean;
+  display_order: number;
+  created_at: string;
+  updated_at?: string;
+}
 export type OfferType = 'category_discount' | 'customer_tier' | 'minimum_order' | 'seasonal' | 'product_specific';
 
 export interface AutoOffer {

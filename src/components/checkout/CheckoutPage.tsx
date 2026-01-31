@@ -505,7 +505,7 @@ export default function CheckoutPage() {
                       value={customerInfo.name}
                       onChange={(event) => handleInputChange('name', event.target.value)}
                       className="peer w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white outline-none focus:border-cyan-400 transition-colors placeholder-transparent"
-                      placeholder="Full Name"
+                      placeholder=" "
                     />
                     <label htmlFor="name" className="absolute left-4 top-3 text-slate-500 text-sm transition-all pointer-events-none">Full Name</label>
                   </div>
@@ -517,7 +517,7 @@ export default function CheckoutPage() {
                       value={customerInfo.phone}
                       onChange={(event) => handleInputChange('phone', event.target.value)}
                       className="peer w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white outline-none focus:border-cyan-400 transition-colors placeholder-transparent"
-                      placeholder="Phone Number"
+                      placeholder=" "
                     />
                     <label htmlFor="phone" className="absolute left-4 top-3 text-slate-500 text-sm transition-all pointer-events-none">Phone Number</label>
                   </div>
@@ -529,7 +529,7 @@ export default function CheckoutPage() {
                       value={customerInfo.email}
                       onChange={(event) => handleInputChange('email', event.target.value)}
                       className="peer w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white outline-none focus:border-cyan-400 transition-colors placeholder-transparent"
-                      placeholder="Email"
+                      placeholder=" "
                     />
                     <label htmlFor="email" className="absolute left-4 top-3 text-slate-500 text-sm transition-all pointer-events-none">Email Address</label>
                   </div>
@@ -540,7 +540,7 @@ export default function CheckoutPage() {
                       value={customerInfo.gstin}
                       onChange={(event) => handleInputChange('gstin', event.target.value)}
                       className="peer w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white outline-none focus:border-cyan-400 transition-colors placeholder-transparent"
-                      placeholder="GSTIN (Optional)"
+                      placeholder=" "
                     />
                     <label htmlFor="gstin" className="absolute left-4 top-3 text-slate-500 text-sm transition-all pointer-events-none">GSTIN (Optional - B2B)</label>
                   </div>
@@ -560,7 +560,7 @@ export default function CheckoutPage() {
                       value={customerInfo.address}
                       onChange={(event) => handleInputChange('address', event.target.value)}
                       className="peer w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white outline-none focus:border-cyan-400 transition-colors placeholder-transparent"
-                      placeholder="Installation Address"
+                      placeholder=" "
                     ></textarea>
                     <label htmlFor="address" className="absolute left-4 top-3 text-slate-500 text-sm transition-all pointer-events-none">Installation Address (Goa)</label>
                   </div>
@@ -573,7 +573,7 @@ export default function CheckoutPage() {
                         value={customerInfo.installDate}
                         onChange={(event) => handleInputChange('installDate', event.target.value)}
                         className="peer w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white outline-none focus:border-cyan-400 transition-colors placeholder-transparent"
-                        placeholder="Preferred Install Date"
+                        placeholder=" "
                       />
                       <label htmlFor="date" className="absolute left-4 top-3 text-slate-500 text-sm transition-all pointer-events-none">Preferred Install Date</label>
                     </div>
@@ -603,7 +603,7 @@ export default function CheckoutPage() {
                         value={customerInfo.city}
                         onChange={(event) => handleInputChange('city', event.target.value)}
                         className="peer w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white outline-none focus:border-cyan-400 transition-colors placeholder-transparent"
-                        placeholder="City"
+                        placeholder=" "
                       />
                       <label htmlFor="city" className="absolute left-4 top-3 text-slate-500 text-sm transition-all pointer-events-none">City</label>
                     </div>
@@ -614,7 +614,7 @@ export default function CheckoutPage() {
                         value={customerInfo.state}
                         onChange={(event) => handleInputChange('state', event.target.value)}
                         className="peer w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white outline-none focus:border-cyan-400 transition-colors placeholder-transparent"
-                        placeholder="State"
+                        placeholder=" "
                       />
                       <label htmlFor="state" className="absolute left-4 top-3 text-slate-500 text-sm transition-all pointer-events-none">State</label>
                     </div>
@@ -626,7 +626,7 @@ export default function CheckoutPage() {
                         value={customerInfo.pincode}
                         onChange={(event) => handleInputChange('pincode', event.target.value)}
                         className="peer w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white outline-none focus:border-cyan-400 transition-colors placeholder-transparent"
-                        placeholder="Pincode"
+                        placeholder=" "
                       />
                       <label htmlFor="pincode" className="absolute left-4 top-3 text-slate-500 text-sm transition-all pointer-events-none">Pincode</label>
                     </div>
@@ -644,7 +644,7 @@ export default function CheckoutPage() {
                       value={customerInfo.notes}
                       onChange={(event) => handleInputChange('notes', event.target.value)}
                       className="peer w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white outline-none focus:border-cyan-400 transition-colors placeholder-transparent"
-                      placeholder="Any special instructions for your order"
+                      placeholder=" "
                     ></textarea>
                     <label htmlFor="notes" className="absolute left-4 top-3 text-slate-500 text-sm transition-all pointer-events-none">Order Notes (Optional)</label>
                   </div>

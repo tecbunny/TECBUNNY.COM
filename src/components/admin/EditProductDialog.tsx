@@ -1,0 +1,322 @@
+'use client';
+
+import * as React from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '../../components/ui/dialog';
+import { Button } from '../../components/ui/button';
+import { Input } from '../../components/ui/input';
+import { Textarea } from '../../components/ui/textarea';
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '../../components/ui/form';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../../components/ui/select';
+import { createClient } from '../../lib/supabase/client';
+import { useToast } from '../../hooks/use-toast';
+import { logger } from '../../lib/logger';
+import type { Product } from '../../lib/types';
+
+const productSchema = z.object({
+  title: z.string().min(3, 'Title is required'),
+  description: z.string().min(10, 'Description is required'),
+  price: z.coerce.number().min(0, 'Price must be positive'),
+  category: z.string().min(1, 'Category is required'),
+  brand: z.string().optional(),
+  image: z.string().url('Must be a valid URL'),
+  stock_quantity: z.coerce.number().min(0).optional(),
+  status: z.enum(['active', 'archived', 'draft']).default('active'),
+});
+
+type ProductFormInput = z.input<typeof productSchema>;
+type ProductFormValues = z.output<typeof productSchema>;
+
+interface EditProductDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  product: Product;
+  onProductUpdated: () => void;
+}
+
+const CATEGORIES = [
+  'CCTV',
+  'Computers',
+  'Accessories',
+  'Services',
+  'Security',
+  'Networking',
+  'Smart Home',
+  'Software',
+];
+
+export function EditProductDialog({ open, onOpenChange, product, onProductUpdated }: EditProductDialogProps) {
+  const supabase = createClient();
+  const { toast } = useToast();
+
+  const form = useForm<ProductFormInput, any, ProductFormValues>({
+    resolver: zodResolver(productSchema),
+    defaultValues: {
+      title: product.title || product.name || '',
+      description: product.description || '',
+      price: product.price || 0,
+      category: product.category || '',
+      brand: product.brand || '',
+      image: product.image || '',
+      stock_quantity: product.stock_quantity || 0,
+      status: (product.status as 'active' | 'archived' | 'draft') || 'active',
+    },
+  });
+
+  // Reset form when product changes
+  React.useEffect(() => {
+    form.reset({
+        title: product.title || product.name || '',
+        description: product.description || '',
+        price: product.price || 0,
+        category: product.category || '',
+        brand: product.brand || '',
+        image: product.image || '',
+        stock_quantity: product.stock_quantity || 0,
+        status: (product.status as 'active' | 'archived' | 'draft') || 'active',
+    });
+  }, [product, form]);
+
+  const onSubmit = async (values: ProductFormValues) => {
+    try {
+      const { error } = await supabase
+        .from('products')
+        .update({
+          title: values.title,
+          name: values.title, // For backward compatibility
+          description: values.description,
+          price: values.price,
+          category: values.category,
+          brand: values.brand,
+          image: values.image,
+          stock_quantity: values.stock_quantity,
+          status: values.status,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', product.id);
+
+      if (error) {
+        throw error;
+      }
+
+      toast({
+        title: 'Success',
+        description: 'Product updated successfully',
+      });
+      onOpenChange(false);
+      onProductUpdated();
+    } catch (error: any) {
+      logger.error('Failed to update product', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to update product',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <div className="flex items-center justify-between">
+            <DialogTitle>Edit Product</DialogTitle>
+          </div>
+          <DialogDescription>
+            Modify product details.
+          </DialogDescription>
+        </DialogHeader>
+
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            <FormField
+              control={form.control}
+              name="title"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Product Title</FormLabel>
+                  <FormControl>
+                    <Input placeholder="e.g. 4K Security Camera" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="description"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Description</FormLabel>
+                  <FormControl>
+                    <Textarea 
+                      placeholder="Detailed product description..." 
+                      className="min-h-[100px]"
+                      {...field} 
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="category"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Category</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select category" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {CATEGORIES.map((category) => (
+                          <SelectItem key={category} value={category}>
+                            {category}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="brand"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Brand</FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g. Hikvision" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="price"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Price (₹)</FormLabel>
+                    <FormControl>
+                    <Input 
+                      type="number" 
+                      min="0" 
+                      step="0.01" 
+                      {...field} 
+                      value={field.value as number ?? ''}
+                    />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="stock_quantity"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Stock Quantity</FormLabel>
+                    <FormControl>
+                    <Input 
+                      type="number" 
+                      min="0" 
+                      {...field} 
+                      value={field.value as number ?? ''}
+                    />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+             <FormField
+                control={form.control}
+                name="status"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Status</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select status" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                         <SelectItem value="active">Active</SelectItem>
+                         <SelectItem value="archived">Archived</SelectItem>
+                         <SelectItem value="draft">Draft</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+            <FormField
+              control={form.control}
+              name="image"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Image URL</FormLabel>
+                  <FormControl>
+                    <Input placeholder="https://..." {...field} />
+                  </FormControl>
+                  <FormMessage />
+                  <FormDescription>
+                    Provide a direct link to the product image.
+                  </FormDescription>
+                </FormItem>
+              )}
+            />
+
+            <div className="flex justify-end gap-3 pt-4">
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={form.formState.isSubmitting}>
+                 {form.formState.isSubmitting ? 'Updating...' : 'Update Product'}
+              </Button>
+            </div>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  );
+}

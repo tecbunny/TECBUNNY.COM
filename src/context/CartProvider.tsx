@@ -285,6 +285,8 @@ export const CartProvider: React.FC<{
         appliedCoupon || undefined
       );
 
+      const grossSubtotal = cartItems.reduce((total, item) => total + item.price * item.quantity, 0);
+
       // Calculate GST on final amount
       const gstAmount = cartItems.reduce((total, item) => {
         const gstRate = typeof item.gstRate === 'number' ? item.gstRate : 18;
@@ -293,21 +295,47 @@ export const CartProvider: React.FC<{
         return total + (itemTotal - basePrice);
       }, 0);
 
+      const safeOfferDiscount = Math.min(pricingData.offerDiscount || 0, grossSubtotal);
+      const safeCouponDiscount = Math.min(pricingData.couponDiscount || 0, grossSubtotal);
+      const safeTotalDiscount = Math.min(pricingData.totalDiscount || 0, grossSubtotal);
+      const safeFinalTotal = Math.max(0, grossSubtotal - safeTotalDiscount);
+
       setPricing({
-        subtotal: pricingData.subtotal - gstAmount,
+        subtotal: Math.max(0, grossSubtotal - gstAmount),
         autoOffer: pricingData.bestOffer,
-        autoOfferDiscount: pricingData.offerDiscount,
+        autoOfferDiscount: safeOfferDiscount,
         appliedCoupon,
-        couponDiscount: pricingData.couponDiscount,
-        totalDiscount: pricingData.totalDiscount,
+        couponDiscount: safeCouponDiscount,
+        totalDiscount: safeTotalDiscount,
         gstAmount,
-        finalTotal: pricingData.finalTotal,
+        finalTotal: safeFinalTotal,
         availableCoupons: pricingData.availableCoupons,
         canCombineDiscounts: pricingData.canCombine,
       });
 
     } catch (error) {
       logger.error('Error calculating pricing', { error });
+
+      const grossSubtotal = cartItems.reduce((total, item) => total + item.price * item.quantity, 0);
+      const gstAmount = cartItems.reduce((total, item) => {
+        const gstRate = typeof item.gstRate === 'number' ? item.gstRate : 18;
+        const itemTotal = item.price * item.quantity;
+        const basePrice = itemTotal / (1 + (gstRate / 100));
+        return total + (itemTotal - basePrice);
+      }, 0);
+
+      setPricing({
+        subtotal: Math.max(0, grossSubtotal - gstAmount),
+        autoOffer: null,
+        autoOfferDiscount: 0,
+        appliedCoupon,
+        couponDiscount: 0,
+        totalDiscount: 0,
+        gstAmount,
+        finalTotal: Math.max(0, grossSubtotal),
+        availableCoupons: [],
+        canCombineDiscounts: false,
+      });
     }
   }, [cartItems, customerCategory, pricing.appliedCoupon, user, isGuestSessionExpired]);
 

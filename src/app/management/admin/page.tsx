@@ -2,6 +2,7 @@
 'use client';
 
 import * as React from 'react';
+import Link from 'next/link';
 
 import { TrendingUp, TrendingDown, RefreshCw } from 'lucide-react';
 
@@ -253,14 +254,31 @@ export default function AdminDashboard() {
                             <div className="rounded-2xl border border-white/5 bg-slate-900/60 p-6">
                                 <h3 className="font-semibold text-white tracking-wide mb-4">Command Protocols</h3>
                                 <div className="grid grid-cols-2 gap-3">
-                                    {['New Quote', 'Add Client', 'Stock Entry', 'Log Issue'].map((label) => (
-                                        <button
-                                            key={label}
-                                            className="p-3 rounded-xl border border-white/10 hover:border-cyan-400/50 hover:bg-cyan-400/10 transition-all text-xs font-semibold text-white"
-                                        >
-                                            {label}
-                                        </button>
-                                    ))}
+                                    <Link href="/management/admin/products">
+                                        <div className="p-3 text-center rounded-xl border border-white/10 hover:border-cyan-400/50 hover:bg-cyan-400/10 transition-all text-xs font-semibold text-white cursor-pointer">
+                                            Manage Products
+                                        </div>
+                                    </Link>
+                                    <Link href="/management/admin/services">
+                                        <div className="p-3 text-center rounded-xl border border-white/10 hover:border-cyan-400/50 hover:bg-cyan-400/10 transition-all text-xs font-semibold text-white cursor-pointer">
+                                            Manage Services
+                                        </div>
+                                    </Link>
+                                    <Link href="/management/admin/innovation">
+                                        <div className="p-3 text-center rounded-xl border border-white/10 hover:border-cyan-400/50 hover:bg-cyan-400/10 transition-all text-xs font-semibold text-white cursor-pointer">
+                                            Manage Innovation
+                                        </div>
+                                    </Link>
+                                    <button
+                                        className="p-3 rounded-xl border border-white/10 hover:border-cyan-400/50 hover:bg-cyan-400/10 transition-all text-xs font-semibold text-white"
+                                    >
+                                        New Quote
+                                    </button>
+                                    <button
+                                        className="p-3 rounded-xl border border-white/10 hover:border-cyan-400/50 hover:bg-cyan-400/10 transition-all text-xs font-semibold text-white"
+                                    >
+                                        Add Client
+                                    </button>
                                 </div>
                             </div>
 
@@ -295,9 +313,11 @@ export default function AdminDashboard() {
                                         </div>
                                     </div>
                                 </div>
-                                <button className="w-full mt-6 py-2 text-xs font-semibold text-center border border-white/10 rounded-lg hover:bg-white/5 transition-colors text-slate-400 hover:text-white">
-                                    View Full Inventory
-                                </button>
+                                <Link href="/management/admin/products" className="block w-full mt-6">
+                                    <div className="py-2 text-xs font-semibold text-center border border-white/10 rounded-lg hover:bg-white/5 transition-colors text-slate-400 hover:text-white cursor-pointer">
+                                        View Full Inventory
+                                    </div>
+                                </Link>
                             </div>
                         </div>
                     </div>

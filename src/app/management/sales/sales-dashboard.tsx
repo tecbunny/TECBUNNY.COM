@@ -41,7 +41,7 @@ export default function SalesDashboard() {
             const [todayOrdersRes, newCustomersRes, pickupRes, deliveryRes, recentOrdersRes] = await Promise.all([
                 supabase
                     .from('orders')
-                    .select('total,total_amount,status,created_at')
+                    .select('total,status,created_at')
                     .gte('created_at', startOfDay.toISOString())
                     .lte('created_at', endOfDay.toISOString())
                     .in('status', COMPLETED_STATUSES),
@@ -61,7 +61,7 @@ export default function SalesDashboard() {
                     .in('status', PENDING_DELIVERY_STATUSES),
                 supabase
                     .from('orders')
-                    .select('id, customer_name, status, total, total_amount, created_at')
+                    .select('id, customer_name, status, total, created_at')
                     .order('created_at', { ascending: false })
                     .limit(5),
             ]);
@@ -73,7 +73,7 @@ export default function SalesDashboard() {
             if (recentOrdersRes.error) throw recentOrdersRes.error;
 
             const todayRevenue = (todayOrdersRes.data || []).reduce((sum, order) => {
-                const total = typeof order.total === 'number' ? order.total : (typeof order.total_amount === 'number' ? order.total_amount : 0);
+                const total = typeof order.total === 'number' ? order.total : 0;
                 return sum + total;
             }, 0);
 
@@ -200,7 +200,7 @@ export default function SalesDashboard() {
                                     </div>
                                     <div className="text-right">
                                         <Badge variant="secondary" className="mb-1">{order.status}</Badge>
-                                        <div className="font-semibold">₹{Number(order.total ?? order.total_amount ?? 0).toFixed(2)}</div>
+                                        <div className="font-semibold">₹{Number(order.total ?? 0).toFixed(2)}</div>
                                     </div>
                                 </div>
                             ))}

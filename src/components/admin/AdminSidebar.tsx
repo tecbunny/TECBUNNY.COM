@@ -26,6 +26,7 @@ import {
   Settings2,
   Bot,
   Activity,
+  Lightbulb,
 } from 'lucide-react';
 
 import { Logo } from '../../components/ui/logo';
@@ -88,6 +89,7 @@ const navSections: NavSection[] = [
     items: [
       { href: '/management/admin/homepage-settings', label: 'Homepage Settings', icon: LayoutTemplate },
       { href: '/management/admin/hero-banners', label: 'Hero Banners', icon: Images },
+      { href: '/management/admin/innovation', label: 'Innovation Content', icon: Lightbulb },
     ]
   },
   {
