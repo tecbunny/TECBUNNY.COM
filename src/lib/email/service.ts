@@ -230,8 +230,8 @@ export function createEmailService(): EmailService {
       pass: process.env.SMTP_PASS || ''
     },
     from: {
-      name: process.env.SMTP_FROM_NAME || 'TecBunny',
-      email: process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER || ''
+      name: process.env.SMTP_FROM_NAME || 'TecBunny Solutions',
+      email: process.env.SMTP_FROM || 'noreply@tecbunny.com'
     }
   };
 

@@ -191,6 +191,13 @@ _iub.csConfiguration = {"siteId":4401650,"cookiePolicyId":81350062,"lang":"en","
               <FloatingAIAssistant />
               <Toaster />
               <Analytics />
+              {/* Cloudflare Web Analytics */}
+              <Script
+                src="https://static.cloudflareinsights.com/beacon.min.js"
+                data-cf-beacon='{"token": "47dd7f9fc88a419790b0682afbad1861"}'
+                strategy="afterInteractive"
+              />
+              {/* End Cloudflare Web Analytics */}
               {gaId ? (
                 <>
                   <Script

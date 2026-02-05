@@ -37,7 +37,7 @@ class ImprovedEmailService {
 
   constructor() {
     this.config = {
-      from: process.env.SMTP_FROM || 'tecbunnysolution@gmail.com',
+      from: process.env.SMTP_FROM || 'noreply@tecbunny.com',
       fromName: process.env.SMTP_FROM_NAME || 'TecBunny Store'
     };
 

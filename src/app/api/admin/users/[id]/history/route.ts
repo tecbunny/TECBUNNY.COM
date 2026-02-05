@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '../../../../../../lib/supabase/server';
+import { createClient, createServiceClient } from '../../../../../../lib/supabase/server';
 import { requireAdmin } from '../../../../../../lib/admin-auth';
 
 export async function GET(
@@ -14,10 +14,12 @@ export async function GET(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  // Use service client to bypass RLS for admin actions
+  const adminDb = createServiceClient();
   const { id: userId } = await params;
 
   // Fetch User Profile
-  const { data: profile } = await supabase
+  const { data: profile } = await adminDb
     .from('profiles')
     .select('*')
     .eq('id', userId)
@@ -28,21 +30,21 @@ export async function GET(
   }
 
   // Fetch Analytics Events
-  const { data: events } = await supabase
+  const { data: events } = await adminDb
     .from('analytics_events')
     .select('*')
     .eq('user_id', userId)
     .order('created_at', { ascending: false });
 
   // Fetch Orders
-  const { data: orders } = await supabase
+  const { data: orders } = await adminDb
     .from('orders')
     .select('*')
     .eq('user_id', userId)
     .order('created_at', { ascending: false });
 
   // Fetch Leads/Inquiries
-  const { data: leads } = await supabase
+  const { data: leads } = await adminDb
     .from('leads')
     .select('*')
     .eq('user_id', userId)
@@ -51,7 +53,7 @@ export async function GET(
   // Fetch Contact Messages (by email)
   let messages: any[] = [];
   if (profile.email) {
-    const { data: msgs } = await supabase
+    const { data: msgs } = await adminDb
       .from('contact_messages')
       .select('*')
       .eq('email', profile.email)

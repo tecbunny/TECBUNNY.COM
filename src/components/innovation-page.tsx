@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 
 import type { InnovationDevice, InnovationMode } from '../lib/types';
+import HeroCarousel from './HeroCarousel';
 
 const iconMap = {
   Shield,
@@ -134,6 +135,8 @@ export default function InnovationPage({ modes, devices }: InnovationPageProps) 
           </div>
         </div>
       </section>
+
+      <HeroCarousel pageKey="innovations" />
 
       <section id="new-devices" className="py-20">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">

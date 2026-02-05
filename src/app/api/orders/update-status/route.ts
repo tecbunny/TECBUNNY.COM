@@ -206,7 +206,7 @@ export async function POST(request: NextRequest) {
     const serviceClient = createServiceClient();
     const { data: orderRecord, error: fetchError } = await serviceClient
       .from('orders')
-      .select('id, type, payment_status, payment_method, status, customer_phone, customer_name, total, currency')
+      .select('id, type, payment_status, payment_method, status, customer_phone, customer_name, total, customer_id')
       .eq('id', orderId)
       .maybeSingle();
 
@@ -229,7 +229,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Status not allowed for this order type' }, { status: 400 });
     }
 
-    if (!isAtLeast(role, requiredRole)) {
+    const isCustomer = role === 'customer';
+    const isCustomerCancel = isCustomer && normalizedStatus === 'Cancelled';
+
+    if (isCustomer) {
+      if (!isCustomerCancel) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+      if (!orderRecord.customer_id || orderRecord.customer_id !== user.id) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+      if (orderRecord.status !== 'Pending') {
+        return NextResponse.json({ error: 'Order can no longer be cancelled' }, { status: 400 });
+      }
+    } else if (!isAtLeast(role, requiredRole)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -243,8 +256,10 @@ export async function POST(request: NextRequest) {
 
     if (normalizedStatus === 'Cancelled' || normalizedStatus === 'Rejected') {
       if (typeof updatePayload.cancellation_reason !== 'string' || !updatePayload.cancellation_reason) {
-        updatePayload.cancellation_reason = 'Cancelled via admin portal';
+        updatePayload.cancellation_reason = isCustomerCancel ? 'Cancelled by customer' : 'Cancelled via admin portal';
       }
+      updatePayload.cancelled_at = new Date().toISOString();
+      updatePayload.cancelled_by = user.id;
     }
 
     const { error: updateError } = await serviceClient
@@ -274,7 +289,7 @@ export async function POST(request: NextRequest) {
         status: normalizedStatus,
         customerName: orderRecord.customer_name,
         amount: orderRecord.total,
-        currency: orderRecord.currency,
+        currency: 'INR',
         cancelReason: updatePayload.cancellation_reason as string
       });
     }

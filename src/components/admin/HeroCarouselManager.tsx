@@ -36,7 +36,8 @@ const PAGE_TABS: Array<{ key: HeroCarouselPageKey; label: string; description: s
   { key: 'homepage', label: 'Homepage', description: 'Large banners shown below the primary hero on the storefront.' },
   { key: 'services', label: 'Services', description: 'Highlight service packages or success stories on the services page.' },
   { key: 'offers', label: 'Offers', description: 'Promote current deals and campaigns on the offers page.' },
-  { key: 'products', label: 'Products', description: 'Upsell categories or spotlight collections on the product catalog.' },
+  { key: 'products', label: 'Store / Products', description: 'Upsell categories or spotlight collections on the product catalog.' },
+  { key: 'innovations', label: 'Innovations', description: 'Showcase R&D projects and technological breakthroughs.' },
 ];
 
 const EMPTY_CONTENT: HeroCarouselContent = {
@@ -44,12 +45,14 @@ const EMPTY_CONTENT: HeroCarouselContent = {
   services: [],
   offers: [],
   products: [],
+  innovations: [],
 };
 
 type SlideDraft = {
   title: string;
   subtitle: string;
   description: string;
+  htmlContent: string;
   ctaText: string;
   ctaLink: string;
   imageUrl: string;
@@ -80,6 +83,7 @@ function normalizeSlides(pageKey: HeroCarouselPageKey, value: unknown): HeroCaro
         title: typeof item.title === 'string' ? item.title : '',
         subtitle: typeof item.subtitle === 'string' ? item.subtitle : '',
         description: typeof item.description === 'string' ? item.description : '',
+        htmlContent: typeof item.htmlContent === 'string' ? item.htmlContent : '',
         imageUrl,
         ctaText: typeof item.ctaText === 'string' ? item.ctaText : '',
         ctaLink: typeof item.ctaLink === 'string' ? item.ctaLink : '',
@@ -103,6 +107,7 @@ function normalizeContent(raw: unknown): HeroCarouselContent {
     services: normalizeSlides('services', pages.services),
     offers: normalizeSlides('offers', pages.offers),
     products: normalizeSlides('products', pages.products),
+    innovations: normalizeSlides('innovations', pages.innovations),
   };
 }
 
@@ -110,6 +115,7 @@ const EMPTY_FORM: SlideDraft = {
   title: '',
   subtitle: '',
   description: '',
+  htmlContent: '',
   ctaText: '',
   ctaLink: '',
   imageUrl: '',
@@ -160,6 +166,7 @@ export default function HeroCarouselManager() {
       title: slide.title || '',
       subtitle: slide.subtitle || '',
       description: slide.description || '',
+      htmlContent: slide.htmlContent || '',
       ctaText: slide.ctaText || '',
       ctaLink: slide.ctaLink || '',
       imageUrl: slide.imageUrl || '',
@@ -240,6 +247,7 @@ export default function HeroCarouselManager() {
         title: formState.title.trim(),
         subtitle: formState.subtitle.trim() || undefined,
         description: formState.description.trim() || undefined,
+        htmlContent: formState.htmlContent.trim() || undefined,
         imageUrl,
         ctaText: formState.ctaText.trim() || undefined,
         ctaLink: formState.ctaLink.trim() || undefined,
@@ -306,6 +314,7 @@ export default function HeroCarouselManager() {
         services: localContent.services.map((slide, index) => ({ ...slide, displayOrder: index })),
         offers: localContent.offers.map((slide, index) => ({ ...slide, displayOrder: index })),
         products: localContent.products.map((slide, index) => ({ ...slide, displayOrder: index })),
+        innovations: localContent.innovations.map((slide, index) => ({ ...slide, displayOrder: index })),
       };
 
       const response = await updateContent({
@@ -515,6 +524,18 @@ export default function HeroCarouselManager() {
                 placeholder="Highlight what makes this banner special."
                 rows={3}
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="hero-html">Custom HTML Overlay (Optional)</Label>
+              <Textarea
+                id="hero-html"
+                value={formState.htmlContent}
+                onChange={event => setFormState(current => ({ ...current, htmlContent: event.target.value }))}
+                placeholder="<div className='text-center'>...</div>"
+                rows={5}
+                className="font-mono text-xs"
+              />
+              <p className="text-[10px] text-muted-foreground">Overrides Title/Subtitle/CTA overlay if provided. Use Tailwind classes.</p>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">

@@ -281,13 +281,13 @@ function PayuPaymentContent() {
             {customerEmail && (
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Email</span>
-                <span className="font-medium text-gray-900">{customerEmail}</span>
+                <span className="font-medium text-foreground">{customerEmail}</span>
               </div>
             )}
             {customerPhone && (
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Phone</span>
-                <span className="font-medium text-gray-900">{customerPhone}</span>
+                <span className="font-medium text-foreground">{customerPhone}</span>
               </div>
             )}
             <Separator className="my-3" />

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '../../../../lib/supabase/server';
+import { createClient, createServiceClient } from '../../../../lib/supabase/server';
 import { requireAdmin } from '../../../../lib/admin-auth';
 
 export async function GET(request: NextRequest) {
@@ -11,6 +11,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  // Use service client for admin data fetching to bypass RLS
+  const adminDb = createServiceClient();
+
   const { searchParams } = new URL(request.url);
   const range = searchParams.get('range') || '7d'; // 7d, 30d, all
 
@@ -20,13 +23,13 @@ export async function GET(request: NextRequest) {
   if (range === 'all') dateFilter = new Date(0);
 
   // Fetch Analytics Events
-  const { data: events } = await supabase
+  const { data: events } = await adminDb
     .from('analytics_events')
     .select('*')
     .gte('created_at', dateFilter.toISOString());
 
   // Fetch Leads
-  const { data: leads } = await supabase
+  const { data: leads } = await adminDb
     .from('leads')
     .select('*')
     .gte('created_at', dateFilter.toISOString());

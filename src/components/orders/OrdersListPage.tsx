@@ -17,11 +17,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import type { Order, OrderStatus } from '../../lib/types';
 
 export default function OrdersListPage() {
-  const { orders, getOrders } = useOrder();
+  const { orders, getOrders, cancelOrder } = useOrder();
   const [filteredOrders, setFilteredOrders] = useState<Order[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [loading, setLoading] = useState(true);
+  const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchOrders = async () => {
@@ -59,6 +60,7 @@ export default function OrdersListPage() {
     switch (status) {
       case 'Pending': return 'bg-yellow-500/15 text-yellow-200 border border-yellow-500/30';
       case 'Awaiting Payment': return 'bg-amber-500/15 text-amber-200 border border-amber-500/30';
+      case 'Payment Failed': return 'bg-red-500/15 text-red-200 border border-red-500/30';
       case 'Payment Confirmed': return 'bg-cyan-500/15 text-cyan-200 border border-cyan-500/30';
       case 'Confirmed': return 'bg-blue-500/15 text-blue-200 border border-blue-500/30';
       case 'Processing': return 'bg-purple-500/15 text-purple-200 border border-purple-500/30';
@@ -88,6 +90,20 @@ export default function OrdersListPage() {
   };
 
   const statusOptions = Array.from(new Set([...ORDER_STATUS_FLOW, ...SERVICE_ORDER_STATUS_FLOW]));
+
+  const handleCancelOrder = async (orderId: string) => {
+    if (cancellingOrderId) return;
+    const confirmed = window.confirm('Are you sure you want to cancel this order?');
+    if (!confirmed) return;
+
+    setCancellingOrderId(orderId);
+    const success = await cancelOrder(orderId);
+    setCancellingOrderId(null);
+
+    if (success) {
+      await getOrders();
+    }
+  };
 
   if (loading) {
     return (
@@ -222,6 +238,17 @@ export default function OrdersListPage() {
                     </div>
 
                     <div className="flex flex-col sm:flex-row gap-2">
+                       {(order.status === 'Pending' || order.status === 'Awaiting Payment' || order.status === 'Payment Failed') && (
+                        <Button
+                          variant="default"
+                          size="sm"
+                          className="bg-green-600 hover:bg-green-700 text-white border-none flex items-center gap-2"
+                          onClick={() => window.location.href = `/payment/payu/${order.id}`}
+                        >
+                          <CreditCard className="h-4 w-4" />
+                          Pay Now
+                        </Button>
+                      )}
                       <Button
                         variant="outline"
                         size="sm"
@@ -236,8 +263,10 @@ export default function OrdersListPage() {
                           variant="outline"
                           size="sm"
                           className="text-red-300 hover:text-red-200 border-red-500/30 hover:border-red-500/50"
+                          disabled={cancellingOrderId === order.id}
+                          onClick={() => handleCancelOrder(order.id)}
                         >
-                          Cancel Order
+                          {cancellingOrderId === order.id ? 'Cancelling...' : 'Cancel Order'}
                         </Button>
                       )}
                     </div>

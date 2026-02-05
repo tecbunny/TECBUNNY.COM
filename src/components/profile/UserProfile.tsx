@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 
-import { User, CheckCircle, XCircle, Clock, Users, Edit, Camera, Monitor, Bell, Plus, Shield, ArrowLeft } from 'lucide-react';
+import { User, CheckCircle, XCircle, Clock, Users, Edit, Camera, Monitor, Bell, Plus, Shield, ArrowLeft, FileText } from 'lucide-react';
 
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 
@@ -22,9 +22,10 @@ interface UserProfileProps {
   salesAgentData: any;
   orders: Array<{ id: string; status?: string; total?: number | null; total_amount?: number | null; created_at?: string; type?: string }>;
   serviceTickets: Array<{ id: string; issue_description?: string; status?: string; priority?: string; created_at?: string }>;
+  quotes: Array<{ id: string; status: string; customer_name: string; summary: string; created_at: string; expiry_at: string }>;
 }
 
-export default function UserProfile({ user, profile, salesAgentData, orders, serviceTickets }: UserProfileProps) {
+export default function UserProfile({ user, profile, salesAgentData, orders, serviceTickets, quotes }: UserProfileProps) {
   const [isApplying, setIsApplying] = React.useState(false);
   const [agentStatus, setAgentStatus] = React.useState(salesAgentData);
   const [showTwoFactorSetup, setShowTwoFactorSetup] = React.useState(false);
@@ -349,6 +350,37 @@ export default function UserProfile({ user, profile, salesAgentData, orders, ser
                   );
                 }) : (
                   <div className="col-span-full text-sm text-slate-400">No orders found.</div>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <h3 className="font-bold text-white font-tech text-lg mb-4 flex items-center gap-2">
+                <FileText className="h-4 w-4 text-cyan-300" /> Saved Quotes
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {(quotes || []).length > 0 ? quotes.map((quote) => {
+                  const created = new Date(quote.created_at).toLocaleDateString();
+                  const expired = new Date(quote.expiry_at) < new Date();
+                  return (
+                    <div key={quote.id} className={`glass-panel p-5 rounded-xl border-l-4 ${expired ? 'border-red-500' : 'border-cyan-500'} group hover:bg-white/5 transition-colors`}>
+                      <div className="flex justify-between items-start mb-3">
+                        <div className="text-slate-400 group-hover:text-white transition-colors">
+                            <FileText className="h-5 w-5" />
+                        </div>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${expired ? 'bg-red-500/20 text-red-300 border-red-500/30' : 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30'}`}>
+                          {expired ? 'Expired' : 'Active'}
+                        </span>
+                      </div>
+                      <h4 className="text-white font-bold truncate" title={quote.summary}>{quote.summary || 'Custom Quote'}</h4>
+                      <p className="text-xs text-slate-500 mt-1">Generated {created}</p>
+                      <Button variant="link" className="p-0 h-auto text-xs text-cyan-400 mt-2 hover:text-cyan-300" onClick={() => window.open('/?quote_id=' + quote.id, '_blank')}>
+                         Re-open (Future Impl)
+                      </Button>
+                    </div>
+                  );
+                }) : (
+                  <div className="col-span-full text-sm text-slate-400">No saved quotes found.</div>
                 )}
               </div>
             </div>

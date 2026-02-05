@@ -18,6 +18,7 @@ import { formatOrderNumber } from '../../../../lib/order-utils';
 const STATUS_VARIANT: Record<OrderStatus, 'default' | 'destructive' | 'outline' | 'secondary'> = {
   'Pending': 'outline',
   'Awaiting Payment': 'destructive',
+  'Payment Failed': 'destructive',
   'Payment Confirmed': 'default',
   'Confirmed': 'default',
   'Processing': 'default',

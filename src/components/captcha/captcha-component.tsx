@@ -98,7 +98,12 @@ export function CaptchaComponent({
         <TurnstileComponent
           siteKey={siteKey}
           onVerify={onVerify}
-          onError={onError}
+          onError={(errCode: string) => {
+            logger.warn('Turnstile error, falling back to simple captcha', { code: errCode });
+            // Fallback to simple captcha if turnstile fails (e.g. invalid site key for domain)
+            setProvider('simple');
+            if (onError) onError(errCode);
+          }}
           onExpire={onExpire}
           theme={theme}
           size={size}

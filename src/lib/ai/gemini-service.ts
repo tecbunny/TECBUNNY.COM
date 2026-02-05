@@ -20,7 +20,7 @@ function extractGeminiText(payload: any): string {
 
 export async function generateGeminiText({
   prompt,
-  model = 'gemini-1.5-flash',
+  model = 'gemini-1.5-pro',
   temperature = 0.4,
   maxOutputTokens = 600,
 }: GeminiGenerateParams): Promise<string> {

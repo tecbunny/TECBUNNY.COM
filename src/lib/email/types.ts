@@ -49,6 +49,11 @@ export interface EmailTemplateData {
   bannerImageUrl?: string;
   discountCode?: string;
 
+  // General Update
+  updateTitle?: string;
+  updateBody?: string;
+  updateDate?: string;
+
   // Abandoned cart
   cartItems?: Array<{
     name: string;
@@ -109,7 +114,10 @@ export const EMAIL_TEMPLATES = {
   // 12. Internal order notifications
   ORDER_NOTIFICATION_MANAGER: 'order_notification_manager',
   ORDER_NOTIFICATION_SALES_PICKUP: 'order_notification_sales_pickup',
-  ORDER_APPROVED_ADMIN: 'order_approved_admin'
+  ORDER_APPROVED_ADMIN: 'order_approved_admin',
+
+  // 13. General Update
+  GENERAL_UPDATE: 'general_update'
 } as const;
 
 export type EmailTemplateType = typeof EMAIL_TEMPLATES[keyof typeof EMAIL_TEMPLATES];

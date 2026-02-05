@@ -20,6 +20,7 @@ const PAGE_LABEL: Record<HeroCarouselPageKey, string> = {
   services: 'Services Hero Carousel',
   offers: 'Offers Hero Carousel',
   products: 'Products Hero Carousel',
+  innovations: 'Innovations Hero Carousel',
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -32,6 +33,7 @@ function ensureContent(value: unknown): HeroCarouselContent {
     services: [],
     offers: [],
     products: [],
+    innovations: [],
   };
   if (!isRecord(value)) {
     return empty;
@@ -42,6 +44,7 @@ function ensureContent(value: unknown): HeroCarouselContent {
     services: normalizeSlides('services', rawPages.services),
     offers: normalizeSlides('offers', rawPages.offers),
     products: normalizeSlides('products', rawPages.products),
+    innovations: normalizeSlides('innovations', rawPages.innovations),
   };
 }
 
@@ -65,6 +68,7 @@ function normalizeSlides(pageKey: HeroCarouselPageKey, raw: unknown): HeroCarous
         title: typeof item.title === 'string' ? item.title : '',
         subtitle: typeof item.subtitle === 'string' ? item.subtitle : undefined,
         description: typeof item.description === 'string' ? item.description : undefined,
+        htmlContent: typeof item.htmlContent === 'string' ? item.htmlContent : undefined,
         imageUrl,
         ctaText: typeof item.ctaText === 'string' ? item.ctaText : undefined,
         ctaLink: typeof item.ctaLink === 'string' ? item.ctaLink : undefined,
@@ -164,36 +168,45 @@ export default function HeroCarousel({ pageKey, intervalMs = 6000, className }: 
                     target.src = 'https://placehold.co/1200x600?text=Hero+Banner';
                   }}
                 />
-                <div className="absolute inset-0 bg-black/55" />
-                <div className="absolute inset-0 flex items-center">
-                  <div className="px-6 sm:px-12">
-                    <div className="max-w-2xl space-y-4">
-                      {slide.subtitle && (
-                        <p className="text-sm font-medium uppercase tracking-[0.3em] text-blue-200">
-                          {slide.subtitle}
-                        </p>
-                      )}
-                      {slide.title && (
-                        <h2 className="text-3xl font-bold leading-tight sm:text-4xl lg:text-5xl">
-                          {slide.title}
-                        </h2>
-                      )}
-                      {slide.description && (
-                        <p className="text-base text-blue-100 sm:text-lg">
-                          {slide.description}
-                        </p>
-                      )}
-                      {slide.ctaText && slide.ctaLink && (
-                        <Link
-                          href={slide.ctaLink}
-                          className="inline-flex items-center rounded-full bg-white px-6 py-2 text-sm font-semibold text-gray-900 shadow-lg transition hover:bg-gray-200"
-                        >
-                          {slide.ctaText}
-                        </Link>
-                      )}
+                {slide.htmlContent ? (
+                  <div
+                    className="absolute inset-0 flex h-full w-full flex-col justify-center"
+                    dangerouslySetInnerHTML={{ __html: slide.htmlContent }}
+                  />
+                ) : (
+                  <>
+                    <div className="absolute inset-0 bg-black/55" />
+                    <div className="absolute inset-0 flex items-center">
+                      <div className="px-6 sm:px-12">
+                        <div className="max-w-2xl space-y-4">
+                          {slide.subtitle && (
+                            <p className="text-sm font-medium uppercase tracking-[0.3em] text-blue-200">
+                              {slide.subtitle}
+                            </p>
+                          )}
+                          {slide.title && (
+                            <h2 className="text-3xl font-bold leading-tight sm:text-4xl lg:text-5xl">
+                              {slide.title}
+                            </h2>
+                          )}
+                          {slide.description && (
+                            <p className="text-base text-blue-100 sm:text-lg">
+                              {slide.description}
+                            </p>
+                          )}
+                          {slide.ctaText && slide.ctaLink && (
+                            <Link
+                              href={slide.ctaLink}
+                              className="inline-flex items-center rounded-full bg-white px-6 py-2 text-sm font-semibold text-gray-900 shadow-lg transition hover:bg-gray-200"
+                            >
+                              {slide.ctaText}
+                            </Link>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
+                  </>
+                )}
               </article>
             ))}
           </div>

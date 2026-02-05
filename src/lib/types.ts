@@ -58,7 +58,7 @@ export interface Product {
   barcode?: string;             // Product barcode/SKU
 }
 
-export type HeroCarouselPageKey = 'homepage' | 'services' | 'offers' | 'products';
+export type HeroCarouselPageKey = 'homepage' | 'services' | 'offers' | 'products' | 'innovations';
 
 export interface HeroCarouselItem {
   id: string;
@@ -66,6 +66,7 @@ export interface HeroCarouselItem {
   subtitle?: string;
   description?: string;
   imageUrl: string;
+  htmlContent?: string;
   ctaText?: string;
   ctaLink?: string;
   isActive?: boolean;
@@ -142,6 +143,7 @@ export type OrderStatus =
   | 'Pending'
   | 'Awaiting Payment'
   | 'Payment Confirmed'
+  | 'Payment Failed'
   | 'Confirmed'
   | 'Processing'
   | 'Ready to Ship'

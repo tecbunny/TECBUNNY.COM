@@ -11,6 +11,8 @@ export async function middleware(request: NextRequest) {
     '/api/auto-offers',
     '/api/coupons',
     '/api/products', // Public product catalog
+    '/api/analytics', // Public analytics tracking
+    '/api/captcha',  // Public captcha config/verification
   ]
   
   // Check if the current path is in the public API routes
@@ -26,26 +28,36 @@ export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname
   let response = NextResponse.next({ request: { headers: requestHeaders } })
 
-  // Supabase Auth & Session Management
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll()
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            response.cookies.set(name, value, options)
-          })
-        },
-      },
-    }
-  )
+  // Supabase Auth & Session Management - Safe initialization
+  let user = null;
+  
+  if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    try {
+      const supabase = createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+        {
+          cookies: {
+            getAll() {
+              return request.cookies.getAll()
+            },
+            setAll(cookiesToSet) {
+              cookiesToSet.forEach(({ name, value, options }) => {
+                response.cookies.set(name, value, options)
+              })
+            },
+          },
+        }
+      )
 
-  // Refresh session if expired
-  const { data: { user } } = await supabase.auth.getUser()
+      // Refresh session if expired
+      const { data } = await supabase.auth.getUser()
+      user = data.user
+    } catch (e) {
+      // If Supabase fails, we proceed with user = null
+      console.error('Middleware Supabase Error:', e);
+    }
+  }
 
   // SECURITY: Fail-Closed API Protection
   // If we are hitting an API route, and it is NOT explicitly public, require a user.
@@ -91,10 +103,10 @@ export async function middleware(request: NextRequest) {
       "default-src 'self'",
       "img-src 'self' data: https:",
       // Allow Cloudflare Turnstile scripts and analytics beacon
-      "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com https://*.cloudflareinsights.com",
+      "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com https://*.cloudflareinsights.com https://static.cloudflareinsights.com",
       "style-src 'self' 'unsafe-inline'",
       // Allow API calls to any https, Turnstile verification, and analytics beacon uploads
-      "connect-src 'self' https: https://*.cloudflareinsights.com",
+      "connect-src 'self' https: https://*.cloudflareinsights.com https://static.cloudflareinsights.com",
       "font-src 'self' data:",
       // Permit Turnstile widget iframe
       "frame-src 'self' https://challenges.cloudflare.com",

@@ -21,9 +21,15 @@ const SENSITIVE_KEYS = [
   'password', 'passwd', 'pwd', 'token', 'authorization', 'auth', 'email',
   'secret', 'key', 'api_key', 'access', 'refresh', 'txn', 'transaction', 'client_secret', 'private', 'rsa', 'ssh'
 ];
-function redacted(obj: unknown): unknown {
+function redacted(obj: unknown, seen = new WeakSet()): unknown {
   if (!obj || typeof obj !== 'object') return obj;
-  if (Array.isArray(obj)) return obj.map(redacted);
+  
+  if (seen.has(obj)) {
+    return '[CIRCULAR]';
+  }
+  seen.add(obj);
+
+  if (Array.isArray(obj)) return obj.map(item => redacted(item, seen));
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(obj)) {
     const lowerK = k.toLowerCase();
@@ -32,19 +38,19 @@ function redacted(obj: unknown): unknown {
       out[k] = '[REDACTED]';
       continue;
     }
+    // ... existing key redaction ...
     if (v && typeof v === 'string') {
-      // redact long tokens, jwt-like strings, or base64-like strings that look like secrets
       const jwtLike = v.split('.').length === 3 && v.length > 20;
-      const longToken = v.length > 60; // arbitrary threshold for likely secrets
+      const longToken = v.length > 60; 
       const base64Like = /^(?:[A-Za-z0-9+/]{4}){8,}=?$/.test(v);
-      if (jwtLike || longToken || base64Like) {
+       if (jwtLike || longToken || base64Like) {
         out[k] = '[REDACTED]';
         continue;
       }
     }
 
     if (typeof v === 'object') {
-      out[k] = redacted(v);
+      out[k] = redacted(v, seen);
     } else {
       out[k] = v;
     }

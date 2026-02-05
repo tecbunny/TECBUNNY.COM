@@ -25,7 +25,7 @@ export default function SignUpPage() {
     password: '',
     confirmPassword: ''
   });
-  type PreferredChannel = 'whatsapp';
+  type PreferredChannel = 'email' | 'whatsapp';
   const [preferredChannel, setPreferredChannel] = useState<PreferredChannel>('whatsapp');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -78,13 +78,6 @@ export default function SignUpPage() {
       [name]: value
     }));
     setError('');
-
-    if (name === 'mobile') {
-      const digitsOnly = value.replace(/\D/g, '');
-      if (digitsOnly.length < 10) {
-        setPreferredChannel('whatsapp');
-      }
-    }
   };
 
   const handleChannelChange = (channel: PreferredChannel) => {
@@ -94,6 +87,7 @@ export default function SignUpPage() {
 
   const normalizedMobile = formData.mobile.replace(/\D/g, '');
   const mobileSupportsMessaging = normalizedMobile.length >= 10;
+  const emailValid = !!formData.email.trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email);
 
   const validateForm = () => {
     if (!formData.name.trim()) {
@@ -382,6 +376,25 @@ export default function SignUpPage() {
               <div className="space-y-2 md:col-span-2">
                 <Label className="text-sm text-slate-400">Verification Method</Label>
                 <div className="grid gap-3">
+                  <label className={cn('flex items-center justify-between rounded-lg border p-3 text-sm', preferredChannel === 'email' ? 'border-purple-400/60 bg-purple-400/10' : 'border-white/10 bg-white/5', !emailValid && 'opacity-60')}>
+                    <span className="flex items-center gap-3">
+                      <Mail className="h-4 w-4 text-blue-300" />
+                      <span className="flex flex-col">
+                        <span className="font-medium text-white">Email</span>
+                        <span className="text-xs text-slate-500">Send code via Email</span>
+                      </span>
+                    </span>
+                    <input
+                      type="radio"
+                      name="verification-channel"
+                      value="email"
+                      checked={preferredChannel === 'email'}
+                      onChange={() => handleChannelChange('email')}
+                      className="h-4 w-4 accent-purple-400"
+                      disabled={!emailValid}
+                    />
+                  </label>
+
                   <label className={cn('flex items-center justify-between rounded-lg border p-3 text-sm', preferredChannel === 'whatsapp' ? 'border-purple-400/60 bg-purple-400/10' : 'border-white/10 bg-white/5', !mobileSupportsMessaging && 'opacity-60')}>
                     <span className="flex items-center gap-3">
                       <MessageCircle className="h-4 w-4 text-emerald-300" />
@@ -401,8 +414,14 @@ export default function SignUpPage() {
                     />
                   </label>
                 </div>
-                {!mobileSupportsMessaging && (
-                  <p className="text-xs text-slate-500">Add a valid WhatsApp number to enable verification.</p>
+                {(!emailValid || !mobileSupportsMessaging) && (
+                  <p className="text-xs text-slate-500 pt-1">
+                    {!emailValid && !mobileSupportsMessaging 
+                      ? "Provide a valid email or WhatsApp number to enable verification."
+                      : !emailValid 
+                        ? "Provide a valid email to enable email verification."
+                        : "Provide a valid mobile number to enable WhatsApp verification."}
+                  </p>
                 )}
               </div>
 

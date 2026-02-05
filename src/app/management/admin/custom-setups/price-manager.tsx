@@ -927,7 +927,7 @@ export default function AdminCustomSetupManager() {
   const renderOptionTable = (system: CustomSetupBlueprintSystemSummary, component: CustomSetupBlueprintSystemSummary['components'][number]) => {
     if (!component.options.length) {
       return (
-        <p className="text-sm text-slate-500">No selectable options. Pricing is driven by quantity or formulas.</p>
+        <p className="text-sm text-muted-foreground">No selectable options. Pricing is driven by quantity or formulas.</p>
       );
     }
 
@@ -971,15 +971,15 @@ export default function AdminCustomSetupManager() {
               <TableRow key={option.id} className={isDirty ? 'bg-primary/5' : undefined}>
                 <TableCell>
                   <div className="flex flex-col gap-1">
-                    <span className="font-medium text-slate-800">{option.label}</span>
+                    <span className="font-medium text-foreground">{option.label}</span>
                     {megapixels !== null && (
-                      <span className="text-xs text-slate-500">Resolution: {megapixels} MP</span>
+                      <span className="text-xs text-muted-foreground">Resolution: {megapixels} MP</span>
                     )}
                     {coverageMeters !== null && (
-                      <span className="text-xs text-slate-500">Coverage: {coverageMeters} m</span>
+                      <span className="text-xs text-muted-foreground">Coverage: {coverageMeters} m</span>
                     )}
                     {formFactor && (
-                      <span className="text-xs text-slate-500">Type: {formFactor}</span>
+                      <span className="text-xs text-muted-foreground">Type: {formFactor}</span>
                     )}
                   </div>
                 </TableCell>
@@ -1003,12 +1003,12 @@ export default function AdminCustomSetupManager() {
                       onChange={(event) => handleOptionSalePriceChange(option.id, event.target.value, originalMetadata)}
                       className={saleDirty ? 'border-primary' : undefined}
                     />
-                    <span className="text-xs text-slate-500">
+                    <span className="text-xs text-muted-foreground">
                       Discount: {currencyFormatter.format(optionDiscountAmount)} ({optionDiscountPercent.toFixed(1)}%)
                     </span>
                   </div>
                 </TableCell>
-                <TableCell className="text-xs text-slate-500">
+                <TableCell className="text-xs text-muted-foreground">
                   {priceDirty && saleDirty && 'Price & sale price pending'}
                   {!priceDirty && saleDirty && 'Sale price pending'}
                   {priceDirty && !saleDirty && 'Price pending'}
@@ -1076,22 +1076,22 @@ export default function AdminCustomSetupManager() {
                         type="button"
                         onClick={() => setSelectedSlug(template.slug)}
                         className={`rounded-lg border p-4 text-left transition-shadow ${
-                          isSelected ? 'border-primary shadow-lg' : 'border-slate-200 hover:shadow'
+                          isSelected ? 'border-primary shadow-lg' : 'border-border hover:shadow'
                         }`}
                         disabled={templateLoading && template.slug !== selectedSlug}
                       >
                         <div className="mb-2 flex items-center justify-between">
-                          <span className="text-sm font-medium text-slate-600">{template.category || 'General'}</span>
+                          <span className="text-sm font-medium text-muted-foreground">{template.category || 'General'}</span>
                           {template.is_active ? (
                             <Badge variant="secondary">Active</Badge>
                           ) : (
                             <Badge variant="outline">Draft</Badge>
                           )}
                         </div>
-                        <h3 className="text-lg font-semibold text-slate-900">{template.name}</h3>
-                        <p className="mt-1 text-xs text-slate-500">Slug: {template.slug}</p>
+                        <h3 className="text-lg font-semibold text-foreground">{template.name}</h3>
+                        <p className="mt-1 text-xs text-muted-foreground">Slug: {template.slug}</p>
                         {template.base_price !== null && template.base_price !== undefined && (
-                          <p className="mt-2 text-sm text-slate-600">
+                          <p className="mt-2 text-sm text-muted-foreground">
                             Base Price: {currencyFormatter.format(template.base_price)}
                           </p>
                         )}
@@ -1123,7 +1123,7 @@ export default function AdminCustomSetupManager() {
                       <CardHeader>
                         <div className="flex flex-wrap items-start justify-between gap-4">
                           <div>
-                            <CardTitle className="text-2xl text-slate-900">{system.name}</CardTitle>
+                            <CardTitle className="text-2xl text-foreground">{system.name}</CardTitle>
                             {system.description && (
                               <CardDescription>{system.description}</CardDescription>
                             )}
@@ -1137,8 +1137,8 @@ export default function AdminCustomSetupManager() {
                                 </Badge>
                               )}
                             </div>
-                            <div className="min-w-[190px] rounded-lg bg-primary/5 px-3 py-2 text-sm text-slate-700">
-                              <p className="font-semibold text-slate-800">System totals</p>
+                            <div className="min-w-[190px] rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">
+                              <p className="font-semibold text-foreground">System totals</p>
                               <p>MRP: {currencyFormatter.format(totalMrp)}</p>
                               <p>Sale: {currencyFormatter.format(totalSale)}</p>
                               <p className="text-emerald-600 font-semibold">
@@ -1151,15 +1151,15 @@ export default function AdminCustomSetupManager() {
                       <CardContent>
                         <div className="space-y-6">
                           {system.components.map((component) => (
-                            <div key={component.id} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                            <div key={component.id} className="rounded-lg border border-border bg-card p-4 shadow-sm">
                               <div className="flex flex-wrap items-start justify-between gap-4">
                                 <div>
-                                  <h3 className="text-lg font-semibold text-slate-900">{component.name}</h3>
+                                  <h3 className="text-lg font-semibold text-foreground">{component.name}</h3>
                                   {component.description && (
-                                    <p className="mt-1 text-sm text-slate-600">{component.description}</p>
+                                    <p className="mt-1 text-sm text-muted-foreground">{component.description}</p>
                                   )}
                                 </div>
-                                <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+                                <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                                   <Badge variant="outline">{component.isRequired ? 'Required' : 'Optional'}</Badge>
                                   {component.pricingMode && (
                                     <Badge variant="outline">Billing: {component.pricingMode.replace('_', ' ')}</Badge>

@@ -5,6 +5,7 @@
 
 import { createServiceClient } from '../lib/supabase/server';
 import type { OtpType } from '../lib/types';
+import { emailClient } from './email/client';
 
 import { logger } from './logger';
 
@@ -12,8 +13,10 @@ export interface OtpRequest {
   order_id: string;
   agent_id?: string;
   customer_phone: string;
+  customer_email?: string;
   otp_type: OtpType;
   created_by?: string;
+  channel?: 'sms' | 'email' | 'both';
 }
 
 export interface OtpVerification {
@@ -99,12 +102,26 @@ export class OtpService {
         };
       }
 
-      if (!skipSms) {
+      // Send OTP via Email if requested or if channel is 'both'
+      if ((request.channel === 'email' || request.channel === 'both') && request.customer_email) {
+        try {
+          await emailClient.sendOtpEmail(request.customer_email, otpCode);
+        } catch (emailError) {
+          logger.error('Failed to send OTP email', { error: emailError, email: request.customer_email });
+          // If email-only channel failed, we should probably report error, 
+          // but if 'both', we might want to continue to SMS or return success if at least one worked.
+          if (request.channel === 'email') {
+            return { success: false, error: 'Failed to send OTP email' };
+          }
+        }
+      }
+
+      if (!skipSms && (request.channel === 'sms' || request.channel === 'both' || !request.channel)) {
         // Send OTP via SMS
         const smsResult = await this.sendOtpSms(request.customer_phone, otpCode, request.otp_type);
         
-        if (!smsResult.success) {
-          // Delete the OTP record if SMS failed
+        if (!smsResult.success && request.channel !== 'both') {
+          // Delete the OTP record if SMS failed (and it was the only channel)
           await this.supabase
             .from('order_otp_verifications')
             .delete()

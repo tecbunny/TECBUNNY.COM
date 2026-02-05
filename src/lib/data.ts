@@ -102,6 +102,7 @@ export const VALIDATION_PATTERNS = {
 export const ORDER_STATUS_FLOW = [
   'Pending',
   'Awaiting Payment',
+  'Payment Failed',
   'Payment Confirmed', 
   'Confirmed',
   'Processing',

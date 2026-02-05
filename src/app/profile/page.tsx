@@ -61,6 +61,18 @@ async function getUserData() {
     // Swallow errors to avoid breaking profile page if table missing
   }
 
+  let quotes: any[] = [];
+  try {
+    const { data } = await supabase
+      .from('quotes')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false });
+    quotes = data ?? [];
+  } catch (error) {
+    // Ignore error
+  }
+
   const fallbackProfile = profileData ?? {
     id: user.id,
     name: user.user_metadata?.name ?? user.email?.split('@')[0] ?? 'User',
@@ -74,12 +86,13 @@ async function getUserData() {
     profile: fallbackProfile,
     salesAgentData,
     recentOrders: recentOrders ?? [],
-    recentTickets: recentTickets ?? []
+    recentTickets: recentTickets ?? [],
+    quotes
   };
 }
 
 export default async function ProfilePage() {
-  const { user, profile, salesAgentData, recentOrders, recentTickets } = await getUserData();
+  const { user, profile, salesAgentData, recentOrders, recentTickets, quotes } = await getUserData();
   
   return (
     <UserProfile
@@ -88,6 +101,7 @@ export default async function ProfilePage() {
       salesAgentData={salesAgentData}
       orders={recentOrders}
       serviceTickets={recentTickets}
+      quotes={quotes}
     />
   );
 }

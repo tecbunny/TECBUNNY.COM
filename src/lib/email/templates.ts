@@ -1005,6 +1005,46 @@ ${data.userName ? `Customer: ${data.userName}\n` : ''}${typeof data.orderTotal =
         text: `Pickup order #${data.orderId} assigned. Prepare and notify customer.`
       };
 
+    case 'general_update':
+      return {
+        subject: `${data.updateTitle || 'Latest Update'} | ${companyData.companyName}`,
+        html: `
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Latest Update</title>
+            ${EMAIL_STYLES}
+          </head>
+          <body>
+            <div class="container">
+              <div class="header">
+                <h1>${data.updateTitle || 'Latest Update'}</h1>
+              </div>
+              <div class="content">
+                <h2>Hello ${data.userName || 'there'},</h2>
+                <div style="background-color: #f8fafc; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                   ${data.updateBody ? `<p>${data.updateBody}</p>` : ''}
+                </div>
+                ${data.updateDate ? `<p style="font-size: 12px; color: #64748b;">Update posted on: ${data.updateDate}</p>` : ''}
+                
+                <a href="${companyData.websiteUrl}" class="button">Visit Dashboard</a>
+                
+                <p>Best regards,<br>
+                The ${companyData.companyName} Team</p>
+              </div>
+              <div class="footer">
+                <p>${companyData.companyName} | ${companyData.companyEmail} | ${companyData.companyPhone}</p>
+                <p>${companyData.companyAddress}</p>
+              </div>
+            </div>
+          </body>
+          </html>
+        `,
+        text: `${data.updateTitle || 'Latest Update'}\n\nHello ${data.userName || 'there'},\n\n${data.updateBody || ''}\n\nVisit: ${companyData.websiteUrl}`
+      };
+
     default:
       throw new Error(`Unknown email template type: ${templateType}`);
   }

@@ -233,7 +233,7 @@ export function Header() {
                         <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-cyan-400 shadow-[0_0_8px_#06b6d4]" />
                       )}
                     </Link>
-                    <div className="invisible absolute left-1/2 top-full z-50 mt-3 w-56 -translate-x-1/2 rounded-2xl border border-white/10 bg-slate-950/95 p-2 opacity-0 shadow-2xl backdrop-blur-xl transition-all duration-200 group-hover:visible group-hover:opacity-100">
+                    <div className="invisible absolute left-1/2 top-full z-50 mt-3 w-56 -translate-x-1/2 rounded-2xl border border-white/10 bg-slate-950/95 p-2 opacity-0 shadow-2xl backdrop-blur-xl transition-all duration-200 group-hover:visible group-hover:opacity-100 before:absolute before:-top-3 before:left-0 before:h-3 before:w-full">
                       {item.children.map((child) => (
                         <Link
                           key={child.name}
@@ -299,6 +299,9 @@ export function Header() {
                   <DropdownMenuContent align="end" className="border-white/10 bg-slate-950 text-slate-200">
                     <DropdownMenuItem asChild className="cursor-pointer focus:bg-white/10">
                       <Link href="/profile">Profile</Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild className="cursor-pointer focus:bg-white/10">
+                      <Link href="/orders">My Orders</Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild className="cursor-pointer focus:bg-white/10">
                       <Link href={accountHref}>Account</Link>

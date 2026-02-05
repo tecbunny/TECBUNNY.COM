@@ -21,6 +21,7 @@ import { getProductDisplayImage } from '../lib/image-utils';
 import { OptimizedImage } from './ui/optimized-image';
 import type { Product } from '../lib/types';
 import { useAnalytics } from '../hooks/use-analytics';
+import HeroCarousel from './HeroCarousel';
 
 type DbProduct = {
   id: string;
@@ -402,6 +403,8 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
+      <HeroCarousel pageKey="homepage" />
 
       <section className="bg-slate-950 py-24">
         <div className="container mx-auto px-6">

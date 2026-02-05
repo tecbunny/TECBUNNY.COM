@@ -16,6 +16,7 @@ import type { Product, AutoOffer } from '../../lib/types';
 import { Skeleton } from '../../components/ui/skeleton';
 import { Input } from '../../components/ui/input';
 import { useCart } from '../../lib/hooks';
+import HeroCarousel from '../HeroCarousel';
 
 const DEFAULT_CUSTOMER_CATEGORY = 'Normal';
 
@@ -404,6 +405,8 @@ export function ShopPageContent() {
     <section className="relative overflow-hidden bg-slate-950 text-slate-200">
       <div className="pointer-events-none absolute inset-0 bg-[url('/noise.svg')] opacity-20" />
       <div className="pointer-events-none absolute right-0 top-0 h-[500px] w-[500px] rounded-full bg-cyan-500/10 blur-[120px]" />
+
+      <HeroCarousel pageKey="products" />
 
       <div className="relative mx-auto max-w-7xl px-4 pb-16 pt-0 sm:px-6 lg:px-8 sm:pt-0">
         <div className="flex flex-col gap-10">

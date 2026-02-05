@@ -8,6 +8,7 @@ import DOMPurify from 'dompurify';
 import { logger } from '../lib/logger';
 
 import { useToast } from '../hooks/use-toast';
+import HeroCarousel from './HeroCarousel';
 
 interface Offer {
   id: string;
@@ -154,6 +155,8 @@ export default function OffersPage() {
     <div className="relative overflow-hidden bg-slate-950 text-slate-200">
       <div className="pointer-events-none absolute inset-0 bg-[url('/noise.svg')] opacity-20" />
       <div className="pointer-events-none absolute right-1/4 top-0 h-[600px] w-[600px] rounded-full bg-amber-400/10 blur-[140px]" />
+
+      <HeroCarousel pageKey="offers" />
 
       <section className="relative pt-0">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">

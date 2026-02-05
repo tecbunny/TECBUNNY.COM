@@ -24,6 +24,7 @@ import { Button } from '@/components/ui/button';
 import { useCart } from '../lib/hooks';
 import { usePermissions } from '../hooks/use-permissions';
 import type { Product, Service } from '../lib/types';
+import HeroCarousel from './HeroCarousel';
 
 
 const iconMap: Record<string, ComponentType<LucideProps>> = {
@@ -305,6 +306,8 @@ export default function ServicesPage({ services }: ServicesPageProps) {
     <div className="relative overflow-hidden bg-slate-950 text-slate-200">
       <div className="pointer-events-none absolute inset-0 bg-[url('/noise.svg')] opacity-20" />
       <div className="pointer-events-none absolute left-1/2 top-32 h-[420px] w-[820px] -translate-x-1/2 rounded-full bg-blue-500/10 blur-[140px]" />
+
+      <HeroCarousel pageKey="services" />
 
       <div className="relative mx-auto flex max-w-7xl flex-col gap-16 px-4 pb-20 pt-0 sm:px-6 lg:px-8 sm:pt-0">
         <section className="text-center">

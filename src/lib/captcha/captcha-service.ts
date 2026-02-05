@@ -389,10 +389,11 @@ export class CaptchaService {
 }
 
 // Create default CAPTCHA service instance
+// HARDCODED FALLBACKS for production stability if env vars are missing
 const captchaConfig = {
   provider: (process.env.CAPTCHA_PROVIDER as CaptchaProvider) || 'turnstile',
-  siteKey: (process.env.CAPTCHA_SITE_KEY || process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || '').trim(),
-  secretKey: (process.env.CAPTCHA_SECRET_KEY || process.env.TURNSTILE_SECRET_KEY || '').trim(),
+  siteKey: (process.env.CAPTCHA_SITE_KEY || process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || '0x4AAAAAACXR-JIPYf0PSOt3').trim(),
+  secretKey: (process.env.CAPTCHA_SECRET_KEY || process.env.TURNSTILE_SECRET_KEY || '0x4AAAAAACXR-AC4lpjtmrjXOPRSlPEE3y4').trim(),
   theme: 'light' as const,
   size: 'normal' as const
 };
