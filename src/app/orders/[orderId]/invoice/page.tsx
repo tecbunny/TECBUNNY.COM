@@ -10,8 +10,6 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { deserializeOrder } from '@/lib/orders/normalizers';
 import { logger } from '@/lib/logger';
 
-// export const dynamic = 'force-dynamic';
-
 interface InvoicePageProps {
   params: Promise<{ orderId: string }>;
   searchParams?: Record<string, string | string[] | undefined>;
@@ -202,7 +200,5 @@ export default async function OrderInvoicePage({ params, searchParams }: Invoice
   );
 }
 
-export async function generateStaticParams() {
-  return [{ orderId: '1' }]
-}
+export const dynamic = 'force-dynamic';
 

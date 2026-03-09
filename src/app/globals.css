@@ -8,6 +8,12 @@
   * {
     border-color: hsl(var(--border));
   }
+
+  /* Dark dropdown options — ensures readable text in all browsers */
+  select option {
+    background-color: #0d1421;
+    color: #e2e8f0;
+  }
   
   :root {
     --background: 220 20% 95%;
