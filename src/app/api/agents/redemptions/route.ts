@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 
 import { createClient } from '../../../../lib/supabase/server'
 
-export const dynamic = 'force-dynamic'
+export const dynamic = 'force-dynamic';
 
 // GET /api/agents/redemptions - list current agent's redemption requests
 export async function GET() {

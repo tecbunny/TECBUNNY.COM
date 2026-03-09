@@ -15,6 +15,7 @@ import {Toaster} from '../components/ui/toaster';
 import {ThemeProvider} from '../components/providers/ThemeProvider';
 import {DynamicFavicon, DynamicTitle} from '../components/ui/dynamic-head';
 import {AuthStateManager} from '../components/auth/AuthStateManager';
+import MarketingPopup from '../components/shared/MarketingPopup';
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://www.tecbunny.com'),
@@ -109,21 +110,85 @@ const structuredData = {
   '@context': 'https://schema.org',
   '@graph': [
     {
-      '@type': 'Organization',
+      '@type': 'WebSite',
+      '@id': 'https://www.tecbunny.com/#website',
       name: 'TecBunny Solutions',
       url: 'https://www.tecbunny.com',
-      logo: 'https://www.tecbunny.com/brand.png',
-      description:
-        'TecBunny Solutions offers CCTV, computer hardware, AMC services, and custom tech setups across Goa.',
+      potentialAction: {
+        '@type': 'SearchAction',
+        target: {
+          '@type': 'EntryPoint',
+          urlTemplate: 'https://www.tecbunny.com/products?search={search_term_string}',
+        },
+        'query-input': 'required name=search_term_string',
+      },
+    },
+    {
+      '@type': 'Organization',
+      '@id': 'https://www.tecbunny.com/#organization',
+      name: 'TecBunny Solutions Private Limited',
+      legalName: 'TECBUNNY SOLUTIONS PRIVATE LIMITED',
+      url: 'https://www.tecbunny.com',
+      logo: {
+        '@type': 'ImageObject',
+        url: 'https://www.tecbunny.com/brand.png',
+        width: 512,
+        height: 512,
+      },
+      description: 'TecBunny Solutions offers CCTV, computer hardware, AMC services, and custom tech setups across Goa.',
+      contactPoint: {
+        '@type': 'ContactPoint',
+        telephone: '+91-96041-36010',
+        contactType: 'customer support',
+        email: 'support@tecbunny.com',
+        areaServed: 'IN',
+        availableLanguage: ['English', 'Hindi', 'Konkani'],
+      },
     },
     {
       '@type': ['LocalBusiness', 'ITService', 'SecurityService'],
+      '@id': 'https://www.tecbunny.com/#localbusiness',
       name: 'TecBunny Solutions',
       url: 'https://www.tecbunny.com',
       image: 'https://www.tecbunny.com/brand.png',
-      description:
-        'CCTV installation, computer hardware, AMC services, networking, and custom tech setups in Goa.',
-      areaServed: 'Goa, India',
+      description: 'CCTV installation, computer hardware, AMC services, networking, and custom tech setups in Goa.',
+      telephone: '+91-96041-36010',
+      email: 'support@tecbunny.com',
+      address: {
+        '@type': 'PostalAddress',
+        streetAddress: 'H No 11 Nhayginwada, Parse, Parxem',
+        addressLocality: 'Pernem',
+        addressRegion: 'North Goa',
+        postalCode: '403512',
+        addressCountry: 'IN',
+      },
+      geo: {
+        '@type': 'GeoCoordinates',
+        latitude: 15.7233,
+        longitude: 73.7879,
+      },
+      areaServed: { '@type': 'State', name: 'Goa' },
+      priceRange: '₹₹',
+      currenciesAccepted: 'INR',
+      paymentAccepted: 'Cash, UPI, Bank Transfer',
+      openingHoursSpecification: [
+        {
+          '@type': 'OpeningHoursSpecification',
+          dayOfWeek: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+          opens: '09:00',
+          closes: '19:00',
+        },
+      ],
+      hasOfferCatalog: {
+        '@type': 'OfferCatalog',
+        name: 'TecBunny Products & Services',
+        itemListElement: [
+          { '@type': 'Offer', itemOffered: { '@type': 'Service', name: 'CCTV Installation' } },
+          { '@type': 'Offer', itemOffered: { '@type': 'Service', name: 'AMC Services' } },
+          { '@type': 'Offer', itemOffered: { '@type': 'Service', name: 'Computer Hardware Supply' } },
+          { '@type': 'Offer', itemOffered: { '@type': 'Service', name: 'Networking & Biometric Systems' } },
+        ],
+      },
     },
   ],
 };
@@ -188,6 +253,7 @@ _iub.csConfiguration = {"siteId":4401650,"cookiePolicyId":81350062,"lang":"en","
                   <Footer />
                 </div>
               </TechShell>
+              <MarketingPopup />
               <FloatingAIAssistant />
               <Toaster />
               <Analytics />

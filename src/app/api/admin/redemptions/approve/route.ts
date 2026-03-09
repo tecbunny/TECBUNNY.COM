@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 
 import { createServiceClient } from '../../../../../lib/supabase/server'
 
-export const dynamic = 'force-dynamic'
+export const dynamic = 'force-dynamic';
 
 // POST /api/admin/redemptions/approve { redemption_id }
 export async function POST(request: Request) {

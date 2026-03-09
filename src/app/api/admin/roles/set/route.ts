@@ -12,7 +12,7 @@ interface Body {
 
 // POST /api/admin/roles/set
 export async function POST(req: Request) {
-  const ctx = await requireRole('admin'); // admin baseline; superadmin needed for superadmin assignment inside logic
+  const ctx = await requireRole('admin'); // admin baseline
   if ('error' in ctx) {
     return NextResponse.json({ error: ctx.error }, { status: ctx.status });
   }
@@ -30,19 +30,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Self role change not permitted' }, { status: 400 });
     }
 
-    // Additional security: only superadmin can assign superadmin
-    if (newRole === 'superadmin' && ctx.role !== 'superadmin') {
-      return NextResponse.json({ error: 'Only superadmin may assign superadmin' }, { status: 403 });
-    }
-
-    // Admin cannot change existing superadmin
     const service = createServiceClient();
     const { data: targetProfile } = await service.from('profiles').select('role').eq('id', userId).maybeSingle();
     if (!targetProfile) {
       return NextResponse.json({ error: 'Target user profile not found' }, { status: 404 });
-    }
-    if (targetProfile.role === 'superadmin' && ctx.role !== 'superadmin') {
-      return NextResponse.json({ error: 'Cannot modify superadmin without superadmin role' }, { status: 403 });
     }
 
     // Update profiles.role via RPC for audit (preferred) else fallback

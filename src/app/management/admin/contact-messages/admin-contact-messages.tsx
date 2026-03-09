@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { RefreshCw, MessageCircle, Eye, Loader2 } from 'lucide-react';
+import { RefreshCw, MessageCircle, Eye, Loader2, Sparkles, Copy, CheckCheck } from 'lucide-react';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -48,6 +48,43 @@ export default function AdminContactMessages() {
   const [notesDraft, setNotesDraft] = React.useState('');
   const [updatingId, setUpdatingId] = React.useState<string | null>(null);
   const [savingNotes, setSavingNotes] = React.useState(false);
+  const [draftReply, setDraftReply] = React.useState('');
+  const [generatingReply, setGeneratingReply] = React.useState(false);
+  const [copied, setCopied] = React.useState(false);
+
+  const handleGenerateReply = async () => {
+    if (!selectedMessage) return;
+    setGeneratingReply(true);
+    try {
+      const res = await fetch('/api/admin/ai/draft-reply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: selectedMessage.name,
+          subject: selectedMessage.subject,
+          message: selectedMessage.message,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || 'AI failed');
+      setDraftReply(data.draft);
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        title: 'AI Reply Failed',
+        description: error instanceof Error ? error.message : 'Could not generate reply.',
+      });
+    } finally {
+      setGeneratingReply(false);
+    }
+  };
+
+  const handleCopyDraft = async () => {
+    if (!draftReply) return;
+    await navigator.clipboard.writeText(draftReply);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   const stats = React.useMemo(() => {
     const totals = {
@@ -139,6 +176,8 @@ export default function AdminContactMessages() {
   const handleOpenDetails = (message: ContactMessage) => {
     setSelectedMessage(message);
     setNotesDraft(message.admin_notes ?? '');
+    setDraftReply('');
+    setCopied(false);
     setDialogOpen(true);
   };
 
@@ -373,6 +412,50 @@ export default function AdminContactMessages() {
                 <p className="rounded-lg border bg-muted/30 p-4 text-sm leading-relaxed whitespace-pre-wrap">
                   {selectedMessage.message}
                 </p>
+              </div>
+
+              {/* AI Draft Reply */}
+              <div className="space-y-2 rounded-xl border border-violet-500/20 bg-violet-500/5 p-4">
+                <div className="flex items-center justify-between">
+                  <p className="flex items-center gap-2 font-semibold text-violet-700 dark:text-violet-300">
+                    <Sparkles className="h-4 w-4" />
+                    AI Draft Reply
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleGenerateReply}
+                    disabled={generatingReply}
+                    className="gap-1.5 border-violet-500/40 text-violet-700 hover:bg-violet-500/10 dark:text-violet-300"
+                  >
+                    {generatingReply ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                    {generatingReply ? 'Generating…' : draftReply ? 'Regenerate' : 'Generate Reply'}
+                  </Button>
+                </div>
+                {draftReply ? (
+                  <div className="relative">
+                    <Textarea
+                      value={draftReply}
+                      onChange={e => setDraftReply(e.target.value)}
+                      rows={6}
+                      className="pr-10 text-sm"
+                    />
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={handleCopyDraft}
+                      className="absolute right-2 top-2 h-7 w-7"
+                      title="Copy to clipboard"
+                    >
+                      {copied ? <CheckCheck className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
+                    </Button>
+                    <p className="mt-1.5 text-xs text-muted-foreground">Edit the draft above, then copy and send via email.</p>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Click <strong>Generate Reply</strong> to create a professional AI-drafted response you can copy and send.
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2">

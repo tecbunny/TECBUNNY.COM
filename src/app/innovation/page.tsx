@@ -7,14 +7,14 @@ import { createClient, createServiceClient, isSupabaseServiceConfigured } from '
 import type { InnovationDevice, InnovationMode } from '../../lib/types';
 
 export const metadata: Metadata = createPageMetadata({
-  title: 'Innovation - TecBunny Store',
-  description: 'Explore next-generation automation and smart ecosystem experiences curated by TecBunny.',
-  keywords: ['innovation', 'automation', 'smart home', 'TecBunny', 'technology'],
+  title: 'Smart Home & Automation Solutions in Goa | TecBunny Innovation',
+  description: 'Explore smart home automation, IoT devices, and intelligent security systems curated by TecBunny Solutions, Goa. Future-ready tech for homes and businesses.',
+  keywords: ['smart home Goa', 'home automation Goa', 'IoT Goa', 'smart security Goa', 'TecBunny innovation'],
   path: '/innovation',
   image: '/brand.png',
 });
 
-export const dynamic = 'force-dynamic';
+// export const dynamic = 'force-dynamic';
 
 export default async function Page() {
   let modes: InnovationMode[] = [];

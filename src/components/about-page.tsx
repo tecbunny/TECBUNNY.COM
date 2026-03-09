@@ -128,7 +128,7 @@ export default function AboutPage() {
             <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-white/10">🏛️</div>
             <h4 className="text-lg font-semibold text-white">Registered Entity</h4>
             <p className="mt-2 text-sm text-slate-400">Tecbunny Solutions Private Limited</p>
-            <p className="mt-3 inline-block rounded bg-cyan-500/10 px-2 py-1 text-xs font-semibold text-cyan-300">CIN: U80200GA2025PTC017366</p>
+            <p className="mt-3 inline-block rounded bg-cyan-500/10 px-2 py-1 text-xs font-semibold text-cyan-300">CIN: U80200GA2025PTC017488</p>
           </div>
           <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-6">
             <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-white/10">📍</div>
@@ -195,7 +195,7 @@ export default function AboutPage() {
       <section className="bg-slate-900 py-16 text-center">
         <div className="mx-auto max-w-4xl px-4 sm:px-6">
           <h2 className="text-3xl font-semibold text-white">Ready to Experience the Difference?</h2>
-          <p className="mt-3 text-sm text-slate-400">Join thousands of satisfied customers who trust Tecbunny for their technology needs.</p>
+          <p className="mt-3 text-sm text-slate-400">Join our growing community of happy customers across Goa who trust TecBunny for their security, automation, and technology needs.</p>
           <div className="mt-6 flex flex-col items-center justify-center gap-4 sm:flex-row">
             <Link href="/products" className="rounded-full bg-white px-6 py-3 text-sm font-semibold text-slate-900">
               Shop Now

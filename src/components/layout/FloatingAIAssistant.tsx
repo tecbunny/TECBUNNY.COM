@@ -28,8 +28,8 @@ export function FloatingAIAssistant() {
                 <Bot className="h-5 w-5" />
               </span>
               <div>
-                <p className="text-sm font-semibold text-white">AI Assistant</p>
-                <p className="text-xs text-slate-400">Ask anything about products.</p>
+                <p className="text-sm font-semibold text-white">TecBunny AI</p>
+                <p className="text-xs text-slate-400">CCTV &amp; IT product specialist.</p>
               </div>
             </div>
             <button
@@ -55,7 +55,7 @@ export function FloatingAIAssistant() {
               <ArrowRight className="h-4 w-4" />
             </Link>
             <p className="text-[11px] text-slate-500">
-              Need pricing? Share your requirements and get recommendations.
+              Ask about cameras, NVR/DVR, computers, or networking. Need a quote? Use our Custom Setups tool.
             </p>
           </div>
         </div>

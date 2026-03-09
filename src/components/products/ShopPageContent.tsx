@@ -182,6 +182,7 @@ export function ShopPageContent() {
   const [products, setProducts] = React.useState<Product[]>([]);
   const [filteredProducts, setFilteredProducts] = React.useState<Product[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [fetchWarning, setFetchWarning] = React.useState<string | null>(null);
   const [categories, setCategories] = React.useState<string[]>([]);
   const [priceRange, setPriceRange] = React.useState<[number, number]>([0, 100000]);
   const [maxPrice, setMaxPrice] = React.useState(100000);
@@ -209,6 +210,7 @@ export function ShopPageContent() {
   React.useEffect(() => {
     const fetchProducts = async () => {
       setLoading(true);
+      setFetchWarning(null);
       
       try {
         logger.info('ShopPage: Fetching products...');
@@ -219,6 +221,9 @@ export function ShopPageContent() {
         }
 
         const payload = await response.json();
+        const warningMessage = Array.isArray(payload?.warnings) && payload.warnings.length > 0
+          ? String(payload.warnings[0])
+          : null;
         const data = Array.isArray(payload?.data) ? payload.data : Array.isArray(payload) ? payload : [];
 
         logger.info('ShopPage: Products fetched', {
@@ -227,7 +232,12 @@ export function ShopPageContent() {
         });
 
         if (!data || data.length === 0) {
-          logger.warn('No products found in database');
+          if (warningMessage) {
+            logger.warn('Products API warning with empty dataset', { warning: warningMessage });
+            setFetchWarning(warningMessage);
+          } else {
+            logger.warn('No products found in database');
+          }
           setProducts([]);
           setCategories([]);
           setLoading(false);
@@ -320,6 +330,7 @@ export function ShopPageContent() {
         }
       } catch (error) {
         logger.error('Error fetching products:', { error });
+        setFetchWarning(error instanceof Error ? error.message : 'Unable to load products right now.');
         setProducts([]);
       } finally {
         // Always set loading to false, even if there's an error
@@ -508,12 +519,12 @@ export function ShopPageContent() {
                     className="group flex h-full flex-col rounded-2xl border border-white/5 bg-slate-900/60 p-4 transition-transform duration-300 hover:-translate-y-1 hover:border-cyan-400/30"
                   >
                     <Link href={`/products/${product.id}`} className="block">
-                      <div className="relative mb-4 flex h-48 items-center justify-center overflow-hidden rounded-xl bg-black/40 p-3">
+                      <div className="relative mb-4 aspect-square w-full overflow-hidden rounded-xl bg-white p-4 flex items-center justify-center">
                         {imageUrl ? (
                           <img
                             src={imageUrl}
                             alt={displayName}
-                            className="h-full w-full object-contain opacity-90 transition-transform duration-500 group-hover:scale-105"
+                            className="h-full w-full object-contain transition-transform duration-500 group-hover:scale-105"
                             loading="lazy"
                           />
                         ) : (
@@ -557,7 +568,7 @@ export function ShopPageContent() {
             </div>
           ) : (
             <div className="rounded-2xl border border-dashed border-white/10 bg-white/5 p-10 text-center text-slate-400">
-              No products matched your search.
+              {fetchWarning || 'No products matched your search.'}
             </div>
           )}
         </div>

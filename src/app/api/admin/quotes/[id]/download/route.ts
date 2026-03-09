@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { requireAdmin } from '@/lib/admin-auth';
 import { buildPdf, loadCompanyInfo } from '@/lib/pdf-generator';
@@ -52,3 +52,4 @@ export async function GET(
     return NextResponse.json({ error: 'Failed to generate PDF' }, { status: 500 });
   }
 }
+

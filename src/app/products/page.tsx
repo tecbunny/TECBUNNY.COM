@@ -6,9 +6,9 @@ import { ShopPageContent } from '../../components/products/ShopPageContent';
 import { createPageMetadata } from '../../lib/metadata';
 
 export const metadata: Metadata = createPageMetadata({
-  title: 'Shop Products - TecBunny Store',
-  description: 'Browse CCTV systems, computers, accessories, and AMC-ready hardware curated by TecBunny.',
-  keywords: ['shop', 'products', 'CCTV', 'computers', 'accessories', 'TecBunny'],
+  title: 'Buy CCTV, Computers & IT Hardware in Goa | TecBunny Solutions',
+  description: 'Shop CCTV cameras, NVR/DVR systems, computers, networking gear, and accessories online from TecBunny Solutions, Goa. Best prices with professional installation support.',
+  keywords: ['buy CCTV Goa', 'CCTV cameras online Goa', 'computer hardware Goa', 'NVR DVR Goa', 'IT hardware Goa', 'TecBunny shop'],
   path: '/products',
   image: '/brand.png',
 });

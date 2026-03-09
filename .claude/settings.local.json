@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(__NEW_LINE_2fd64bf0a7fea8d0__ grep -rn \"// export const dynamic\\\\|//export const dynamic\" src/app/api/)"
+    ]
+  }
+}

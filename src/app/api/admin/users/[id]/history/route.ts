@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
 import { createClient, createServiceClient } from '../../../../../../lib/supabase/server';
 import { requireAdmin } from '../../../../../../lib/admin-auth';
 
@@ -74,3 +74,4 @@ export async function GET(
     timeline
   });
 }
+

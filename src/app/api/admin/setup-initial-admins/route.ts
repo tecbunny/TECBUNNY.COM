@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
         password: 'Bunny@6010',
         name: 'Shubham Bhisaji',
         mobile: '7387375651',
-        role: 'superadmin'
+        role: 'admin'
       }
     ];
 

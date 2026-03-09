@@ -5,7 +5,7 @@ import { createServiceClient, isSupabaseServiceConfigured } from '../../../../li
 import { logger } from '../../../../lib/logger';
 import { deserializeOrder } from '../../../../lib/orders/normalizers';
 
-const ADMIN_ROLES = new Set(['admin', 'superadmin', 'manager']);
+const ADMIN_ROLES = new Set(['admin', 'manager']);
 const MIN_LIMIT = 10;
 const MAX_LIMIT = 100;
 

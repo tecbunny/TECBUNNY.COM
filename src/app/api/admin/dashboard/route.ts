@@ -132,6 +132,85 @@ export async function GET(_request: NextRequest) {
       status: String(order.status ?? '')
     }));
 
+    // ── Contact messages stats ────────────────────────────────────────────────
+    let contactTotal = 0;
+    let contactNewCount = 0;
+    let contactInProgressCount = 0;
+    let contactResolvedCount = 0;
+    const { data: contactStatusData, error: contactStatusError } = await serviceSupabase
+      .from('contact_messages')
+      .select('status');
+    if (contactStatusError) {
+      logger.warn('admin_dashboard.contact_messages_error', { error: contactStatusError.message });
+    } else if (contactStatusData) {
+      contactTotal = contactStatusData.length;
+      contactNewCount = contactStatusData.filter((r: { status: string }) => r.status === 'New').length;
+      contactInProgressCount = contactStatusData.filter((r: { status: string }) => r.status === 'In Progress').length;
+      contactResolvedCount = contactStatusData.filter((r: { status: string }) => r.status === 'Resolved').length;
+    }
+
+    // ── Service request breakdown by subject ─────────────────────────────────
+    const serviceRequestBreakdown: Array<{ subject: string; count: number }> = [];
+    const { data: subjectData, error: subjectError } = await serviceSupabase
+      .from('contact_messages')
+      .select('subject');
+    if (!subjectError && subjectData) {
+      const subjectCounts: Record<string, number> = {};
+      for (const row of subjectData as Array<{ subject: string }>) {
+        const key = row.subject || 'General';
+        subjectCounts[key] = (subjectCounts[key] ?? 0) + 1;
+      }
+      for (const [subject, count] of Object.entries(subjectCounts)) {
+        serviceRequestBreakdown.push({ subject, count });
+      }
+      serviceRequestBreakdown.sort((a, b) => b.count - a.count);
+    }
+
+    // ── Order status breakdown ────────────────────────────────────────────────
+    const ordersByStatus: Array<{ status: string; count: number }> = [];
+    const { data: orderStatusData, error: orderStatusError } = await serviceSupabase
+      .from('orders')
+      .select('status');
+    if (!orderStatusError && orderStatusData) {
+      const statusCounts: Record<string, number> = {};
+      for (const row of orderStatusData as Array<{ status: string }>) {
+        const key = row.status || 'unknown';
+        statusCounts[key] = (statusCounts[key] ?? 0) + 1;
+      }
+      for (const [status, count] of Object.entries(statusCounts)) {
+        ordersByStatus.push({ status, count });
+      }
+      ordersByStatus.sort((a, b) => b.count - a.count);
+    }
+
+    // ── Last 6 months revenue ─────────────────────────────────────────────────
+    const revenueByMonth: Array<{ month: string; revenue: number }> = [];
+    const sixMonthsAgo = new Date(currentYear, currentMonth - 5, 1);
+    const { data: sixMonthOrdersRaw, error: sixMonthError } = await serviceSupabase
+      .from('orders')
+      .select('total, created_at')
+      .gte('created_at', sixMonthsAgo.toISOString())
+      .neq('status', 'cancelled');
+    if (!sixMonthError && sixMonthOrdersRaw) {
+      const monthMap: Record<string, number> = {};
+      for (let i = 0; i < 6; i++) {
+        const d = new Date(currentYear, currentMonth - 5 + i, 1);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        monthMap[key] = 0;
+      }
+      for (const order of sixMonthOrdersRaw as Array<Record<string, unknown>>) {
+        const d = new Date(String(order.created_at));
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        if (key in monthMap) monthMap[key] += coerceCurrency(order);
+      }
+      const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      for (const [key, revenue] of Object.entries(monthMap)) {
+        const mIdx = parseInt(key.split('-')[1]) - 1;
+        const yr = key.split('-')[0].slice(2);
+        revenueByMonth.push({ month: `${MONTH_NAMES[mIdx]} '${yr}`, revenue });
+      }
+    }
+
     const stats = {
       totalUsers: totalUserCount ?? 0,
       totalProducts: productCount ?? 0,
@@ -139,7 +218,16 @@ export async function GET(_request: NextRequest) {
       monthlyRevenue,
       monthlyOrders: monthlyOrdersCount ?? 0,
       lastMonthOrders: lastMonthOrdersCount ?? 0,
-      recentActivity
+      recentActivity,
+      contactMessages: {
+        total: contactTotal,
+        newCount: contactNewCount,
+        inProgressCount: contactInProgressCount,
+        resolvedCount: contactResolvedCount,
+      },
+      serviceRequestBreakdown,
+      ordersByStatus,
+      revenueByMonth,
     };
 
     logger.info('admin_dashboard.fetch_success', { stats });

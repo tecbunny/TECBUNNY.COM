@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 
 import { createClient } from '../../../../lib/supabase/server'
 
-export const dynamic = 'force-dynamic'
+export const dynamic = 'force-dynamic';
 
 function quickLoginEnabled() {
   if (process.env.NODE_ENV !== 'production') return true

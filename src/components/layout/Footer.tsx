@@ -171,38 +171,80 @@ export function Footer() {
   const activeSocialPlatforms = socialPlatforms.filter(({ key }) => Boolean(socialLinks[key]));
 
   return (
-    <footer className="footer-custom relative overflow-hidden bg-[#030712] border-t border-white/10 pt-12 pb-8 font-sans shadow-[0_-4px_20px_rgba(6,182,212,0.05)]">
-      <div className="absolute top-0 right-0 h-48 w-48 sm:h-64 sm:w-64 rounded-full bg-brand-purple/5 blur-[80px] pointer-events-none" />
+    <footer className="footer-custom relative overflow-hidden bg-[#030712] border-t border-white/8 pt-8 pb-5 font-sans">
+      <div className="pointer-events-none absolute top-0 right-0 h-40 w-40 rounded-full bg-brand-purple/5 blur-[70px]" />
       <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-10 mb-12 pb-12 border-b border-white/5">
-          <div className="max-w-md">
-            <Link href="/" className="flex items-center gap-3 mb-4 group">
-              <div className="relative flex h-14 w-14 items-center justify-center rounded-2xl border border-white/50 bg-white shadow-[0_0_18px_rgba(6,182,212,0.25)] transition-all duration-300 group-hover:border-cyan-300/80 group-hover:bg-white group-hover:shadow-[0_0_24px_rgba(6,182,212,0.35)]">
-                <Image
-                  src="/brand.png"
-                  alt="TecBunny Solutions"
-                  width={56}
-                  height={56}
-                  className="h-12 w-12 object-contain drop-shadow-[0_0_8px_rgba(255,255,255,0.35)] transition-transform group-hover:scale-105"
-                />
-              </div>
-              <span className="font-tech font-bold text-3xl sm:text-4xl text-white tracking-wide">
-                TECBUNNY<span className="text-brand-cyan">.</span>
-              </span>
-            </Link>
-            <p className="text-slate-400 text-base leading-relaxed">
-              Transforming spaces into smart, secure sanctuaries. Goa&apos;s trusted partner for CCTV, IT infrastructure, and automation.
-            </p>
+
+        {/* Brand row */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 pb-6 border-b border-white/5">
+          <Link href="/" className="flex items-center gap-2.5 group">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/40 bg-white shadow-[0_0_12px_rgba(6,182,212,0.2)] transition-all group-hover:shadow-[0_0_18px_rgba(6,182,212,0.3)]">
+              <Image src="/brand.png" alt="TecBunny Solutions" width={32} height={32} className="h-7 w-7 object-contain" />
+            </div>
+            <span className="font-tech font-bold text-xl text-white tracking-wide">
+              TECBUNNY<span className="text-brand-cyan">.</span>
+            </span>
+          </Link>
+          <p className="text-slate-500 text-xs max-w-xs">
+            Goa&apos;s trusted partner for CCTV, home automation, IT &amp; RFID solutions.
+          </p>
+        </div>
+
+        {/* Links + Newsletter grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 mb-6">
+
+          {/* Services */}
+          <div>
+            <h4 className="text-brand-cyan text-[10px] font-bold uppercase tracking-widest mb-3">Services</h4>
+            <ul className="space-y-2 text-xs text-slate-400">
+              <li><Link href="/services" className="hover:text-white transition-colors">CCTV Installation</Link></li>
+              <li><Link href="/services" className="hover:text-white transition-colors">Home Automation</Link></li>
+              <li><Link href="/services" className="hover:text-white transition-colors">IT Services</Link></li>
+              <li><Link href="/services" className="hover:text-white transition-colors">RFID Locks &amp; Cards</Link></li>
+              <li><Link href="/webdev" className="hover:text-white transition-colors">Web Development</Link></li>
+            </ul>
           </div>
 
-          <div className="w-full lg:w-auto">
-            <h4 className="font-tech text-white text-lg font-bold mb-3 flex items-center gap-2">
-              <span className="text-brand-purple">SYSTEM UPDATES</span>
-            </h4>
-            <form className="flex flex-col sm:flex-row gap-3" onSubmit={handleSubscribe}>
+          {/* Company */}
+          <div>
+            <h4 className="text-brand-cyan text-[10px] font-bold uppercase tracking-widest mb-3">Company</h4>
+            <ul className="space-y-2 text-xs text-slate-400">
+              <li><Link href="/about" className="hover:text-white transition-colors">About Us</Link></li>
+              <li><Link href="/about/business-info" className="hover:text-white transition-colors">Business Info</Link></li>
+              <li><Link href="/offers" className="hover:text-white transition-colors">Offers</Link></li>
+              <li><Link href="/products" className="hover:text-white transition-colors">Products</Link></li>
+              <li><Link href="/info/policies/privacy" className="hover:text-white transition-colors">Privacy Policy</Link></li>
+              <li><Link href="/info/policies/terms" className="hover:text-white transition-colors">Terms</Link></li>
+              <li><Link href="/info/policies/return" className="hover:text-white transition-colors">Return Policy</Link></li>
+              <li><Link href="/info/policies/refund-cancellation" className="hover:text-white transition-colors">Refund Policy</Link></li>
+            </ul>
+          </div>
+
+          {/* Contact */}
+          <div>
+            <h4 className="text-brand-cyan text-[10px] font-bold uppercase tracking-widest mb-3">Contact Us</h4>
+            <ul className="space-y-2 text-xs text-slate-400">
+              <li className="text-slate-300">{address || 'Goa, India'}</li>
+              <li>
+                <a href={`tel:${supportPhone.replace(/\s+/g,'')}`} className="hover:text-brand-cyan transition-colors">
+                  {supportPhone}
+                </a>
+              </li>
+              <li>
+                <a href={`mailto:${supportEmail}`} className="hover:text-brand-cyan transition-colors break-all">
+                  {supportEmail}
+                </a>
+              </li>
+            </ul>
+          </div>
+
+          {/* Newsletter */}
+          <div>
+            <h4 className="text-brand-cyan text-[10px] font-bold uppercase tracking-widest mb-3">Newsletter</h4>
+            <form className="flex flex-col gap-2" onSubmit={handleSubscribe}>
               <input
                 type="email"
-                placeholder="Enter secure email..."
+                placeholder="Your email"
                 value={subscribeEmail}
                 onChange={(event) => {
                   setSubscribeEmail(event.target.value);
@@ -211,120 +253,43 @@ export function Footer() {
                     setSubscribeMessage(null);
                   }
                 }}
-                className="bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-base text-white focus:outline-none focus:border-brand-cyan/50 w-full sm:w-72 placeholder-slate-600"
+                className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-brand-cyan/50 placeholder-slate-600 w-full"
               />
               <button
                 type="submit"
                 disabled={subscribeStatus === 'loading'}
-                className="px-6 py-3 bg-white/5 border border-white/10 hover:bg-brand-cyan hover:text-brand-dark hover:border-brand-cyan text-white text-base font-bold font-tech rounded-lg transition-all duration-300"
+                className="px-4 py-2 bg-white/5 border border-white/10 hover:bg-brand-cyan hover:text-brand-dark hover:border-brand-cyan text-white text-xs font-bold font-tech rounded-lg transition-all duration-300"
               >
                 {subscribeStatus === 'loading' ? 'SUBSCRIBING...' : 'SUBSCRIBE'}
               </button>
             </form>
             {subscribeMessage && (
-              <p
-                className={`mt-3 text-xs ${subscribeStatus === 'success' ? 'text-emerald-300' : 'text-rose-300'}`}
-                role="status"
-                aria-live="polite"
-              >
+              <p className={`mt-2 text-[10px] ${subscribeStatus === 'success' ? 'text-emerald-300' : 'text-rose-300'}`} role="status" aria-live="polite">
                 {subscribeMessage}
               </p>
             )}
           </div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-12">
-          <div>
-            <h4 className="text-brand-cyan text-sm font-bold uppercase tracking-widest mb-6">Protocols</h4>
-            <ul className="space-y-3 text-base text-slate-300">
-              <li>
-                <Link href="/services" className="hover:text-white transition-colors flex items-center gap-2">
-                  <span className="w-1 h-1 rounded-full bg-brand-purple" /> CCTV Installation
-                </Link>
-              </li>
-              <li>
-                <Link href="/services" className="hover:text-white transition-colors flex items-center gap-2">
-                  <span className="w-1 h-1 rounded-full bg-brand-purple" /> Biometric Access
-                </Link>
-              </li>
-              <li>
-                <Link href="/webdev" className="hover:text-white transition-colors flex items-center gap-2">
-                  <span className="w-1 h-1 rounded-full bg-brand-purple" /> Web Development
-                </Link>
-              </li>
-              <li>
-                <Link href="/services" className="hover:text-white transition-colors flex items-center gap-2">
-                  <span className="w-1 h-1 rounded-full bg-brand-purple" /> Intruder Alarms
-                </Link>
-              </li>
-              <li>
-                <Link href="/services" className="hover:text-white transition-colors flex items-center gap-2">
-                  <span className="w-1 h-1 rounded-full bg-brand-purple" /> Video Door Phones
-                </Link>
-              </li>
-            </ul>
+        {/* Bottom bar */}
+        <div className="flex flex-col sm:flex-row justify-between items-center gap-3 pt-5 border-t border-white/5 text-[11px] text-slate-500">
+          <div className="flex flex-col sm:flex-row items-center gap-1 sm:gap-4 text-center">
+            <p>© 2026 TecBunny Solutions. All rights reserved.</p>
+            <p className="font-mono">CIN: U80200GA2025PTC017488</p>
           </div>
-
-          <div>
-            <h4 className="text-brand-cyan text-sm font-bold uppercase tracking-widest mb-6">Database</h4>
-            <ul className="space-y-3 text-base text-slate-300">
-              <li><Link href="/about" className="hover:text-white transition-colors">About Us</Link></li>
-              <li><Link href="/products" className="hover:text-white transition-colors">Products</Link></li>
-              <li><Link href="/info/policies/privacy" className="hover:text-white transition-colors">Privacy Policy</Link></li>
-              <li><Link href="/info/policies/terms" className="hover:text-white transition-colors">Terms of Service</Link></li>
-            </ul>
-          </div>
-
-          <div className="col-span-2 md:col-span-2 bg-white/[0.02] border border-white/5 rounded-2xl p-6 md:p-7 relative overflow-hidden group hover:border-brand-cyan/30 transition-colors">
-            <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-              <Globe className="h-16 w-16 text-brand-cyan" />
-            </div>
-
-            <h4 className="text-white font-bold font-tech text-xl mb-4">Transmission Hub</h4>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-base">
-              <div>
-                <span className="block text-xs text-slate-500 uppercase mb-1">Location</span>
-                <p className="text-slate-300">{address || 'Goa, India'}</p>
-              </div>
-              <div>
-                <span className="block text-xs text-slate-500 uppercase mb-1">Comms</span>
-                <p className="text-brand-cyan hover:text-white transition-colors">
-                  <a href={`tel:${supportPhone.replace(/\s+/g,'')}`}>{supportPhone}</a>
-                </p>
-                <p className="text-brand-cyan hover:text-white transition-colors">
-                  <a href={`mailto:${supportEmail}`}>{supportEmail}</a>
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex flex-col md:flex-row justify-between items-center gap-4 pt-8 border-t border-white/5 text-sm text-slate-400">
-          <div className="flex flex-col md:flex-row items-center gap-2 md:gap-6">
-            <p>© 2025 TecBunny. All rights reserved. Built with ❤️ and innovation.</p>
-            <span className="hidden md:inline text-white/10">|</span>
-            <p className="font-mono">CIN: U80200GA2025PTC017366</p>
-          </div>
-
           {activeSocialPlatforms.length > 0 && (
-            <div className="flex gap-6">
+            <div className="flex gap-4">
               {activeSocialPlatforms.map(({ key, icon: Icon, label }) => (
-                <a
-                  key={key}
-                  href={socialLinks[key]}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hover:text-brand-cyan transition-colors"
-                  onClick={() => handleSocialClick(label)}
-                >
-                  <Icon className="h-5 w-5" />
+                <a key={key} href={socialLinks[key]} target="_blank" rel="noopener noreferrer"
+                  className="hover:text-brand-cyan transition-colors" onClick={() => handleSocialClick(label)}>
+                  <Icon className="h-4 w-4" />
                   <span className="sr-only">{label}</span>
                 </a>
               ))}
             </div>
           )}
         </div>
+
       </div>
     </footer>
   );

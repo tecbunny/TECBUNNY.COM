@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 
 import { createServiceClient } from '../../../../../lib/supabase/server'
 
-export const dynamic = 'force-dynamic'
+export const dynamic = 'force-dynamic';
 
 // GET /api/admin/redemptions/list?status=pending|approved|processed
 export async function GET(request: Request) {

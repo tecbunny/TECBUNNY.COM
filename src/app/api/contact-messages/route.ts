@@ -5,6 +5,7 @@ import { createServiceClient, createClient as createServerClient } from '@/lib/s
 import { rateLimit } from '@/lib/rate-limit';
 import { logger } from '@/lib/logger';
 import { isAdmin } from '@/lib/permissions';
+import improvedEmailService from '@/lib/improved-email-service';
 import type { ContactMessage, ContactMessageStatus } from '@/lib/types';
 
 const CONTACT_RATE_LIMIT = {
@@ -71,6 +72,64 @@ export async function POST(request: NextRequest) {
     }
 
     logger.info('contact_message_created', { messageId: data?.id, ip: submissionIp });
+
+    // Fire-and-forget admin notification email
+    const adminEmail = process.env.ADMIN_EMAIL || 'support@tecbunny.com';
+    improvedEmailService.sendEmail({
+      to: adminEmail,
+      subject: `New Request: ${payload.subject || 'Contact Form'} — ${payload.name}`,
+      html: `
+        <div style="font-family:sans-serif;max-width:580px;margin:0 auto;background:#0f172a;color:#e2e8f0;padding:32px;border-radius:12px">
+          <div style="background:linear-gradient(135deg,#06b6d4,#7c3aed);padding:20px 24px;border-radius:8px;margin-bottom:24px">
+            <h1 style="margin:0;font-size:20px;color:#fff">New Service Request</h1>
+            <p style="margin:4px 0 0;font-size:13px;color:rgba(255,255,255,0.75)">Received on TecBunny.com</p>
+          </div>
+          <table style="width:100%;border-collapse:collapse">
+            <tr><td style="padding:8px 0;color:#94a3b8;font-size:13px">Name</td><td style="padding:8px 0;font-weight:bold">${payload.name}</td></tr>
+            <tr><td style="padding:8px 0;color:#94a3b8;font-size:13px">Email</td><td style="padding:8px 0"><a href="mailto:${payload.email}" style="color:#06b6d4">${payload.email}</a></td></tr>
+            <tr><td style="padding:8px 0;color:#94a3b8;font-size:13px">Phone</td><td style="padding:8px 0">${payload.phone || '—'}</td></tr>
+            <tr><td style="padding:8px 0;color:#94a3b8;font-size:13px">Service</td><td style="padding:8px 0">${payload.subject || '—'}</td></tr>
+          </table>
+          <div style="margin-top:20px;background:#1e293b;border-radius:8px;padding:16px">
+            <p style="margin:0 0 8px;color:#94a3b8;font-size:12px;text-transform:uppercase;letter-spacing:.05em">Message</p>
+            <p style="margin:0;white-space:pre-wrap;font-size:14px">${payload.message}</p>
+          </div>
+          <div style="margin-top:24px;text-align:center">
+            <a href="https://www.tecbunny.com/management/admin/contact-messages" style="background:#06b6d4;color:#000;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:14px">View in Admin Panel</a>
+          </div>
+          <p style="margin-top:24px;font-size:11px;color:#475569;text-align:center">TecBunny Solutions · Goa, India · +91 96041 36010</p>
+        </div>
+      `,
+    }).catch((err: unknown) => {
+      logger.warn('admin_notification_email_failed', { error: err instanceof Error ? err.message : String(err) });
+    });
+
+    // Fire-and-forget customer acknowledgment email
+    const serviceName = payload.subject || 'your enquiry';
+    improvedEmailService.sendEmail({
+      to: payload.email,
+      subject: `We received your request — TecBunny Solutions`,
+      html: `
+        <div style="font-family:sans-serif;max-width:560px;margin:0 auto;background:#0f172a;color:#e2e8f0;padding:32px;border-radius:12px">
+          <div style="background:linear-gradient(135deg,#06b6d4,#7c3aed);padding:20px 24px;border-radius:8px;margin-bottom:24px">
+            <h1 style="margin:0;font-size:20px;color:#fff">Hi ${payload.name.split(' ')[0]}, thanks for reaching out!</h1>
+            <p style="margin:4px 0 0;font-size:13px;color:rgba(255,255,255,0.75)">TecBunny Solutions · Goa, India</p>
+          </div>
+          <p style="font-size:15px;line-height:1.6">We've received your request about <strong>${serviceName}</strong> and our team is reviewing it.</p>
+          <p style="font-size:15px;line-height:1.6">We'll get back to you within <strong>24 hours</strong> with next steps, a quote, or to schedule a site visit.</p>
+          <div style="margin:24px 0;background:#1e293b;border-radius:8px;padding:16px;border-left:4px solid #06b6d4">
+            <p style="margin:0;font-size:13px;color:#94a3b8">Your message</p>
+            <p style="margin:8px 0 0;font-size:14px;white-space:pre-wrap">${payload.message}</p>
+          </div>
+          <p style="font-size:14px;color:#94a3b8">Need urgent help? Call us directly:</p>
+          <p style="font-size:15px;font-weight:bold"><a href="tel:+919172529309" style="color:#06b6d4;text-decoration:none">+91 91725 29309</a></p>
+          <hr style="border:none;border-top:1px solid #1e293b;margin:24px 0" />
+          <p style="font-size:11px;color:#475569;text-align:center">TecBunny Solutions Pvt. Ltd. · Goa, India · <a href="https://www.tecbunny.com" style="color:#475569">tecbunny.com</a></p>
+        </div>
+      `,
+    }).catch((err: unknown) => {
+      logger.warn('customer_acknowledgment_email_failed', { error: err instanceof Error ? err.message : String(err) });
+    });
 
     return NextResponse.json({ success: true, id: data?.id }, { status: 201 });
   } catch (error) {

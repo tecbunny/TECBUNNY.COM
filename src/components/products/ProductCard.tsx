@@ -198,13 +198,13 @@ export function ProductCard({ product, viewMode = 'grid' }: ProductCardProps) {
       <Card onClick={handleCardClick} className="cursor-pointer flex flex-col md:flex-row overflow-hidden transition-all duration-300 hover:shadow-lg">
         <div className="w-full md:w-48 lg:w-64 relative">
           <div className="block">
-            <div className="aspect-square md:aspect-[4/3] w-full relative bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
+            <div className="aspect-square md:aspect-[4/3] w-full relative bg-white flex items-center justify-center">
               {
                 !hasImageError && displayImage ? (
                   <img
                     src={displayImage}
                     alt={displayName}
-                    className="w-full h-full object-contain p-4"
+                    className="w-full h-full object-contain p-6"
                     loading="lazy"
                     onError={() => setHasImageError(true)}
                   />
@@ -378,14 +378,14 @@ export function ProductCard({ product, viewMode = 'grid' }: ProductCardProps) {
     <Card onClick={handleCardClick} className="cursor-pointer flex flex-col transition-all duration-300 hover:shadow-lg hover:-translate-y-1 group">
       <CardHeader className="p-0 relative flex-shrink-0">
         <div className="block">
-          <div className="h-[280px] w-full relative overflow-hidden bg-gradient-to-br from-gray-50 to-gray-100">
+          <div className="aspect-square w-full relative overflow-hidden bg-white">
             {!hasImageError && displayImage ? (
               <img
                 src={displayImage}
                 alt={displayName}
                 width={800}
-                height={560}
-                className="w-full h-full object-contain p-4 transition-transform duration-300 group-hover:scale-105"
+                height={800}
+                className="w-full h-full object-contain p-6 transition-transform duration-300 group-hover:scale-105"
                 loading="lazy"
                 onError={() => setHasImageError(true)}
               />

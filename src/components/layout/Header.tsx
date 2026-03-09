@@ -38,6 +38,7 @@ const navLinks = [
     ]
   },
   { name: 'Innovation', href: '/innovation' },
+  { name: 'Offers', href: '/offers' },
   { name: 'About Us', href: '/about' },
   { name: 'Contact Us', href: '/contact' },
   {
@@ -45,8 +46,10 @@ const navLinks = [
     href: '/info/policies',
     children: [
       { name: 'Privacy Policy', href: '/info/policies/privacy' },
-      { name: 'Shipping Policies', href: '/info/policies/shipping' },
+      { name: 'Shipping Policy', href: '/info/policies/shipping' },
       { name: 'Terms & Conditions', href: '/info/policies/terms' },
+      { name: 'Return Policy', href: '/info/policies/return' },
+      { name: 'Refund & Cancellation', href: '/info/policies/refund-cancellation' },
     ],
   },
 ];
@@ -160,12 +163,12 @@ export function Header() {
   };
 
   const showDashboard = !loading && !!user && user.role !== 'customer';
+  const showAdminOption = !loading && hasRoleClient(user, 'admin');
 
   const dashboardHref = React.useMemo(() => {
     if (!user?.role) return '/management';
     switch (user.role) {
       case 'admin':
-      case 'superadmin':
         return '/management/admin';
       case 'accounts':
         return '/management/accounts';
@@ -215,13 +218,13 @@ export function Header() {
           </Link>
 
           <div className="hidden flex-1 items-center justify-center lg:flex">
-            <nav className="flex items-center gap-1 rounded-full border border-white/5 bg-white/5 p-1.5 backdrop-blur-md shadow-lg shadow-black/20">
+            <nav className="flex items-center gap-0.5 xl:gap-1 rounded-full border border-white/5 bg-white/5 p-1.5 backdrop-blur-md shadow-lg shadow-black/20">
               {navLinks.map((item) => (
                 item.children ? (
                   <div key={item.name} className="relative group">
                     <Link
                       href={item.href}
-                      className={`relative rounded-full px-4 py-2 text-sm font-medium transition-all duration-300 inline-flex items-center gap-1
+                      className={`relative rounded-full px-3 xl:px-4 py-2 text-sm font-medium whitespace-nowrap transition-all duration-300 inline-flex items-center gap-1
                         ${isActive(item.href)
                           ? 'bg-white/10 text-white border border-white/5 shadow-inner'
                           : 'text-slate-400 hover:text-white hover:bg-white/5'
@@ -250,7 +253,7 @@ export function Header() {
                   <Link
                     key={item.name}
                     href={item.href}
-                    className={`relative rounded-full px-4 py-2 text-sm font-medium transition-all duration-300
+                    className={`relative inline-flex items-center whitespace-nowrap rounded-full px-3 xl:px-4 py-2 text-sm font-medium transition-all duration-300
                       ${isActive(item.href)
                         ? 'bg-white/10 text-white border border-white/5 shadow-inner'
                         : 'text-slate-400 hover:text-white hover:bg-white/5'
@@ -306,6 +309,11 @@ export function Header() {
                     <DropdownMenuItem asChild className="cursor-pointer focus:bg-white/10">
                       <Link href={accountHref}>Account</Link>
                     </DropdownMenuItem>
+                    {showAdminOption && (
+                      <DropdownMenuItem asChild className="cursor-pointer focus:bg-white/10">
+                        <Link href="/admin">Admin Panel</Link>
+                      </DropdownMenuItem>
+                    )}
                     <DropdownMenuItem asChild className="cursor-pointer focus:bg-white/10">
                       <Link href="/auth/change-password">Change Password</Link>
                     </DropdownMenuItem>
@@ -439,14 +447,6 @@ export function Header() {
               )}
             </div>
           ))}
-          <Link
-            href="/contact"
-            onClick={() => setMobileMenuOpen(false)}
-            className="flex min-h-[40px] items-center justify-between rounded-lg px-4 py-2 text-sm text-slate-300 hover:bg-white/5 hover:text-white transition-colors"
-          >
-            Contact Support
-            <ChevronRight size={16} className="text-slate-500" />
-          </Link>
           {showDashboard && (
             <Link
               href={dashboardHref}
@@ -503,6 +503,16 @@ export function Header() {
                 Account
                 <ChevronRight size={16} className="text-slate-500" />
               </Link>
+              {showAdminOption && (
+                <Link
+                  href="/admin"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex items-center justify-between rounded-lg px-4 py-2 text-sm text-slate-300 hover:bg-white/5 hover:text-white transition-colors"
+                >
+                  Admin Panel
+                  <ChevronRight size={16} className="text-slate-500" />
+                </Link>
+              )}
               <button
                 type="button"
                 onClick={async () => {

@@ -335,7 +335,7 @@ export function ProductDetailPage({ productId }: ProductDetailPageProps) {
 
           <section className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-12">
             <div className="space-y-4">
-              <div className="relative bg-slate-900/60 border border-white/10 rounded-2xl p-6 h-[500px] flex items-center justify-center overflow-hidden group">
+              <div className="relative bg-white border border-white/10 rounded-2xl p-6 aspect-square flex items-center justify-center overflow-hidden group">
                 <div className="absolute inset-0 z-10 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-500">
                   <div className="product-scan-line"></div>
                   <div className="absolute inset-0 bg-cyan-400/5"></div>

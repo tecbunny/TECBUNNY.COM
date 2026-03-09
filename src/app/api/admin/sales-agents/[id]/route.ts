@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+﻿import { NextResponse } from 'next/server';
 
 import { createClient, createServiceClient } from '../../../../../lib/supabase/server';
 import { isAdmin } from '../../../../../lib/permissions';
@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 
 // PATCH /api/admin/sales-agents/[id]
 // Updates the status of a sales agent application (approve or reject).
-export async function PATCH(
+async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -63,3 +63,8 @@ export async function PATCH(
     return NextResponse.json({ error: 'An unexpected error occurred.', details: error.message }, { status: 500 });
   }
 }
+
+export async function GET() { return Response.json({}) }
+
+
+

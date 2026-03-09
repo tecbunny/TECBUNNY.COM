@@ -7,15 +7,15 @@ import { createPageMetadata } from '../../lib/metadata';
 
 // Static metadata for better SEO and performance
 export const metadata: Metadata = createPageMetadata({
-  title: 'Services - TecBunny Store',
-  description: 'Explore our comprehensive range of technology services including repairs, consultations, and custom solutions.',
-  keywords: ['services', 'tech repair', 'consultation', 'TecBunny', 'technology solutions'],
+  title: 'CCTV, Home Automation, IT, RFID Locks & Web Development | TecBunny Solutions',
+  description: 'TecBunny Solutions offers CCTV installation, Home Automation, IT Services, RFID Smart Locks & Designed RFID Cards, and Web Development across Goa. Call +91 96041 36010.',
+  keywords: ['CCTV installation Goa', 'Home Automation Goa', 'IT services Goa', 'RFID locks Goa', 'RFID cards Goa', 'web development Goa', 'AMC services Goa', 'smart home Goa'],
   path: '/services',
   image: '/brand.png',
 });
 
 // Always fetch fresh data so admin updates appear immediately
-export const dynamic = 'force-dynamic';
+// export const dynamic = 'force-dynamic';
 
 export default async function Page() {
   let services: any[] = [];

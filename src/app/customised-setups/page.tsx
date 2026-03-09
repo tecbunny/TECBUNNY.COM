@@ -11,17 +11,27 @@ import { DEFAULT_CUSTOM_SETUP_TEMPLATE_SLUG } from '@/lib/custom-setup.constants
 import { getCustomSetupBlueprintSummary } from '@/lib/custom-setup-service';
 
 export const metadata: Metadata = {
-  title: 'Customised Setups - TecBunny Store',
-  description:
-    'Build a CCTV deployment tailored to your site. Select DVR/NVR paths, camera counts, storage, and services to preview TecBunny pricing instantly.',
+  title: 'Custom CCTV & IT Setups in Goa | TecBunny Solutions',
+  description: 'Design a tailored CCTV surveillance or IT setup for your home or business in Goa. Choose DVR/NVR, camera count, storage, and services — get instant transparent pricing from TecBunny Solutions.',
+  keywords: ['custom CCTV setup Goa', 'CCTV installation quote Goa', 'surveillance system Goa', 'NVR DVR setup', 'TecBunny custom setup'],
+  alternates: { canonical: 'https://www.tecbunny.com/customised-setups' },
   openGraph: {
-    title: 'Customised Setups | TecBunny',
-    description: 'Configure TecBunny surveillance bundles with transparent MRP vs sale pricing.',
+    title: 'Custom CCTV & IT Setups in Goa | TecBunny Solutions',
+    description: 'Design a tailored CCTV surveillance or IT setup. Get instant transparent pricing from TecBunny Solutions, Goa.',
     type: 'website',
+    siteName: 'TecBunny Solutions',
+    url: 'https://www.tecbunny.com/customised-setups',
+    images: [{ url: 'https://www.tecbunny.com/brand.png', width: 1200, height: 630, alt: 'TecBunny Custom Setups' }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Custom CCTV & IT Setups in Goa | TecBunny Solutions',
+    description: 'Design a tailored CCTV surveillance or IT setup. Get instant transparent pricing.',
+    images: ['https://www.tecbunny.com/brand.png'],
   },
 };
 
-export const dynamic = 'force-dynamic';
+// export const dynamic = 'force-dynamic';
 export const revalidate = 0; // Force no caching
 
 export default async function CustomisedSetupsPage({

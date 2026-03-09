@@ -147,6 +147,9 @@ export default function HomePage() {
 
         const payload = await response.json();
         const items: DbProduct[] = Array.isArray(payload?.data) ? (payload.data as DbProduct[]) : [];
+        const warningMessage = Array.isArray(payload?.warnings) && payload.warnings.length > 0
+          ? String(payload.warnings[0])
+          : null;
 
         const hasAnyImage = (item: DbProduct) => {
           if (getProductDisplayImage(item)) return true;
@@ -163,6 +166,9 @@ export default function HomePage() {
         const chosen = (itemsWithImages.length ? itemsWithImages : items).slice(0, 4);
 
         if (isMounted) {
+          if (chosen.length === 0 && warningMessage) {
+            setProductsError(warningMessage);
+          }
           setFeaturedProducts(chosen);
         }
       } catch (error) {
@@ -361,7 +367,7 @@ export default function HomePage() {
 
               <div className="flex gap-8 border-t border-white/5 pt-8">
                 <div>
-                  <p className="text-2xl font-bold text-white font-tech">100</p>
+                  <p className="text-2xl font-bold text-white font-tech">100+</p>
                   <p className="text-xs uppercase tracking-wider text-slate-500">Installations</p>
                 </div>
                 <div>

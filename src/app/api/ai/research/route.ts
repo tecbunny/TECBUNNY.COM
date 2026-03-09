@@ -4,185 +4,171 @@ import { createClient } from '../../../../lib/supabase/server';
 import { generateGeminiText } from '../../../../lib/ai/gemini-service';
 import { getProductDisplayImage } from '../../../../lib/image-utils';
 
-const MAX_SOURCES = 3;
-const MAX_SOURCE_CHARS = 3500;
+export const dynamic = 'force-dynamic';
 
-const PRICE_PATTERN = /(₹|\$|€|£|INR|USD|EUR|GBP|Rs\.?|Rs\s|INR\s|USD\s|EUR\s|GBP\s)\s?[0-9][0-9,]*(?:\.[0-9]{1,2})?/gi;
-const PRICE_WORD_PATTERN = /\b(price|pricing|cost|mrp|offer|discount|rate|rs\b|usd\b|inr\b|eur\b|gbp\b)\b/gi;
+// ── Allowed topics ─────────────────────────────────────────────────────────
+const CCTV_IT_KEYWORDS = [
+  // CCTV / security
+  'cctv', 'camera', 'cameras', 'nvr', 'dvr', 'surveillance', 'security camera',
+  'ip camera', 'ptz', 'dome', 'bullet camera', 'fisheye', 'analog',
+  'hikvision', 'dahua', 'cp plus', 'cpplus', 'uniview', 'axis', 'reolink',
+  'access control', 'intercom', 'biometric', 'fingerprint', 'attendance',
+  // IT / computer hardware
+  'computer', 'laptop', 'desktop', 'pc', 'monitor', 'keyboard', 'mouse',
+  'ram', 'memory', 'ssd', 'hdd', 'hard disk', 'storage', 'processor', 'cpu',
+  'motherboard', 'gpu', 'graphics card', 'graphics', 'power supply', 'ups',
+  'router', 'switch', 'wifi', 'network', 'networking', 'lan', 'cable', 'patch',
+  'printer', 'scanner', 'projector', 'server', 'rack',
+  // Services / generic intent
+  'amc', 'installation', 'maintenance', 'repair', 'install',
+  'product', 'spec', 'specification', 'feature', 'compare', 'comparison',
+  'recommend', 'recommendation', 'which', 'best', 'difference', 'vs',
+  'tecbunny', 'techbunny',
+];
 
-function redactPrices(input: string) {
-  if (!input) return '';
-  return input
-    .replace(PRICE_PATTERN, '[redacted]')
-    .replace(PRICE_WORD_PATTERN, '');
+// ── Quote / pricing keywords ───────────────────────────────────────────────
+const QUOTE_KEYWORDS = [
+  'quote', 'quotation', 'price', 'pricing', 'cost', 'how much', 'budget',
+  'estimate', 'custom setup', 'package', 'bundle', 'total cost',
+  'setup cost', 'installation cost', 'rate', 'rates', 'tariff',
+];
+
+// ── Topic helpers ──────────────────────────────────────────────────────────
+function isTopicAllowed(query: string): boolean {
+  const lower = query.toLowerCase();
+  return CCTV_IT_KEYWORDS.some((kw) => lower.includes(kw));
 }
 
-function normalizeSourceUrl(url: string) {
-  if (!url) return null;
-  const trimmed = url.trim();
-  if (!/^https?:\/\//i.test(trimmed)) return null;
-  return trimmed;
+function isQuoteRequest(query: string): boolean {
+  const lower = query.toLowerCase();
+  return QUOTE_KEYWORDS.some((kw) => lower.includes(kw));
 }
 
-function uniqueStrings(values: string[]) {
-  return Array.from(new Set(values));
-}
+// ── System instruction ─────────────────────────────────────────────────────
+const SYSTEM_INSTRUCTION = `You are TecBunny AI — the dedicated product specialist for TecBunny Solutions, \
+a CCTV and IT hardware company based in Goa, India.
 
-async function fetchSearchUrls(query: string): Promise<string[]> {
-  const encoded = encodeURIComponent(query);
-  const searchUrl = `https://r.jina.ai/http://duckduckgo.com/html/?q=${encoded}`;
-  const response = await fetch(searchUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
-  if (!response.ok) return [];
-  const html = await response.text();
+STRICT RULES — follow these without exception:
+1. You ONLY answer questions about CCTV products, IT/computer hardware, \
+networking equipment, security systems, and TecBunny's product catalog.
+2. For ANY off-topic question, respond exactly: \
+"I can only assist with CCTV and IT product questions. Please contact our support team for anything else."
+3. NEVER mention, guess, or suggest prices, costs, discounts, or budgets. \
+If the user asks about pricing, respond exactly: \
+"For pricing and custom quotes, please use our Customised Setups tool at /customised-setups"
+4. Base every answer on the product catalog data provided. Do not invent specs or \
+details that are not in the catalog.
+5. Be concise, professional, and helpful. Use Markdown (bold, bullets) for clarity.`;
 
-  const urls: string[] = [];
-  const uddgMatches = [...html.matchAll(/uddg=([^&"']+)/gi)];
-  for (const match of uddgMatches) {
-    try {
-      const decoded = decodeURIComponent(match[1]);
-      if (decoded.startsWith('http')) {
-        urls.push(decoded);
-      }
-    } catch {
-      // ignore decode errors
-    }
-  }
-
-  const hrefMatches = [...html.matchAll(/href="(https?:\/\/[^\"\s]+)"/gi)];
-  for (const match of hrefMatches) {
-    urls.push(match[1]);
-  }
-
-  return uniqueStrings(urls)
-    .filter((url) => !url.includes('duckduckgo.com'))
-    .slice(0, MAX_SOURCES);
-}
-
-async function fetchReadableContent(url: string): Promise<string> {
-  const readerUrl = `https://r.jina.ai/http://${url}`;
-  const response = await fetch(readerUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
-  if (!response.ok) return '';
-  const text = await response.text();
-  return redactPrices(text).slice(0, MAX_SOURCE_CHARS);
-}
-
+// ── Route handler ──────────────────────────────────────────────────────────
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const query = typeof body?.query === 'string' ? body.query.trim() : '';
-    const urls = Array.isArray(body?.urls) ? body.urls : [];
 
     if (!query) {
       return NextResponse.json({ error: 'Query is required.' }, { status: 400 });
     }
 
+    // 1. Quote intent → send to /customised-setups ─────────────────────────
+    if (isQuoteRequest(query)) {
+      return NextResponse.json({
+        type: 'quote_redirect',
+        summary: 'It looks like you need pricing or a custom quote.',
+        quoteUrl: '/customised-setups',
+        products: [],
+      });
+    }
+
+    // 2. Off-topic guard ───────────────────────────────────────────────────
+    if (!isTopicAllowed(query)) {
+      return NextResponse.json({
+        type: 'off_topic',
+        summary:
+          'I can only assist with CCTV and IT product questions. Try asking about cameras, NVR/DVR systems, computers, networking gear, or any tech hardware we carry.',
+        products: [],
+      });
+    }
+
+    // 3. Search internal product catalog ──────────────────────────────────
     const supabase = await createClient();
+
     const { data: products } = await supabase
       .from('products')
-      .select('id,title,name,description,product_type,category,tags,images,image,additional_images,brand,specifications')
-      .or(`title.ilike.%${query}%,name.ilike.%${query}%,category.ilike.%${query}%`)
-      .limit(5);
+      .select(
+        'id,title,name,description,product_type,category,brand,tags,specifications,image,images,additional_images'
+      )
+      .or(
+        [
+          `title.ilike.%${query}%`,
+          `name.ilike.%${query}%`,
+          `category.ilike.%${query}%`,
+          `brand.ilike.%${query}%`,
+          `description.ilike.%${query}%`,
+        ].join(',')
+      )
+      .limit(6);
 
-    const safeProducts = (products || []).map((product) => ({
-      id: product.id,
-      title: product.title || product.name || 'Product',
-      description: redactPrices(product.description || ''),
-      category: product.category || null,
-      brand: product.brand || null,
-      productType: product.product_type || null,
-      tags: Array.isArray(product.tags) ? product.tags : [],
-      specifications: product.specifications || null,
-      image: getProductDisplayImage(product),
-      images: [
-        getProductDisplayImage(product),
-        ...(Array.isArray(product.images) ? product.images : []),
-        ...(Array.isArray(product.additional_images) ? product.additional_images : []),
-      ].filter(Boolean),
+    const safeProducts = (products || []).map((p) => ({
+      id: p.id,
+      title: p.title || p.name || 'Product',
+      description: (p.description || '').replace(/<[^>]+>/g, '').slice(0, 300),
+      category: p.category ?? null,
+      brand: p.brand ?? null,
+      productType: p.product_type ?? null,
+      tags: Array.isArray(p.tags) ? p.tags : [],
+      specifications: p.specifications ?? null,
+      image: getProductDisplayImage(p),
+      images: [] as string[],
     }));
 
-    const requestedUrls = uniqueStrings(
-      urls
-        .map((url: string) => (typeof url === 'string' ? url.trim() : ''))
-        .map((url: string) => normalizeSourceUrl(url))
-        .filter(Boolean) as string[]
-    );
+    // 4. Build prompt with catalog context ────────────────────────────────
+    const catalogContext = safeProducts.length
+      ? safeProducts
+          .map((p, i) => {
+            const lines = [
+              `Product ${i + 1}: ${p.title}`,
+              p.brand ? `Brand: ${p.brand}` : null,
+              p.category ? `Category: ${p.category}` : null,
+              p.productType ? `Type: ${p.productType}` : null,
+              p.description ? `Description: ${p.description}` : null,
+              p.tags?.length ? `Tags: ${p.tags.join(', ')}` : null,
+            ].filter(Boolean);
+            return lines.join('\n');
+          })
+          .join('\n\n')
+      : 'No exact product match found in the catalog for this query.';
 
-    const sourceUrls = requestedUrls.length
-      ? requestedUrls.slice(0, MAX_SOURCES)
-      : await fetchSearchUrls(query);
+    const prompt = `Customer question: "${query}"
 
-    const sources: { url: string; content: string }[] = [];
-    for (const url of sourceUrls) {
-      const content = await fetchReadableContent(url);
-      if (content) {
-        sources.push({ url, content });
-      }
-    }
+Relevant products from TecBunny's catalog:
+${catalogContext}
 
-    const productContext = safeProducts
-      .map((product, index) => {
-        const parts = [
-          `Product ${index + 1}: ${product.title}`,
-          product.category ? `Category: ${product.category}` : null,
-          product.brand ? `Brand: ${product.brand}` : null,
-          product.productType ? `Type: ${product.productType}` : null,
-          product.tags?.length ? `Tags: ${product.tags.join(', ')}` : null,
-          product.description ? `Description: ${product.description}` : null,
-        ].filter(Boolean);
-        return parts.join('\n');
-      })
-      .join('\n\n');
+Answer the customer's question about CCTV or IT products using the catalog data above.
+Structure your response in Markdown:
+1. **Overview** — what this product or category is
+2. **Key Features** — what to look for
+3. **Our Products** — highlight matching catalog items (if any)
+4. **Next Steps** — how to proceed (view product page, request installation, etc.)
 
-    const sourceContext = sources
-      .map((source, index) => `Source ${index + 1} (${source.url}):\n${source.content}`)
-      .join('\n\n');
+Be concise and helpful. Do not mention prices. Do not answer off-topic questions.`;
 
-    const prompt = `You are an AI research assistant. Provide detailed, complete product details, typical uses, comparisons, and key considerations. Do not mention prices, costs, discounts, budgets, or financial info. If you are unsure, say "Unknown".
-
-Product query: ${query}
-
-Internal product details (no prices):
-${productContext || 'No internal product details found.'}
-
-Open web sources (sanitized):
-${sourceContext || 'No external sources available.'}
-
-Return a detailed response with headings using Markdown:
-1) Overview
-2) Typical Uses
-3) Comparison to Similar Products
-4) Key Considerations
-5) Recommended Next Steps
-`;
-
-    let rawResponse = await generateGeminiText({
+    // 5. Call Vertex AI / Gemini ──────────────────────────────────────────
+    const rawResponse = await generateGeminiText({
       prompt,
-      temperature: 0.3,
-      maxOutputTokens: 4000,
+      systemInstruction: SYSTEM_INSTRUCTION,
+      temperature: 0.2,
+      maxOutputTokens: 2000,
     });
 
-    let summary = redactPrices(rawResponse);
-
-    if (summary.replace(/\s+/g, ' ').trim().length < 300) {
-      const expandPrompt = `${prompt}
-
-The previous response was too brief. Expand each section with 2-4 sentences and keep the same headings.`;
-      rawResponse = await generateGeminiText({
-        prompt: expandPrompt,
-        temperature: 0.3,
-        maxOutputTokens: 1400,
-      });
-      summary = redactPrices(rawResponse);
-    }
-
     return NextResponse.json({
-      summary,
+      type: 'info',
+      summary: rawResponse,
       products: safeProducts,
-      sources: sources.map((source) => source.url),
     });
   } catch (error: any) {
     return NextResponse.json(
-      { error: error?.message || 'Failed to generate AI research.' },
+      { error: error?.message || 'Failed to generate AI response.' },
       { status: 500 }
     );
   }

@@ -10,9 +10,13 @@ import type { LucideProps } from 'lucide-react';
 import {
   Award,
   Cctv,
+  CheckCircle2,
   Code,
   Cpu,
+  Globe,
   HeadphonesIcon,
+  Home,
+  KeyRound,
   RefreshCw,
   Shield,
   ShoppingCart,
@@ -37,7 +41,83 @@ const iconMap: Record<string, ComponentType<LucideProps>> = {
   Cctv,
   Cpu,
   Code,
+  Home,
+  KeyRound,
+  Globe,
 };
+
+const coreServices = [
+  {
+    icon: Cctv,
+    title: 'CCTV',
+    subtitle: 'Surveillance & Security',
+    color: 'from-cyan-500 to-blue-600',
+    border: 'border-cyan-500/20',
+    bg: 'bg-cyan-500/10',
+    text: 'text-cyan-300',
+    description:
+      'HD indoor & outdoor camera installation with 24/7 remote monitoring, motion alerts, and cloud backup across Goa.',
+    features: ['HD camera setup', 'Remote mobile access', 'Motion detection alerts', 'AMC support available'],
+    cta: '/request?service=cctv',
+    ctaLabel: 'Get CCTV Quote',
+  },
+  {
+    icon: Home,
+    title: 'Home Automation',
+    subtitle: 'Smart Home Control',
+    color: 'from-violet-500 to-purple-600',
+    border: 'border-violet-500/20',
+    bg: 'bg-violet-500/10',
+    text: 'text-violet-300',
+    description:
+      'Control lights, fans, ACs, and appliances from your phone or voice assistant. Intelligent automation for comfort and energy savings.',
+    features: ['App & voice control', 'Energy-saving schedules', 'Smart switches & sensors', 'Professional installation'],
+    cta: '/request?service=home-automation',
+    ctaLabel: 'Request Setup',
+  },
+  {
+    icon: Cpu,
+    title: 'IT Services',
+    subtitle: 'Complete Tech Support',
+    color: 'from-emerald-500 to-teal-600',
+    border: 'border-emerald-500/20',
+    bg: 'bg-emerald-500/10',
+    text: 'text-emerald-300',
+    description:
+      'End-to-end IT support including network setup, server configuration, hardware repair, upgrades, and Annual Maintenance Contracts.',
+    features: ['Network & server setup', 'Hardware repair & upgrades', 'Computer sales & builds', 'AMC plans available'],
+    cta: '/request?service=it-services',
+    ctaLabel: 'Raise IT Ticket',
+  },
+  {
+    icon: KeyRound,
+    title: 'RFID Locks & Cards',
+    subtitle: 'Designed RFID Solutions',
+    color: 'from-orange-500 to-amber-600',
+    border: 'border-orange-500/20',
+    bg: 'bg-orange-500/10',
+    text: 'text-orange-300',
+    description:
+      'Smart RFID door locks paired with fully custom-designed branded RFID cards. Keyless access control for homes, offices, and hotels.',
+    features: ['Smart RFID door locks', 'Custom branded RFID cards', 'Multi-user access control', 'Audit trail logging'],
+    cta: '/request?service=rfid-locks',
+    ctaLabel: 'Get RFID Quote',
+  },
+  {
+    icon: Globe,
+    title: 'Web Development',
+    subtitle: 'Modern Websites & Apps',
+    color: 'from-pink-500 to-rose-600',
+    border: 'border-pink-500/20',
+    bg: 'bg-pink-500/10',
+    text: 'text-pink-300',
+    description:
+      'Responsive, SEO-ready websites and web applications built for performance. From business portfolios to full e-commerce platforms.',
+    features: ['Responsive design', 'E-commerce & portals', 'SEO-ready deployment', 'Ongoing maintenance'],
+    cta: '/request?service=web-development',
+    ctaLabel: 'Start Your Project',
+  },
+];
 
 interface ServicePricingTier {
   label: string;
@@ -174,23 +254,12 @@ export interface ServicesPageProps {
   services: Service[];
 }
 
-export default function ServicesPage({ services }: ServicesPageProps) {
+export default function ServicesPage({ services: _services }: ServicesPageProps) {
   const router = useRouter();
   const { addToCart } = useCart();
   const { atLeast } = usePermissions();
   const [busyServiceId, setBusyServiceId] = useState<string | null>(null);
   const canManageServices = atLeast('admin');
-
-  const serviceSections = services.reduce<Array<{ key: string; items: Service[] }>>((acc, service) => {
-    const key = service.category || 'Services';
-    const existing = acc.find(section => section.key === key);
-    if (existing) {
-      existing.items.push(service);
-    } else {
-      acc.push({ key, items: [service] });
-    }
-    return acc;
-  }, []);
 
   const buildServiceProduct = (service: Service): Product => {
     const title = service.title || 'TecBunny Service';
@@ -228,44 +297,6 @@ export default function ServicesPage({ services }: ServicesPageProps) {
   };
 
   const slugify = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
-
-  const handleRaiseRequest = (service: Service) => {
-    if (busyServiceId === service.id) return;
-    setBusyServiceId(service.id);
-
-    const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-    const findDefaultAmount = (): number => {
-      const normTitle = normalize(service.title || '');
-      for (const category of servicePricing) {
-        const categoryMatches = category.category.toLowerCase().includes(service.category?.toLowerCase() || '');
-        for (const plan of category.plans) {
-          const normPlan = normalize(plan.name);
-          if (normTitle.includes(normPlan) || normPlan.includes(normTitle) || categoryMatches) {
-            const tier = plan.tiers.find(t => typeof t.amount === 'number' && t.amount > 0);
-            if (tier && typeof tier.amount === 'number') return tier.amount;
-          }
-        }
-      }
-      const firstTier = servicePricing
-        .flatMap(c => c.plans.flatMap(p => p.tiers))
-        .find(t => typeof t.amount === 'number' && t.amount > 0);
-      return typeof firstTier?.amount === 'number' ? firstTier.amount : 0;
-    };
-
-    const fallbackAmount = findDefaultAmount();
-    const coercedPrice = typeof service.price === 'number' && service.price > 0
-      ? service.price
-      : fallbackAmount;
-
-    const product = buildServiceProduct({ ...service, price: coercedPrice });
-    product.price = coercedPrice;
-    product.offer_price = coercedPrice;
-    product.gstRate = coercedPrice > 0 ? 18 : 0;
-    product.gst_rate = product.gstRate;
-
-    addToCart(product);
-    router.push('/checkout?source=services');
-  };
 
   const handlePricingTierAdd = (category: string, plan: ServicePricingPlan, tier: ServicePricingTier) => {
     if (!tier.amount) return;
@@ -315,13 +346,13 @@ export default function ServicesPage({ services }: ServicesPageProps) {
             End-to-end Solutions
           </div>
           <h1 className="mt-6 text-4xl font-semibold text-white sm:text-5xl lg:text-6xl">
-            Engineering{' '}
-            <span className="bg-gradient-to-r from-cyan-300 via-blue-400 to-violet-400 bg-clip-text text-transparent">
-              Sanctuary
+            Smart Solutions{' '}
+            <span className="bg-gradient-to-r from-cyan-300 via-violet-400 to-pink-400 bg-clip-text text-transparent">
+              for Every Need
             </span>
           </h1>
           <p className="mx-auto mt-4 max-w-2xl text-base text-slate-400 sm:text-lg">
-            From secure perimeters to smart automation, we deliver professional installation, maintenance, and service care across Goa.
+            CCTV · Home Automation · IT Services · RFID Locks &amp; Cards · Web Development — professional installation and support across Goa.
           </p>
           {canManageServices && (
             <div className="mt-6 flex justify-center">
@@ -335,100 +366,50 @@ export default function ServicesPage({ services }: ServicesPageProps) {
           )}
         </section>
 
-        <section className="grid gap-4 md:grid-cols-2">
-          <div className="flex flex-col gap-3 rounded-2xl border border-white/5 bg-slate-900/60 p-6 shadow-md">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-xl bg-cyan-500/10 text-cyan-300 flex items-center justify-center">
-                <Cctv className="h-5 w-5" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-white">CCTV New Setup</h3>
-                <p className="text-sm text-slate-400">Site survey, design, and deployment with a tailored quote.</p>
-              </div>
-            </div>
-            <Button
-              variant="outline"
-              className="justify-center border-cyan-400/40 text-cyan-200 hover:border-cyan-400/70 hover:bg-cyan-500/10"
-              onClick={() => router.push('/customised-setups')}
-            >
-              Get Quote
-            </Button>
-          </div>
-
-          <div className="flex flex-col gap-3 rounded-2xl border border-white/5 bg-slate-900/60 p-6 shadow-md">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-xl bg-blue-500/10 text-blue-300 flex items-center justify-center">
-                <Cpu className="h-5 w-5" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-white">New Computer Setup</h3>
-                <p className="text-sm text-slate-400">Capture requirements and raise a ticket for a customised build.</p>
-              </div>
-            </div>
-            <Button
-              variant="outline"
-              className="justify-center border-blue-400/40 text-blue-200 hover:border-blue-400/70 hover:bg-blue-500/10"
-              onClick={() => router.push('/customised-setups?type=computer')}
-            >
-              Raise Ticket
-            </Button>
-          </div>
-        </section>
-
+        {/* ── Core Services Grid ── */}
         <section>
-          <div className="space-y-8">
-            {serviceSections.map((section) => (
-              <div key={section.key} className="space-y-6">
-                <div className="flex items-center gap-3">
-                  <div className="h-8 w-1 rounded-full bg-cyan-400" />
-                  <div>
-                    <h2 className="text-2xl font-semibold text-white">{section.key}</h2>
-                    <p className="text-sm text-slate-400">Explore curated services under {section.key.toLowerCase()}.</p>
+          <div className="mb-6 text-center">
+            <h2 className="text-2xl font-bold text-white sm:text-3xl">Our 5 Core Services</h2>
+            <p className="mt-2 text-sm text-slate-400">Every service includes a site survey, professional installation, and post-setup support.</p>
+          </div>
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {coreServices.map((svc) => {
+              const Icon = svc.icon;
+              return (
+                <div
+                  key={svc.title}
+                  className={`group flex flex-col rounded-2xl border ${svc.border} bg-slate-900/60 p-6 shadow-md transition-all duration-300 hover:-translate-y-1`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br ${svc.color} shadow-lg transition-transform duration-300 group-hover:scale-110`}>
+                      <Icon className="h-6 w-6 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-bold text-white">{svc.title}</h3>
+                      <p className={`text-xs font-semibold ${svc.text}`}>{svc.subtitle}</p>
+                    </div>
+                  </div>
+                  <p className="mt-4 text-sm text-slate-400 leading-relaxed">{svc.description}</p>
+                  <ul className="mt-4 space-y-2">
+                    {svc.features.map((f) => (
+                      <li key={f} className="flex items-start gap-2 text-sm text-slate-500">
+                        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
+                        {f}
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="mt-auto pt-5">
+                    <Button
+                      variant="outline"
+                      className={`w-full justify-center ${svc.border} ${svc.text} hover:${svc.bg}`}
+                      onClick={() => router.push(svc.cta)}
+                    >
+                      {svc.ctaLabel}
+                    </Button>
                   </div>
                 </div>
-                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                  {section.items.map((service) => {
-                    const Icon = iconMap[service.icon] || Wrench;
-                    return (
-                      <div
-                        key={service.id}
-                        className="group flex h-full flex-col rounded-2xl border border-white/5 bg-slate-900/60 p-6 transition-all duration-300 hover:-translate-y-1 hover:border-cyan-400/30"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-300 transition-transform duration-300 group-hover:scale-110">
-                            <Icon className="h-6 w-6" />
-                          </div>
-                          <div>
-                            <h3 className="text-lg font-semibold text-white">{service.title}</h3>
-                            {service.badge && (
-                              <p className="text-xs uppercase tracking-widest text-cyan-300">{service.badge}</p>
-                            )}
-                          </div>
-                        </div>
-                        <p className="mt-4 text-sm text-slate-400">{service.description}</p>
-                        <ul className="mt-5 space-y-2 text-sm text-slate-500">
-                          {service.features.map((feature, idx) => (
-                            <li key={idx} className="flex items-start gap-2">
-                              <span className="mt-1 h-1.5 w-1.5 rounded-full bg-cyan-300" />
-                              <span>{feature}</span>
-                            </li>
-                          ))}
-                        </ul>
-                        <button
-                          type="button"
-                          className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition-colors hover:border-cyan-400/40 hover:bg-cyan-500/10"
-                          disabled={busyServiceId === service.id}
-                          onClick={() => handleRaiseRequest(service)}
-                        >
-                          <ShoppingCart className="h-4 w-4" />
-                          Raise Request
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </section>
 

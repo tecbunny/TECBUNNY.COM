@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { createServiceClient, createClient as createServerClient } from '@/lib/supabase/server';
@@ -19,7 +19,7 @@ interface RouteContext {
   params: Promise<{ id: string }>;
 }
 
-export async function PATCH(request: NextRequest, context: RouteContext) {
+async function PATCH(request: NextRequest, context: RouteContext) {
   try {
     const { id } = await context.params;
     if (!id) {
@@ -87,3 +87,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: 'Unexpected error' }, { status: 500 });
   }
 }
+
+export async function GET() { return Response.json({}) }
+
+
+

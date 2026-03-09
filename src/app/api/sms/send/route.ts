@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { sendSms } from '../../../../lib/sms/twofactor'
 import { rateLimit } from '../../../../lib/rate-limit'
 
-export const dynamic = 'force-dynamic'
+export const dynamic = 'force-dynamic';
 
 function authorized(req: NextRequest) {
   // Basic protection: require internal token in header for server-to-server

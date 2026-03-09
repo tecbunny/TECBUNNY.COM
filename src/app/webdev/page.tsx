@@ -1,150 +1,206 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { 
-  Code, 
-  LayoutDashboard, 
-  MessageCircle, 
-  Palette, 
-  Files, 
+import {
+  ArrowRight,
   CheckCircle2,
-  ArrowRight
+  Code,
+  Files,
+  Globe,
+  LayoutDashboard,
+  MessageCircle,
+  Palette,
+  Rocket,
+  ShieldCheck,
 } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-
 export const metadata: Metadata = {
-  title: 'Web Development Services',
-  description: 'Professional website building services with custom designs, admin dashboards, and WhatsApp integration.',
+  title: 'Web Development Services | TecBunny Solutions',
+  description: 'Professional website and web application development across Goa. Custom designs, admin dashboards, e-commerce, SEO-ready, and WhatsApp integration.',
+  keywords: ['web development Goa', 'website building Goa', 'e-commerce Goa', 'custom website Goa', 'TecBunny web development'],
 };
 
+const features = [
+  {
+    icon: MessageCircle,
+    title: 'WhatsApp Integration',
+    description: 'Direct customer communication built right into your website for instant lead capture.',
+    color: 'from-emerald-500 to-teal-600',
+    border: 'border-emerald-500/20',
+    text: 'text-emerald-300',
+  },
+  {
+    icon: Palette,
+    title: 'Unique Design',
+    description: "Custom-crafted designs tailored to your brand. No generic templates — everything is built for you.",
+    color: 'from-violet-500 to-purple-600',
+    border: 'border-violet-500/20',
+    text: 'text-violet-300',
+  },
+  {
+    icon: LayoutDashboard,
+    title: 'Admin Dashboard',
+    description: 'Easy-to-use backend for managing content, products, orders, and viewing analytics.',
+    color: 'from-blue-500 to-cyan-600',
+    border: 'border-blue-500/20',
+    text: 'text-blue-300',
+  },
+  {
+    icon: Files,
+    title: 'Multiple Pages',
+    description: 'Comprehensive multi-page structure to showcase every aspect of your business.',
+    color: 'from-orange-500 to-amber-600',
+    border: 'border-orange-500/20',
+    text: 'text-orange-300',
+  },
+  {
+    icon: ShieldCheck,
+    title: 'Secure & Fast',
+    description: 'SSL, secure authentication, optimised images, and CDN-backed hosting for maximum performance.',
+    color: 'from-pink-500 to-rose-600',
+    border: 'border-pink-500/20',
+    text: 'text-pink-300',
+  },
+  {
+    icon: Globe,
+    title: 'SEO Ready',
+    description: 'Structured data, sitemap, metadata, and page-speed optimisations baked in from day one.',
+    color: 'from-cyan-500 to-blue-600',
+    border: 'border-cyan-500/20',
+    text: 'text-cyan-300',
+  },
+];
+
 export default function WebDevPage() {
-  const features = [
-    {
-      title: "WhatsApp Integration",
-      description: "Direct customer communication integrated right into your website.",
-      icon: MessageCircle,
-    },
-    {
-      title: "Unique Design",
-      description: "Custom-crafted designs tailored to your brand. We don't use common templates.",
-      icon: Palette,
-    },
-    {
-      title: "Admin Dashboard",
-      description: "Easy-to-use backend for managing your content and viewing analytics.",
-      icon: LayoutDashboard,
-    },
-    {
-      title: "Multiple Pages",
-      description: "Comprehensive multi-page structure to showcase all aspects of your business.",
-      icon: Files,
-    },
-  ];
-
   return (
-    <div className="flex flex-col min-h-screen">
-      {/* Hero Section */}
-      <section className="bg-gradient-to-br from-blue-50 via-white to-blue-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 py-20 lg:py-32">
-        <div className="container px-4 md:px-6">
-          <div className="flex flex-col items-center space-y-4 text-center">
-            <div className="space-y-2">
-              <h1 className="text-3xl font-bold tracking-tighter sm:text-4xl md:text-5xl lg:text-6xl text-primary">
-                Professional Web Development
-              </h1>
-              <p className="mx-auto max-w-[700px] text-muted-foreground md:text-xl">
-                Build your digital presence with our expert website building services. Custom solutions for modern businesses.
-              </p>
-            </div>
-            <div className="space-x-4">
-              <Button asChild size="lg">
-                <Link href="/contact?subject=web_development">Get Started</Link>
-              </Button>
-              <Button variant="outline" size="lg" asChild>
-                <Link href="/services">View All Services</Link>
-              </Button>
+    <div className="relative overflow-hidden bg-slate-950 text-slate-200">
+      <div className="pointer-events-none absolute inset-0 bg-[url('/noise.svg')] opacity-20" />
+      <div className="pointer-events-none absolute left-1/2 top-32 h-[420px] w-[820px] -translate-x-1/2 rounded-full bg-pink-500/8 blur-[140px]" />
+
+      <div className="relative mx-auto flex max-w-7xl flex-col gap-20 px-4 pb-24 pt-24 sm:px-6 lg:px-8">
+
+        {/* Hero */}
+        <section className="text-center">
+          <div className="inline-flex items-center gap-2 rounded-full border border-pink-400/30 bg-pink-500/5 px-3 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-pink-300">
+            Web Development
+          </div>
+          <h1 className="mt-6 text-4xl font-bold text-white sm:text-5xl lg:text-6xl">
+            Your Digital Presence,{' '}
+            <span className="bg-gradient-to-r from-pink-300 via-violet-400 to-cyan-300 bg-clip-text text-transparent">
+              Built Right
+            </span>
+          </h1>
+          <p className="mx-auto mt-5 max-w-2xl text-base text-slate-400 sm:text-lg">
+            We design and develop fast, secure, SEO-ready websites and web applications for businesses across Goa.
+            The website you&apos;re viewing right now is engineered by us — a live example of what we build.
+          </p>
+          <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+            <Link
+              href="/contact?subject=web_development"
+              className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-pink-500 to-rose-600 px-8 py-3 text-sm font-bold text-white shadow-lg shadow-pink-500/20 transition-transform hover:scale-105 active:scale-100"
+            >
+              Get Started <ArrowRight className="h-4 w-4" />
+            </Link>
+            <Link
+              href="/services"
+              className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-8 py-3 text-sm font-semibold text-slate-300 transition-colors hover:border-white/20 hover:bg-white/10 hover:text-white"
+            >
+              View All Services
+            </Link>
+          </div>
+        </section>
+
+        {/* What we build */}
+        <section className="grid gap-10 lg:grid-cols-2 lg:items-center">
+          <div>
+            <h2 className="text-3xl font-bold text-white sm:text-4xl">Website Building Services</h2>
+            <p className="mt-4 text-base text-slate-400 leading-relaxed">
+              From simple business portfolios to full e-commerce platforms and complex web applications — we build it all.
+              Every project is responsive, secure, and optimised for search engines from the ground up.
+            </p>
+            <ul className="mt-6 space-y-3">
+              {[
+                'Responsive mobile-first design',
+                'SEO optimisation & structured data',
+                'Fast loading with CDN & image optimisation',
+                'Secure authentication & SSL setup',
+                'E-commerce & payment gateway integration',
+                'Ongoing maintenance & support',
+              ].map((item) => (
+                <li key={item} className="flex items-center gap-3 text-sm text-slate-300">
+                  <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+                  {item}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="relative flex h-72 items-center justify-center rounded-3xl border border-white/5 bg-slate-900/60 lg:h-80">
+            <div className="pointer-events-none absolute inset-0 rounded-3xl bg-gradient-to-br from-pink-500/5 via-violet-500/5 to-cyan-500/5" />
+            <div className="flex flex-col items-center gap-4">
+              <div className="flex h-24 w-24 items-center justify-center rounded-2xl bg-gradient-to-br from-pink-500 to-rose-600 shadow-2xl shadow-pink-500/20">
+                <Code className="h-12 w-12 text-white" />
+              </div>
+              <div className="flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-500/10 px-4 py-1.5 text-xs font-semibold text-emerald-300">
+                <Rocket className="h-3.5 w-3.5" /> Live on the web in days
+              </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* Services Section */}
-      <section className="py-16 md:py-24 bg-background">
-        <div className="container px-4 md:px-6">
-          <div className="grid gap-10 md:grid-cols-2 lg:items-center">
-            <div className="space-y-4">
-              <h2 className="text-3xl font-bold tracking-tighter sm:text-4xl">
-                Website Building Services
-              </h2>
-              <p className="text-muted-foreground text-lg">
-                We create robust, scalable, and secure websites that drive growth. In fact, the website you are viewing right now is engineered by us—a live example of our capabilities. From landing pages to complex web applications, we handle it all.
-              </p>
-              <ul className="grid gap-4 mt-6">
-                {[
-                  "Responsive Mobile-First Design",
-                  "SEO Optimization Ready",
-                  "Fast Loading Speeds",
-                  "Secure & Reliable Hosting Setup"
-                ].map((item, index) => (
-                  <li key={index} className="flex items-center gap-2 text-foreground">
-                    <CheckCircle2 className="h-5 w-5 text-primary" />
-                    {item}
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <div className="bg-muted rounded-xl p-8 flex items-center justify-center min-h-[300px]">
-                 <Code className="h-32 w-32 text-primary/20" />
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Features Grid */}
-      <section className="py-16 md:py-24 bg-muted/50">
-        <div className="container px-4 md:px-6">
-          <div className="flex flex-col items-center justify-center space-y-4 text-center mb-12">
-            <h2 className="text-3xl font-bold tracking-tighter sm:text-4xl">
-              Why Choose Our Web Solutions?
-            </h2>
-            <p className="max-w-[700px] text-muted-foreground md:text-lg">
-              We deliver more than just a website; we deliver a complete digital business tool.
+        {/* Features grid */}
+        <section>
+          <div className="mb-10 text-center">
+            <h2 className="text-3xl font-bold text-white sm:text-4xl">Why Choose Our Web Solutions?</h2>
+            <p className="mx-auto mt-3 max-w-xl text-sm text-slate-400">
+              We deliver more than just a website — a complete digital business tool built to grow with you.
             </p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {features.map((feature, index) => (
-              <Card key={index} className="border-none shadow-md hover:shadow-lg transition-shadow bg-card">
-                <CardHeader>
-                  <feature.icon className="h-10 w-10 text-primary mb-2" />
-                  <CardTitle>{feature.title}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <CardDescription>{feature.description}</CardDescription>
-                </CardContent>
-              </Card>
-            ))}
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {features.map((feature) => {
+              const Icon = feature.icon;
+              return (
+                <div
+                  key={feature.title}
+                  className={`group flex flex-col rounded-2xl border ${feature.border} bg-slate-900/60 p-6 transition-all duration-300 hover:-translate-y-1`}
+                >
+                  <div className={`flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br ${feature.color} shadow-lg transition-transform duration-300 group-hover:scale-110`}>
+                    <Icon className="h-5 w-5 text-white" />
+                  </div>
+                  <h3 className="mt-4 text-base font-bold text-white">{feature.title}</h3>
+                  <p className="mt-2 text-sm text-slate-400 leading-relaxed">{feature.description}</p>
+                </div>
+              );
+            })}
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* CTA Section */}
-      <section className="py-16 lg:py-24">
-        <div className="container px-4 md:px-6">
-          <div className="bg-primary rounded-3xl p-8 md:p-16 text-center text-primary-foreground shadow-xl">
-            <h2 className="text-3xl font-bold tracking-tighter sm:text-4xl mb-4 text-white">
-              Ready to Build Your Website?
-            </h2>
-            <p className="max-w-[600px] mx-auto text-primary-foreground/80 mb-8 text-lg text-blue-100">
-              Contact us today to discuss your project requirements and get a custom quote.
-            </p>
-            <Button asChild size="lg" variant="secondary" className="font-semibold text-primary">
-              <Link href="/contact?subject=web_development" className="flex items-center gap-2">
-                Contact Us Now <ArrowRight className="h-4 w-4" />
-              </Link>
-            </Button>
+        {/* CTA */}
+        <section className="rounded-3xl border border-white/10 bg-gradient-to-r from-pink-500/10 via-violet-500/10 to-cyan-500/10 p-10 text-center">
+          <h2 className="text-3xl font-bold text-white sm:text-4xl">Ready to Build Your Website?</h2>
+          <p className="mx-auto mt-4 max-w-lg text-sm text-slate-400">
+            Share your requirements and we&apos;ll craft a tailored plan with a transparent quote. No obligation.
+          </p>
+          <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+            <Link
+              href="/contact?subject=web_development"
+              className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-pink-500 to-rose-600 px-8 py-3 text-sm font-bold text-white shadow-lg shadow-pink-500/20 transition-transform hover:scale-105 active:scale-100"
+            >
+              Contact Us Now <ArrowRight className="h-4 w-4" />
+            </Link>
+            <Link
+              href="/customised-setups"
+              className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-8 py-3 text-sm font-semibold text-slate-300 transition-colors hover:border-white/20 hover:bg-white/10 hover:text-white"
+            >
+              Get Instant Quote
+            </Link>
           </div>
-        </div>
-      </section>
+          <p className="mt-6 text-xs text-slate-600">
+            📞 +91 96041 36010 &nbsp;·&nbsp; support@tecbunny.com &nbsp;·&nbsp; Goa, India
+          </p>
+        </section>
+
+      </div>
     </div>
   );
 }
+

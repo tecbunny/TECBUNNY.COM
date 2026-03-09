@@ -42,6 +42,7 @@ export async function POST(request: NextRequest) {
     const wantsServices = isQueryMatch(query, ['service']);
     const wantsAnalytics = isQueryMatch(query, ['analytics', 'views', 'page view', 'product view']);
     const wantsRelated = isQueryMatch(query, ['related', 'recommend', 'requirements', 'requirement']);
+    const wantsRequests = isQueryMatch(query, ['request', 'enquir', 'contact message', 'contact form', 'lead', 'quote request', 'new message', 'pending request']);
 
     const contextData: Record<string, unknown> = {};
     let dataPayload: any = null;
@@ -204,6 +205,28 @@ export async function POST(request: NextRequest) {
           type: 'related_products',
           summary: { requirement },
           items: scored,
+        };
+      }
+
+      if (wantsRequests) {
+        const [{ data: newRequests }, { data: recentRequests }, { count: totalRequests }] = await Promise.all([
+          adminClient.from('contact_messages').select('id, name, email, phone, subject, message, created_at, status').eq('status', 'New').order('created_at', { ascending: false }).limit(10),
+          adminClient.from('contact_messages').select('id, name, email, subject, status, created_at').order('created_at', { ascending: false }).limit(8),
+          adminClient.from('contact_messages').select('*', { count: 'exact', head: true }),
+        ]);
+
+        const newCount = newRequests?.length ?? 0;
+        contextData.serviceRequests = {
+          totalRequests: totalRequests ?? 0,
+          newCount,
+          newRequests: newRequests || [],
+          recentRequests: recentRequests || [],
+        };
+
+        dataPayload = {
+          type: 'requests_report',
+          summary: { totalRequests: totalRequests ?? 0, newCount },
+          items: newRequests || recentRequests || [],
         };
       }
     } catch (err) {

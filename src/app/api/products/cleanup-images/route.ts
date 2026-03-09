@@ -5,7 +5,7 @@ import { getSessionWithRole } from '../../../../lib/auth/server-role';
 import { logger } from '../../../../lib/logger';
 import { isValidImageUrl } from '../../../../lib/image-utils';
 
-const ADMIN_ROLES = new Set(['admin', 'superadmin', 'manager']);
+const ADMIN_ROLES = new Set(['admin', 'manager']);
 
 export async function POST(request: NextRequest) {
   try {

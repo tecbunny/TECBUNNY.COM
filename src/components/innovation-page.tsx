@@ -87,7 +87,7 @@ export default function InnovationPage({ modes, devices }: InnovationPageProps) 
               </p>
               <div className="flex flex-wrap gap-4">
                 <Link
-                  href="#new-devices"
+                  href="#featured-tech"
                   className="rounded-lg bg-violet-500 px-8 py-3 text-sm font-bold text-white shadow-lg shadow-violet-500/20 transition-colors hover:bg-white hover:text-slate-900"
                 >
                   Explore New Tech
@@ -138,66 +138,110 @@ export default function InnovationPage({ modes, devices }: InnovationPageProps) 
 
       <HeroCarousel pageKey="innovations" />
 
-      <section id="new-devices" className="py-20">
+      {/* ── Featured Technology Solutions ── */}
+      <section id="featured-tech" className="py-24">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="mb-12 flex flex-wrap items-end justify-between gap-6">
-            <div>
-              <h2 className="text-3xl font-bold text-white font-tech">New Arrivals</h2>
-              <p className="mt-1 text-sm text-slate-400">Latest integrations in our inventory.</p>
+          <div className="mb-14 text-center">
+            <div className="inline-flex items-center gap-2 rounded-full border border-violet-400/20 bg-violet-500/8 px-3 py-1 text-xs font-bold uppercase tracking-widest text-violet-300">
+              What We Deploy
             </div>
-            <div className="flex gap-2">
-              <span className="h-3 w-3 rounded-full bg-violet-500" />
-              <span className="h-3 w-3 rounded-full bg-white/10" />
-              <span className="h-3 w-3 rounded-full bg-white/10" />
-            </div>
+            <h2 className="mt-5 text-3xl font-bold text-white font-tech sm:text-4xl">
+              Technology at the Core
+            </h2>
+            <p className="mx-auto mt-3 max-w-xl text-sm text-slate-400">
+              Every solution we install runs on proven, enterprise-grade technology — built for reliability, security, and remote control.
+            </p>
           </div>
 
-          <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
-            {sortedDevices.map((device) => {
-              const DeviceIcon = iconMap[device.icon as keyof typeof iconMap] || Shield;
-              return (
-                <div
-                  key={device.id}
-                  className="spotlight-card group rounded-3xl border border-white/5 bg-slate-900/60 p-1 transition-colors hover:border-violet-400/50"
-                  onMouseMove={(event) => {
-                    const rect = event.currentTarget.getBoundingClientRect();
-                    const x = event.clientX - rect.left;
-                    const y = event.clientY - rect.top;
-                    event.currentTarget.style.setProperty('--spotlight-x', `${x}px`);
-                    event.currentTarget.style.setProperty('--spotlight-y', `${y}px`);
-                  }}
-                >
-                  <div className="relative flex h-64 items-center justify-center overflow-hidden rounded-[20px] bg-black/40">
-                    <div className="absolute left-4 top-4 z-10">
-                      <span className="rounded border border-white/10 bg-white/5 px-2 py-1 text-xs font-bold text-white">
-                        NEW
-                      </span>
-                    </div>
-                    <div className="text-slate-600 transition-colors duration-500 group-hover:text-violet-300">
-                      <DeviceIcon className="h-16 w-16" />
-                    </div>
-                    <div className="absolute bottom-0 left-0 w-full bg-gradient-to-t from-black/90 to-transparent p-6">
-                      <h3 className="text-xl font-bold text-white">{device.title}</h3>
-                      <p className="text-sm text-slate-400">{device.description}</p>
-                    </div>
-                  </div>
-                  <div className="p-6">
-                    <div className="mb-6 grid grid-cols-2 gap-4 text-xs text-slate-400">
-                      {device.chips?.map((chip) => (
-                        <div key={chip} className="flex items-center gap-2">
-                          <span className="h-2 w-2 rounded-full bg-violet-400/60" />
-                          {chip}
-                        </div>
-                      ))}
-                    </div>
-                    <button className="w-full rounded-lg border border-white/10 py-2 text-sm font-bold text-white transition-colors hover:bg-white/5">
-                      View Specs
-                    </button>
-                  </div>
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+
+            {/* CCTV */}
+            <div className="group relative overflow-hidden rounded-3xl border border-white/5 bg-slate-900/60 p-6 transition-all duration-300 hover:border-cyan-400/30 hover:-translate-y-1">
+              <div className="pointer-events-none absolute -right-8 -top-8 h-40 w-40 rounded-full bg-cyan-500/8 blur-2xl" />
+              <div className="mb-4 flex items-center gap-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 shadow-lg">
+                  <Camera className="h-6 w-6 text-white" />
                 </div>
-              );
-            })}
+                <div>
+                  <h3 className="text-lg font-bold text-white">CCTV Surveillance</h3>
+                  <p className="text-xs text-cyan-300">Smart Security Systems</p>
+                </div>
+              </div>
+              <p className="mb-5 text-sm text-slate-400 leading-relaxed">
+                Full HD & 4K IP camera systems with H.265 compression, IR night vision up to 40 m, and real-time alerts on your phone via dedicated mobile apps.
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                {['H.265 Codec', '4K Ultra HD', 'IR Night Vision', 'Motion Alerts', 'Cloud Backup', 'Remote Access'].map((spec) => (
+                  <div key={spec} className="flex items-center gap-2 rounded-lg bg-white/5 px-3 py-2 text-xs text-slate-300">
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-cyan-400" />
+                    {spec}
+                  </div>
+                ))}
+              </div>
+              <Link href="/services" className="mt-5 inline-flex items-center gap-1.5 text-xs font-semibold text-cyan-300 hover:text-white">
+                Get a Quote <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </div>
+
+            {/* Home Automation */}
+            <div className="group relative overflow-hidden rounded-3xl border border-white/5 bg-slate-900/60 p-6 transition-all duration-300 hover:border-violet-400/30 hover:-translate-y-1">
+              <div className="pointer-events-none absolute -right-8 -top-8 h-40 w-40 rounded-full bg-violet-500/8 blur-2xl" />
+              <div className="mb-4 flex items-center gap-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 shadow-lg">
+                  <Lightbulb className="h-6 w-6 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white">Home Automation</h3>
+                  <p className="text-xs text-violet-300">Matter & Zigbee Protocol</p>
+                </div>
+              </div>
+              <p className="mb-5 text-sm text-slate-400 leading-relaxed">
+                Smart switches, sensors, and hubs to automate lights, fans, ACs, and appliances — controllable via app, voice assistants, or automated schedules.
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                {['Matter Protocol', 'Zigbee 3.0', 'Voice Control', 'Energy Monitor', 'Scene Automation', 'App Control'].map((spec) => (
+                  <div key={spec} className="flex items-center gap-2 rounded-lg bg-white/5 px-3 py-2 text-xs text-slate-300">
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-violet-400" />
+                    {spec}
+                  </div>
+                ))}
+              </div>
+              <Link href="/services" className="mt-5 inline-flex items-center gap-1.5 text-xs font-semibold text-violet-300 hover:text-white">
+                Request Setup <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </div>
+
+            {/* RFID Access Control */}
+            <div className="group relative overflow-hidden rounded-3xl border border-white/5 bg-slate-900/60 p-6 transition-all duration-300 hover:border-orange-400/30 hover:-translate-y-1">
+              <div className="pointer-events-none absolute -right-8 -top-8 h-40 w-40 rounded-full bg-orange-500/8 blur-2xl" />
+              <div className="mb-4 flex items-center gap-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 shadow-lg">
+                  <DoorClosed className="h-6 w-6 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white">RFID Access Control</h3>
+                  <p className="text-xs text-orange-300">Smart Locks & Custom Cards</p>
+                </div>
+              </div>
+              <p className="mb-5 text-sm text-slate-400 leading-relaxed">
+                RFID-based smart door locks with AES-128 encryption, multi-user card management, access logs, and fully custom-designed branded RFID cards for offices, homes, and hotels.
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                {['AES-128 Encrypted', 'Multi-User Cards', 'Custom RFID Design', 'Access Logging', 'Anti-Tamper Alert', 'Remote Revoke'].map((spec) => (
+                  <div key={spec} className="flex items-center gap-2 rounded-lg bg-white/5 px-3 py-2 text-xs text-slate-300">
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-orange-400" />
+                    {spec}
+                  </div>
+                ))}
+              </div>
+              <Link href="/services" className="mt-5 inline-flex items-center gap-1.5 text-xs font-semibold text-orange-300 hover:text-white">
+                Get RFID Quote <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </div>
+
           </div>
+
+
         </div>
       </section>
 
